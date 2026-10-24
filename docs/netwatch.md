@@ -1,54 +1,23 @@
 # Netwatch: host monitoring
 
 File: `src/topics/netwatch.j`. Path: `/tool/netwatch`
-(`NETWATCH_PATH`).
+(`NETWATCH_PATH`). Reference: [cheatsheet](cheatsheet.md#netwatch).
 
-## Background
+`ping` ([tools.md](tools.md)) asks whether the router reaches a host now.
+Netwatch keeps asking: the router probes each watched host on an
+interval, records its state (`up`, `down`, `unknown`) and when it last
+changed, and can run a RouterOS script on each transition. Scripts fire
+once per transition, not once per probe, and keep working while your
+management host is off.
 
-The tools topic's `ping` answers "can the router reach X *right now*";
-netwatch answers the operational questions: "is X up, since when, and
-who noticed at 3 a.m.?" The router probes each watched host on an
-interval, keeps the state (`up` / `down` / `unknown`) plus the time of
-the last flip, and - the powerful part - can run a **RouterOS script**
-on every transition. That turns the router into a tiny self-contained
-monitoring system that works even when your management host is off.
-
-Because the scripts run on state *transitions*, they fire once per
-outage, not once per probe - no alert storms.
-
-## Struct
-
-```jennifer
-mt.NetwatchHost {
-    id, host,
-    status,                  # "up" / "down" / "unknown" (not yet probed)
-    up,                      # computed: status == "up"
-    since,                   # when the current state began
-    interval, timeout,
-    upScript, downScript,    # RouterOS script, "" for none
-    disabled, comment
-}
-```
-
-## Functions
-
-| Function | Purpose |
-|---|---|
-| `watchHost(c, host, comment)` → id | start watching (router default interval; idempotent) |
-| `watchHostWith(c, host, interval, comment)` → id | explicit probe interval |
-| `watchHostScripted(c, host, downScript, upScript, comment)` → id | react to flips |
-| `hostStatus(c, host)` → `NetwatchHost` | one host's state |
-| `downHosts(c)` → `list of NetwatchHost` | everything down right now |
-| `netwatchHosts(c)` → `list of NetwatchHost` | the whole watch list |
-| `unwatchHost(c, host)` | stop and forget |
-| `disableWatch(c, host)` / `enableWatch(c, host)` | pause / resume |
-
-Everything is keyed by the watched host address - netwatch entries have
-no names.
+Entries have no names; every call is keyed by the watched host address.
+The `watchHost*` calls are idempotent: when the host is already watched
+they return the existing id and leave that entry's interval and scripts
+as they are.
 
 ## Examples
 
-Watch the important boxes:
+Watch some hosts:
 
 ```jennifer
 mt.watchHost($c, "192.168.88.50", "printer");
@@ -56,19 +25,17 @@ mt.watchHostWith($c, "192.168.88.10", "10s", "file server");
 mt.watchHost($c, "1.1.1.1", "internet reachability");
 ```
 
-The morning sweep:
+What is down right now:
 
 ```jennifer
 def down as list of mt.NetwatchHost init mt.downHosts($c);
-if (len($down) == 0) {
-    io.printf("everything is up\n");
-}
 for (def d in $down) {
     io.printf("%s (%s) down since %s\n", $d.host, $d.comment, $d.since);
 }
 ```
 
-Alert into the log (and from there to syslog - see [log.md](log.md)):
+Alert into the router log (and from there to syslog, see
+[log.md](log.md)):
 
 ```jennifer
 mt.watchHostScripted($c, "192.168.88.10",
@@ -77,9 +44,8 @@ mt.watchHostScripted($c, "192.168.88.10",
     "file server");
 ```
 
-Self-healing: power-cycle a hung PoE camera when it stops answering
-(RouterOS script in the down hook; see [ethernet.md](ethernet.md) for
-the PoE side):
+Power-cycle a hung PoE camera when it stops answering (PoE in
+[ethernet.md](ethernet.md)):
 
 ```jennifer
 mt.watchHostScripted($c, "192.168.88.60",
@@ -90,23 +56,18 @@ mt.watchHostScripted($c, "192.168.88.60",
 
 ## Pitfalls
 
-- **Scripts are RouterOS script, not Jennifer**, and routeros validates
-  the watch, not the script - a typo shows up in the router's log at
-  flip time. Test one-liners in the RouterOS terminal first.
-- Scripts run with netwatch's own (restricted, on v7) policies; a
-  down-script that needs `reboot` or `write` rights may silently do
-  nothing. Check `/log` after a test flip.
-- A watched host that drops ICMP looks "down" while being perfectly
-  alive - netwatch's default probe is a ping. RouterOS v7 adds other
-  probe types (`http-get`, `tcp-conn`) via the generic `set`.
+- routeros validates the host and interval, not the scripts. A typo
+  shows up in the router log when the state flips. Try one-liners in the
+  RouterOS terminal first.
+- Scripts run with netwatch's own policies, restricted on v7. A script
+  that needs `reboot` or `write` may do nothing; check the log after a
+  test flip.
+- The default probe is ICMP ping, so a host that drops ICMP looks down.
+  RouterOS v7 has other probe types (`http-get`, `tcp-conn`), settable
+  with the generic `set`.
 - `status == "unknown"` right after adding is normal (first probe
-  pending); `downHosts` deliberately excludes it.
-- Watching many hosts at aggressive intervals is load on small
-  routers - 10s is plenty for most things.
+  pending); `downHosts` leaves those out.
+- Many hosts at short intervals load small routers; 10s is enough for
+  most uses.
 
-## Related
-
-- [tools.md](tools.md) (one-shot ping from the router),
-  [log.md](log.md) (where script alerts land, and shipping them off),
-  [scheduler.md](scheduler.md) (time-based instead of state-based
-  automation), [ethernet.md](ethernet.md) (PoE power-cycling).
+See also [scheduler.md](scheduler.md) for time-based automation.

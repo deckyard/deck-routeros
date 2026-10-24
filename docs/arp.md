@@ -1,52 +1,24 @@
 # The ARP table
 
 File: `src/topics/arp.j`. Path: `/ip/arp` (`ARP_PATH`).
+Reference: [cheatsheet](cheatsheet.md#the-arp-table).
 
-## Background
+The ARP table maps IP addresses to MAC addresses on the router's
+connected networks. It serves two purposes:
 
-ARP is how a router maps IP addresses to hardware (MAC) addresses on
-its connected networks. The table under `/ip/arp` is therefore two
-things at once:
+- an inventory: every device the router recently exchanged packets with
+  is listed, so it answers "who is on this LAN right now";
+- an access control: static (pinned) entries, combined with the
+  interface property `arp=reply-only`, let only pinned devices talk.
 
-1. **A live inventory** - every device the router recently exchanged
-   packets with shows up, which makes it the quickest honest answer to
-   "who is on my LAN right now".
-2. **A security lever** - entries can be pinned *statically*, and an
-   interface switched to `arp=reply-only` then only talks to pinned
-   devices at all.
-
-Entries are *dynamic* (learned, they age out) or *static* (yours, they
-stay). An entry with `complete == false` is an address the router tried
-to resolve and got no answer for - typically an offline device.
-
-## Struct
-
-```jennifer
-mt.ArpEntry {
-    id, address, mac,        # mac is "" while unresolved
-    interfaceName,
-    dynamic,                 # learned vs. pinned
-    complete,                # MAC actually known
-    published,               # router answers ARP for it (proxy ARP)
-    disabled, comment
-}
-```
-
-## Functions
-
-| Function | Purpose |
-|---|---|
-| `arpTable(c)` → `list of ArpEntry` | the whole table |
-| `arpTableOn(c, interfaceName)` | one interface's entries |
-| `macForAddress(c, address)` → string | IP → MAC; `""` on a miss (a miss is normal) |
-| `addressesForMac(c, mac)` → `list of string` | MAC → IPs, case-insensitive |
-| `addStaticArp(c, address, mac, interfaceName)` → id | pin a binding |
-| `removeArpEntry(c, address)` | unpin, or clear a stale dynamic entry |
-| `flushArp(c, interfaceName)` → count | drop all dynamic entries there |
+Dynamic entries are learned and age out; static entries stay until
+removed. `complete == false` means the router asked and got no answer,
+usually an offline device. `macForAddress` returns `""` on a miss
+instead of throwing, because a miss is normal.
 
 ## Examples
 
-Who is on the LAN, and are they resolved?
+List one interface's neighbours:
 
 ```jennifer
 def neighbours as list of mt.ArpEntry init mt.arpTableOn($c, "brlan");
@@ -56,7 +28,7 @@ for (def n in $neighbours) {
 }
 ```
 
-Find a device both ways:
+Look a device up both ways:
 
 ```jennifer
 def mac as string init mt.macForAddress($c, "192.168.88.50");
@@ -70,44 +42,35 @@ for (def a in $addrs) {
 }
 ```
 
-The locked-down LAN - only pinned devices may talk:
+Lock a LAN to pinned devices. `arp` is an interface property, so it is
+set with the generic verb:
 
 ```jennifer
-# pin every allowed device...
 mt.addStaticArp($c, "192.168.88.50", "AA:BB:CC:DD:EE:FF", "brlan");
 mt.addStaticArp($c, "192.168.88.51", "11:22:33:44:55:66", "brlan");
-# ...then switch the interface to reply-only (generic verb - it is an
-# interface property, not an ARP-table one):
 mt.set($c, mt.INTERFACE_PATH,
     mt.idByName($c, mt.INTERFACE_PATH, "brlan"), {"arp": "reply-only"});
 ```
 
-After swapping a device's hardware (same IP, new MAC):
+After a device changed hardware but kept its IP, remove the stale entry
+(and re-pin a static one with the new MAC):
 
 ```jennifer
-mt.removeArpEntry($c, "192.168.88.50");   # clears the stale binding
-# a static entry must be re-pinned with the new MAC afterwards
+mt.removeArpEntry($c, "192.168.88.50");
 ```
 
 ## Pitfalls
 
-- **ARP only sees layer-2 neighbours.** Devices behind another router
-  (or on a non-connected network) never appear; that is routing, not a
-  fault.
-- The table is a *cache*: an offline device ages out after a few
-  minutes. Absence proves nothing; presence proves recent traffic.
-- `arp=reply-only` without a complete set of static entries cuts off
-  everyone you forgot - pin first, switch second, and keep the router's
-  own management path in mind.
-- Static ARP does not stop a determined spoofer on an open network -
-  it protects the *router's* view, not the switch fabric.
-- DHCP can create ARP entries for its leases (`add-arp` on the DHCP
-  server, generic verbs) - handy together with `arp=reply-only` on the
-  DHCP interface.
+- Only layer-2 neighbours appear. Devices behind another router are
+  never in the table.
+- The table is a cache: absence proves nothing, presence proves recent
+  traffic.
+- `arp=reply-only` cuts off every device not pinned, possibly including
+  your management host. Pin first, switch second.
+- Static ARP protects the router's view only; it does not stop spoofing
+  between other hosts on the segment.
+- The DHCP server can add ARP entries for its leases (`add-arp`, set
+  with the generic verbs), which pairs with `arp=reply-only`.
 
-## Related
-
-- [dhcp.md](dhcp.md) (leases pair naturally with static ARP),
-  [interfaces.md](interfaces.md) (the `arp` interface property),
-  [wireless.md](wireless.md) (`wifiClients` is the WiFi flavor of
-  "who is connected").
+See also: [dhcp.md](dhcp.md), [interfaces.md](interfaces.md),
+[wireless.md](wireless.md) (`wifiClients` lists WiFi clients).

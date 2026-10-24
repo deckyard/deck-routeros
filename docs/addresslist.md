@@ -2,87 +2,57 @@
 
 File: `src/topics/addresslist.j`. Path:
 `/ip/firewall/address-list` (`ADDRESS_LIST_PATH`).
+Reference: [cheatsheet](cheatsheet.md#firewall-address-lists).
 
-## Background
+An address list is a named set of addresses that a firewall rule
+matches as a whole. Keep one rule ("drop everything on `blocklist`")
+and maintain only the list; adding or removing members never touches
+the firewall.
 
-An address list is a named set of addresses the firewall can reference
-as a whole. That inverts the usual maintenance burden: instead of one
-firewall rule per blocked host, you keep **one rule** ("drop everything
-on `blocklist`") and manage only the *list* - adding and removing
-members never touches the firewall again.
-
-Entries can be single IPs, CIDR networks, or DNS names (RouterOS
-resolves the name and tracks address changes). Entries may also carry a
-**timeout** and disappear by themselves - ideal for penalties. Some
-entries are *dynamic*: firewall rules with `add-src-to-address-list`
-create them on the fly (that action is available through the generic
-verbs).
-
-## Struct
-
-```jennifer
-mt.AddressListEntry {
-    id, listName, address,
-    timeout,          # "" = permanent
-    dynamic,          # created by a rule/timeout mechanism
-    disabled, comment
-}
-```
-
-## Functions
-
-| Function | Purpose |
-|---|---|
-| `addressLists(c)` → `list of string` | distinct list names |
-| `addressListEntries(c, listName)` → `list of AddressListEntry` | one list's members |
-| `addToAddressList(c, listName, address, comment)` → id | add permanently (idempotent) |
-| `addToAddressListTimed(c, listName, address, timeout, comment)` → id | add with expiry |
-| `removeFromAddressList(c, listName, address)` | take one member off |
-| `clearAddressList(c, listName)` | remove all static members |
-| `dropAddressList(c, listName, chain, comment)` → id | one drop rule covering the whole list |
-
-Rule-side matchers live in the firewall builder:
+Entries are IPs, CIDR networks or DNS names (RouterOS resolves names
+and follows their changes). An entry with a timeout removes itself.
+Dynamic entries are created by firewall rules with
+`add-src-to-address-list` (an action available through the generic
+verbs). The rule-side matchers are the builder's
 `withSrcAddressList(rule, listName)` and
-`withDstAddressList(rule, listName)` (see [firewall.md](firewall.md)).
+`withDstAddressList(rule, listName)` ([firewall.md](firewall.md)).
 
 ## Examples
 
-The pattern - one rule, living list:
+One rule, then list maintenance only:
 
 ```jennifer
-# once: the rule
 mt.dropAddressList($c, "blocklist", mt.CHAIN_INPUT, "drop blocklisted");
 
-# forever after: only list maintenance
 mt.addToAddressList($c, "blocklist", "203.0.113.7", "ssh scanner");
 mt.addToAddressList($c, "blocklist", "198.51.100.0/24", "botnet range");
 mt.removeFromAddressList($c, "blocklist", "203.0.113.7");
 ```
 
-A 24-hour penalty that cleans itself up:
+A 24-hour block that expires by itself:
 
 ```jennifer
 mt.addToAddressListTimed($c, "blocklist", "192.0.2.66", "1d", "brute force");
 ```
 
-Allow-listing with the builder - only the admin net reaches WinBox:
+WinBox (TCP 8291) only from the admin network: accept the list, then
+drop the port. Rules are appended, so add them in this order:
 
 ```jennifer
 mt.addToAddressList($c, "admins", "10.0.9.0/24", "management net");
 
-def r as mt.FirewallRule init mt.firewallRule(mt.CHAIN_INPUT, mt.ACTION_DROP);
-$r = mt.withProtocol($r, "tcp");
-$r = mt.withDstPort($r, "8291");
-$r = mt.withComment($r, "winbox only for admins");
-# drop everyone NOT on the list is a RouterOS negation - keep it simple
-# and instead accept the list first, then drop the port:
 def ok as mt.FirewallRule init mt.firewallRule(mt.CHAIN_INPUT, mt.ACTION_ACCEPT);
 $ok = mt.withProtocol($ok, "tcp");
 $ok = mt.withDstPort($ok, "8291");
 $ok = mt.withSrcAddressList($ok, "admins");
 $ok = mt.withComment($ok, "winbox for admins");
-mt.addFirewallRule($c, $ok);   # accept first...
-mt.addFirewallRule($c, $r);    # ...then the drop (order matters!)
+mt.addFirewallRule($c, $ok);
+
+def r as mt.FirewallRule init mt.firewallRule(mt.CHAIN_INPUT, mt.ACTION_DROP);
+$r = mt.withProtocol($r, "tcp");
+$r = mt.withDstPort($r, "8291");
+$r = mt.withComment($r, "winbox only for admins");
+mt.addFirewallRule($c, $r);
 ```
 
 Audit:
@@ -97,22 +67,14 @@ for (def n in $names) {
 
 ## Pitfalls
 
-- **The list alone does nothing.** Without a rule referencing it
-  (`dropAddressList` or the `with*AddressList` matchers), members are
-  just bookkeeping.
-- Rule order still matters: an accept-from-list must come *before* the
-  broad drop it punches through (routeros appends - see
-  [firewall.md](firewall.md)).
-- `clearAddressList` leaves dynamic entries alone on purpose; they
-  belong to whatever created them (timeouts, `add-src-to-address-list`
-  rules).
+- A list does nothing until a rule references it (`dropAddressList` or
+  the `with*AddressList` matchers).
+- An accept-from-list rule must sit above the drop it exempts from;
+  see [firewall.md](firewall.md) for ordering and `moveRule`.
+- `addToAddressList` is idempotent (RouterOS itself traps on a
+  duplicate); `addToAddressListTimed` and `dropAddressList` are not.
+- `clearAddressList` leaves dynamic entries alone and throws when the
+  list has no static entries.
 - DNS-name entries depend on the router's resolver
-  ([dns.md](dns.md)) and update at the name's TTL pace - fine for
-  convenience, not for hard security boundaries.
-- `addToAddressList` is idempotent, so re-running a provisioning
-  script is safe; RouterOS itself would trap on the duplicate.
-
-## Related
-
-- [firewall.md](firewall.md), [dns.md](dns.md),
-  [nat.md](nat.md).
+  ([dns.md](dns.md)) and change at the name's TTL; do not rely on
+  them for hard security boundaries.

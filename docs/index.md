@@ -1,49 +1,44 @@
-# routeros documentation
+# routeros
 
-routeros is a thick, friendly layer over the MikroTik RouterOS API for
-the [Jennifer](https://jennifer-lang.dev/) language. Each guide below
-covers one topic file of the module with background, the full function
-surface, worked examples, and the pitfalls the abstraction protects you
-from.
+`@deckyard/routeros` drives a MikroTik router over the RouterOS binary API.
+Each guide covers one topic; the [cheatsheet](cheatsheet.md) lists every
+function, constant and struct. MikroTik's
+[RouterOS documentation](https://help.mikrotik.com/docs/) describes the menus
+behind the paths.
 
-## Conventions used in every guide
+This deck is part of [Deckyard](https://github.com/deckyard), community decks for [Jennifer](https://jennifer-lang.dev/).
 
-All snippets assume an established connection:
+## Conventions
+
+Snippets assume a connection:
 
 ```jennifer
-import "@jennifer/routeros/" as mt;
+import "@deckyard/routeros/" as mt;
 
 def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
-# ... snippets go here ...
+# ... snippet ...
 mt.disconnect($c);
 ```
 
-Errors: every validation failure raised by routeros is an
-`Error{kind: "routeros"}` with a human-readable message; errors coming
-from the router or the wire are `Error{kind: "mikrotik"}`. Catch either
-with `try { ... } catch (e) { io.printf("%s\n", $e.message); }`.
+- **Errors.** Input rejected locally throws `Error{kind: "routeros"}` before
+  anything is sent. Errors from the router or the connection throw
+  `Error{kind: "mikrotik"}`. Both carry a readable `message`.
+- **Ids.** RouterOS gives every list item an id like `"*3"`. `add*` functions
+  return it, structs carry it in `.id`, and the generic verbs take it. Most
+  helpers take a name or a comment instead, because ids change when an item is
+  re-created.
+- **Verbose mode.** `$c = mt.setVerbose($c, true);` prints every command sent,
+  with credentials redacted; `MT_VERBOSE=1` sets it at `connect`. See
+  [core.md](core.md).
 
-Verbose mode: `$c = mt.setVerbose($c, true);` prints every command the
-client sends to stdout (`mt> /ip/address/add address=... interface=...`),
-with credentials redacted - see [core.md](core.md). It returns a copy, so
-keep the returned client. `MT_VERBOSE=1` in the environment turns it on
-at `connect` time without touching the script.
-
-Ids: RouterOS gives every list item an internal id like `"*3"`. The
-`add*` functions return it, the typed structs carry it in `.id`, and the
-generic verbs accept it. Most routeros helpers let you use a *name* or
-a *comment* instead, so you rarely touch ids directly.
-
-The condensed, everything-on-one-page reference is
-[cheatsheet.md](cheatsheet.md). For the RouterOS side itself -
-every menu, property, and behavior these topics wrap - see MikroTik's
-official [RouterOS documentation](https://help.mikrotik.com/docs/).
+Every topic has a read-only example in
+[`examples/`](https://github.com/deckyard/deck-routeros/tree/main/examples):
+`MT_HOST=... MT_USER=... MT_PASSWORD=... jennifer run examples/<topic>.j`.
 
 ## Guides
 
 | Guide | Covers |
 |---|---|
-| [cheatsheet.md](cheatsheet.md) | **the whole API surface on one page** |
 | [core.md](core.md) | connecting, the generic add/set/remove verbs, shared validation |
 | [interfaces.md](interfaces.md) | listing, enabling, renaming physical and virtual interfaces |
 | [interfacelist.md](interfacelist.md) | interface lists: WAN/LAN groups for firewall matching |
@@ -99,25 +94,10 @@ official [RouterOS documentation](https://help.mikrotik.com/docs/).
 | [log.md](log.md) | reading the router log, routing what gets logged |
 | [system.md](system.md) | packages, updates, firmware, reboot |
 
-One runnable example per topic lives in [`../examples/`](../examples/)
-(`MT_HOST=... MT_USER=... MT_PASSWORD=... jennifer run examples/<topic>.j`).
-
 ## Disclaimer
 
-MikroTik and RouterOS are trademarks of SIA Mikrotīkls. routeros is an
-independent, community-written client library, **not affiliated with,
-endorsed, or supported by SIA Mikrotīkls** - and it configures live
-network equipment. **Use at your own risk**; no warranty of any kind.
-
-Licensed under the **GNU LGPL v3.0 only** - see
-[../LICENSE](../LICENSE).
-
-## Running the tests
-
-```sh
-jennifer test src/routeros_test.j
-```
-
-The white-box overlay exercises everything network-free: validators,
-row folding, builders, and normalization. Functions that need a live
-router are thin compositions of those tested helpers.
+MikroTik and RouterOS are trademarks of SIA Mikrotikls. routeros is an
+independent library, not affiliated with, endorsed or supported by SIA
+Mikrotikls. It changes the configuration of live network equipment. Use at
+your own risk; no warranty of any kind. Licensed LGPL-3.0-only, see
+[LICENSE](https://github.com/deckyard/deck-routeros/blob/main/LICENSE).

@@ -1,66 +1,27 @@
 # Management services
 
 File: `src/topics/services.j`. Path: `/ip/service` (`SERVICE_PATH`).
+Reference: [cheatsheet](cheatsheet.md#management-services).
 
-## Background
+`/ip/service` is the fixed list of ways into the router: `api` and
+`api-ssl` (what the deck connects through), `ssh`, `winbox`, `www` and
+`www-ssl` (WebFig), and the cleartext `telnet` and `ftp`. Services are
+enabled, disabled, moved and restricted, never added or removed. Names
+are checked against that list locally; a typo fails with the valid names
+in the message.
 
-`/ip/service` is the fixed list of doors into the router: `api` and
-`api-ssl` (what routeros itself uses), `ssh`, `winbox`, `www` and
-`www-ssl` (WebFig), plus the cleartext relics `telnet` and `ftp`.
-Services are never added or removed - only enabled, disabled, moved to
-other ports, and restricted to source networks.
-
-Hardening a MikroTik largely happens right here, in three moves:
-
-1. **Close what you don't use** - especially telnet and ftp, which
-   send passwords in cleartext.
-2. **Restrict what you do use** to the management networks.
-3. Optionally **move noisy ports** (ssh, winbox) - that cuts scanner
-   noise, but is obscurity, not security; the restriction does the
-   protecting.
-
-## Struct
+Unrestricted services listen on every address, the WAN included: a fresh
+router answers WinBox from the internet. Restrict them here, block them
+in the input chain ([firewall.md](firewall.md)), or both.
 
 ```jennifer
-mt.Service {
-    id, name,
-    port,          # int
-    address,       # allowed sources, "" = anywhere
-    certificate,   # ssl services, "" otherwise
-    invalid,       # misconfigured (e.g. ssl without cert) - not running
-    disabled
-}
-```
-
-## Functions
-
-| Function | Purpose |
-|---|---|
-| `services(c)` → `list of Service` | the audit view |
-| `serviceByName(c, name)` → `Service` | one service |
-| `enableService(c, name)` / `disableService(c, name)` | open / close a door |
-| `setServicePort(c, name, port)` | move a service (clashes refused, owner named) |
-| `restrictService(c, name, addresses)` | limit sources to IPs/CIDRs; `""` lifts |
-| `disableInsecureServices(c)` → count | switch off telnet + ftp |
-
-Service names are validated against the fixed list, so a typo fails
-with the choices spelled out.
-
-## Examples
-
-The standard hardening pass:
-
-```jennifer
-mt.disableInsecureServices($c);                       # telnet + ftp off
-mt.restrictService($c, "winbox", "10.0.9.0/24");      # management net only
+mt.disableInsecureServices($c);                       # telnet and ftp; returns the count
+mt.restrictService($c, "winbox", "10.0.9.0/24");
 mt.restrictService($c, "ssh", "10.0.9.0/24");
 mt.restrictService($c, "api-ssl", "10.0.9.0/24");
 mt.disableService($c, "www");                         # WebFig over TLS only
-```
+mt.setServicePort($c, "ssh", 2200);                   # refused if another service uses 2200
 
-The audit:
-
-```jennifer
 def svcs as list of mt.Service init mt.services($c);
 for (def s in $svcs) {
     if (not $s.disabled and $s.address == "") {
@@ -69,36 +30,19 @@ for (def s in $svcs) {
 }
 ```
 
-Move ssh out of the scan storm:
+## Notes
 
-```jennifer
-mt.setServicePort($c, "ssh", 2200);
-# ssh to the router now needs -p 2200; the restriction above still applies
-```
-
-## Pitfalls
-
-- **Do not close the door you came through.** Disabling (or
-  mis-restricting) the API service carrying this session disconnects
-  you - and if it was your only way in, the next step is a serial
-  cable. Change `api` from an `api-ssl` session and vice versa, and
-  always verify one other access path (winbox/ssh) works first.
-- `restrictService` applies to *new* connections; your current session
+- Disabling or mis-restricting the API service this session uses
+  disconnects it; if it was the only way in, recovery needs a serial
+  cable. Change `api` from an `api-ssl` session and the other way round,
+  and check that winbox or ssh works first.
+- `restrictService` applies to new connections. The current session
   survives a mistake, so test a fresh connection before logging out.
-- A service with `invalid == true` (typically `api-ssl`/`www-ssl`
-  without a certificate) is enabled but not actually listening -
-  enabling it is not enough, it needs a certificate (generic verbs,
-  `/certificate`).
-- The services listen on **all** addresses the router has, including
-  the WAN, unless restricted - a fresh router answers WinBox from the
-  internet. Restriction here and/or an input-chain firewall rule
-  ([firewall.md](firewall.md)) both work; doing both is fine.
+- `invalid` true (typically `api-ssl` or `www-ssl` without a
+  certificate) means enabled but not listening. Fix it with
+  `assignServiceCertificate` ([certificates.md](certificates.md)).
+- A non-default port cuts scanner noise; the address restriction is
+  what protects.
 - MAC-WinBox and MAC-Telnet (`/tool/mac-server`, generic verbs) are
-  separate LAN-only doors that ignore these settings.
-
-## Related
-
-- [users.md](users.md) (who may log in; `restrictUser` is the same
-  idea per account), [firewall.md](firewall.md) (the other layer of
-  the same defence), [core.md](core.md) (the api service is what
-  routeros connects through).
+  separate LAN-only ways in that ignore these settings.
+- `restrictUser` ([users.md](users.md)) is the per-account equivalent.

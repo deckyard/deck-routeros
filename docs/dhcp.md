@@ -1,75 +1,60 @@
 # DHCP: server, leases, and the WAN client
 
-File: `src/topics/dhcp.j`. Paths: `/ip/pool`, `/ip/dhcp-server`,
-`/ip/dhcp-server/network`, `/ip/dhcp-server/lease`, `/ip/dhcp-client`
-(`IP_POOL_PATH`, `DHCP_SERVER_PATH`, `DHCP_NETWORK_PATH`,
-`DHCP_LEASE_PATH`, `DHCP_CLIENT_PATH`).
+File: `src/topics/dhcp.j`. Paths: `/ip/pool` (`IP_POOL_PATH`),
+`/ip/dhcp-server` (`DHCP_SERVER_PATH`), `/ip/dhcp-server/network`
+(`DHCP_NETWORK_PATH`), `/ip/dhcp-server/lease` (`DHCP_LEASE_PATH`),
+`/ip/dhcp-client` (`DHCP_CLIENT_PATH`), `/ip/dhcp-relay`
+(`DHCP_RELAY_PATH`). Reference: [cheatsheet](cheatsheet.md#dhcp).
 
-## Background
+A DHCP server in RouterOS is three objects: an address pool (the range),
+the server (bound to an interface) and a network entry (the gateway and
+DNS servers clients are told). `setupDhcp` creates all three. The DHCP
+client is the WAN side: it asks the ISP for the router's own address.
 
-DHCP has two sides on a router:
+## Server
 
-- **Server** (LAN side): hands addresses, gateway, and DNS to your
-  clients. RouterOS needs *three* objects for this - an address pool
-  (the range to hand out), the server itself (bound to an interface),
-  and a network entry (gateway + DNS the clients are told). Forgetting
-  one of the three is the classic beginner failure; routeros creates
-  them together.
-- **Client** (WAN side): asks the ISP for the router's own public
-  address. See "WAN" below.
-
-## DHCP server
+The interface needs an address inside the served network first, or
+clients get a gateway they cannot reach:
 
 ```jennifer
-# the interface needs an address inside the network first
 mt.addIpAddress($c, "192.168.77.1/24", "brlan");
 
 mt.setupDhcp($c, "dhcplan", "brlan",
-    "192.168.77.0/24",       # the network
-    "192.168.77.1",          # gateway told to clients (the router itself)
+    "192.168.77.0/24",       # network
+    "192.168.77.1",          # gateway told to clients
     "192.168.77.10",         # range start
     "192.168.77.199",        # range end
-    "192.168.77.1");         # DNS told to clients (comma list allowed)
-```
+    "192.168.77.1");         # DNS told to clients, comma-separated
 
-Everything is cross-checked before anything is created: the gateway and
-both range ends must lie *inside* the network, the interface must
-exist, DNS entries must be IP addresses. The pool shares the server's
-name so the whole thing can be undone:
-
-```jennifer
 mt.teardownDhcp($c, "dhcplan", "192.168.77.0/24");
 ```
 
-(each of the three pieces is removed if present - a half-finished setup
-tears down too).
-
-Other server-side functions: `dhcpServers(c)` → `list of DhcpServer`.
+`setupDhcp` checks everything before it creates anything: gateway and both
+range ends must lie inside the network, DNS entries must be IP addresses,
+the interface must exist. It is not idempotent: it adds three objects on
+every call. The pool takes the server's name. `teardownDhcp` removes
+whichever of the three pieces exist (the network entry is matched by the
+exact CIDR string) and fails only when none does.
 
 ## Leases and reservations
 
 ```jennifer
-# who is on the network right now?
 def leases as list of mt.DhcpLease init mt.dhcpLeases($c);
 for (def l in $leases) {
     io.printf("%s -> %s (%s) %s\n", $l.address, $l.mac, $l.hostName, $l.status);
 }
 
-# always give the printer the same address
-mt.addStaticLease($c, "192.168.77.50", "AA:BB:CC:DD:EE:FF", "printer");
-
-# and take the reservation away again
+mt.addStaticLease($c, "192.168.77.50", "aa:bb:cc:dd:ee:ff", "printer");
 mt.removeLeaseByMac($c, "AA:BB:CC:DD:EE:FF");
 ```
 
-`DhcpLease.dynamic` distinguishes an automatic lease from a static
-reservation. MAC addresses are validated (six hex pairs) and uppercased
-for you.
+MACs must be six colon-separated hex pairs, any case; they are sent
+uppercased. `DhcpLease.dynamic` is false for a static reservation.
 
-## WAN: the DHCP client
+## WAN client
 
 ```jennifer
-mt.setupWan($c, "ether1");                  # defaults: ISP route + ISP DNS
+mt.setupWan($c, "ether1");                  # adopts the ISP's route and DNS
 mt.addMasquerade($c, "ether1", "lan to internet");
 
 def wan as mt.DhcpClient init mt.wanStatus($c, "ether1");
@@ -79,32 +64,33 @@ if ($wan.bound) {
 }
 ```
 
-`setupWan` is idempotent (an existing client on the interface is
-reused). `setupWanWith(c, iface, usePeerDns, addDefaultRoute)` opts out
-of adopting the ISP's DNS or route - useful for a backup uplink whose
-route you manage with `addRouteWithDistance` (see
-[routing.md](routing.md)). Also: `renewWan(c, iface)` (fresh lease),
-`dhcpClients(c)`, `removeDhcpClient` / `enableDhcpClient` /
-`disableDhcpClient(c, iface)`.
+`setupWan` and `setupWanWith` are idempotent: an existing client on the
+interface is returned untouched, with its old settings. `setupWanWith`
+can decline the ISP's DNS servers or default route, e.g. for a backup
+uplink routed with `addRouteWithDistance` ([routing.md](routing.md)).
+`DhcpClient.addDefaultRoute` is a string because RouterOS has three
+values: `yes`, `no`, `special-classless`.
 
-`DhcpClient.addDefaultRoute` stays a string because RouterOS allows
-three values (`yes` / `no` / `special-classless`).
+## Relay
+
+`addDhcpRelay` forwards the DHCP broadcasts on an interface to a central
+server by unicast. The interface needs an address in the client network,
+which tells the server which subnet to serve. Idempotent by name.
+
+```jennifer
+mt.addDhcpRelay($c, "vlan20-relay", "vlanoffice", "10.0.0.5");
+```
 
 ## Pitfalls
 
-- **The interface must have an address inside the served network** -
-  clients are told a gateway they can only reach if the router is
-  actually there. `setupDhcp`'s docblock reminds you; the snippet above
-  shows the order.
-- One DHCP server per interface; RouterOS refuses a second.
-- A static lease for a device with an *active* dynamic lease takes
-  effect at the next renewal, not instantly.
-- On the WAN side, `bound == false` with status `searching...` usually
-  means the ISP link is down or the modem is not bridging.
-- Do not run a DHCP server on the WAN interface. RouterOS will happily
-  let you annoy your ISP.
+- RouterOS allows one DHCP server per interface.
+- A static lease for a device with an active dynamic lease applies at
+  the next renewal.
+- A WAN client stuck with status `searching...` usually means the ISP
+  link is down or the modem is not bridging.
+- Never run a DHCP server on the WAN interface.
+- `removeDhcpClient` takes the WAN address, default route and DNS
+  servers with it: the uplink is down until reconfigured.
 
-## Related
-
-- [ip.md](ip.md), [nat.md](nat.md), [ppp.md](ppp.md) (PPPoE instead of
-  DHCP WAN), [dns.md](dns.md) (the router as the LAN's resolver).
+See also: [ip.md](ip.md), [nat.md](nat.md), [ppp.md](ppp.md) (PPPoE
+instead of DHCP on the WAN), [dns.md](dns.md).

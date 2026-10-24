@@ -1,61 +1,59 @@
 <!-- SPDX-License-Identifier: LGPL-3.0-only -->
-<!-- SPDX-FileCopyrightText: 2026 mplx <jennifer@mplx.dev> -->
+<!-- SPDX-FileCopyrightText: 2026 mplx <mplx@jennifer-lang.dev> -->
 
 # Remote-access VPN (L2TP, SSTP, OpenVPN, IKEv2)
 
 Files: `src/topics/ppp.j` (the shared user database), `l2tp.j`,
-`sstp.j`, `ovpn.j`, and the IKEv2 additions in `ipsec.j`.
+`sstp.j`, `ovpn.j`, and `setupIkev2Server` in `ipsec.j`. Reference:
+[L2TP](cheatsheet.md#l2tp), [SSTP](cheatsheet.md#sstp),
+[OpenVPN](cheatsheet.md#openvpn), [PPPoE and VPN users](cheatsheet.md#pppoe),
+[IPsec](cheatsheet.md#ipsec).
 
-## Background
+Site-to-site VPNs ([wireguard](wireguard.md), [ipsec](ipsec.md),
+[gre](gre.md), [eoip](eoip.md)) join networks; these let people dial
+in. The choice depends mostly on the client:
 
-The site-to-site VPNs ([wireguard](wireguard.md), [ipsec](ipsec.md),
-[gre](gre.md), [eoip](eoip.md)) join *networks*. Remote-access VPNs let
-*people* dial in - a laptop in a café, a phone on cellular. RouterOS has
-several, and which to pick is mostly about the client:
-
-| Server | Client story | Needs |
+| Server | Client side | Needs |
 |---|---|---|
-| **L2TP/IPsec** | built into Windows/macOS/iOS/Android - nothing to install | a pre-shared key |
-| **SSTP** | TLS on 443, crosses hotel/captive firewalls | a TLS certificate |
-| **OpenVPN** | a client for everything, but a config file to import | a TLS certificate |
-| **IKEv2** | native modern clients ("IKEv2" in iOS/macOS/Win) | a certificate + EAP users |
+| L2TP/IPsec | built into Windows, macOS, iOS, Android | a pre-shared key |
+| SSTP | TLS on 443, passes hotel and captive firewalls | a TLS certificate |
+| OpenVPN | a client for every OS, plus a config file per device | a TLS certificate |
+| IKEv2 | native in iOS, macOS, Windows | a certificate and RADIUS users |
 
-For most "let staff reach the office" cases, **L2TP/IPsec** is the least
-friction. All four (except WireGuard) share one thing:
+For "staff reach the office", L2TP/IPsec has the least friction.
 
-### The shared user database (PPP secrets)
+## Users: PPP secrets
 
-L2TP, SSTP, OpenVPN, and PPTP all authenticate against `/ppp/secret`.
-So the workflow is always: **enable a server, then add users** - the
-users work for whichever servers you turned on.
+L2TP, SSTP and OpenVPN (and PPTP) authenticate against `/ppp/secret`.
+Enable a server, then add users; a user works on every server its
+`service` allows: `"any"`, `"l2tp"`, `"sstp"`, `"ovpn"`, `"pptp"` or
+`"pppoe"`.
 
 ```jennifer
 mt.addVpnUser($c, "alice", "her password", "any", "field laptop");
 mt.vpnUsers($c);              # list them
-mt.pppActive($c);            # who is connected right now (any VPN type)
-mt.kickPppUser($c, "alice"); # disconnect a session
+mt.pppActive($c);             # sessions now, any VPN type
+mt.kickPppUser($c, "alice");  # drop a session
 ```
 
-`service` pins a login to one server type (`"l2tp"`, `"sstp"`,
-`"ovpn"`) or `"any"`.
-
-## L2TP/IPsec - the easy one
+## L2TP/IPsec
 
 ```jennifer
-mt.enableL2tpServer($c, "a long random ipsec secret");   # opens the firewall too
+mt.enableL2tpServer($c, "a long random ipsec secret");   # also opens the firewall
 mt.addVpnUser($c, "alice", "her password", "l2tp", "laptop");
 ```
 
-Clients enter: server = the router's public address or DNS name (see
+Clients enter the router's public address or DNS name (see
 [cloud.md](cloud.md) for a name on a dynamic IP), the pre-shared key,
-and their username/password. `disableL2tpServer($c)` turns it off and
-removes the firewall openings. Never enable L2TP without the IPsec
-secret - plain L2TP is cleartext (the helper refuses an empty secret).
+and their username and password. `enableL2tpServer` requires IPsec and
+refuses an empty secret; plain L2TP is cleartext.
+`disableL2tpServer($c)` turns the server off and removes its firewall
+accepts.
 
-## SSTP and OpenVPN - TLS-based
+## SSTP and OpenVPN
 
-Both need a certificate ([certificates.md](certificates.md)); a public
-Let's Encrypt cert means clients connect without warnings.
+Both need a certificate ([certificates.md](certificates.md)); with a
+public Let's Encrypt certificate clients connect without warnings.
 
 ```jennifer
 mt.enableSstpServer($c, "router-le-cert", 443);   # looks like HTTPS
@@ -63,13 +61,14 @@ mt.enableOvpnServer($c, "router-le-cert", 1194);
 mt.addVpnUser($c, "bob", "his password", "any", "remote worker");
 ```
 
-SSTP shines where other VPNs are blocked (it *is* HTTPS to a firewall).
-OpenVPN is the most portable but needs a client config profile
-(exported from the router / hand-built) on each device.
+SSTP works where other VPNs are blocked, since to a firewall it is
+HTTPS. OpenVPN runs routed (`mode=ip`) over TCP and each device needs a
+config profile, exported from the router or written by hand.
 
-## Dialing out (VPN clients)
+## Dialing out
 
-The router can also be the one dialing in to someone else's server:
+The router can be the client of someone else's server. Each client is
+an interface to route or bridge:
 
 ```jennifer
 mt.addL2tpClient($c, "l2tpto-hq", "vpn.example.org", "branch", "password");
@@ -77,42 +76,35 @@ mt.addSstpClient($c, "sstpto-hq", "vpn.example.org", "branch", "password");
 mt.addOvpnClient($c, "ovpnto-hq", "vpn.example.org", "branch", "password");
 ```
 
-Each appears as an interface you can route or bridge.
+`addSstpClient` sets `verify-server-certificate=no`, so it does not
+authenticate the server; set it to `yes` with the generic `set` when the
+server's certificate chain is trusted on the router.
 
-## IKEv2 road-warrior (native clients, no L2TP layer)
+## IKEv2 road-warrior
 
-`setupIkev2Server` (ipsec topic) builds the mode-config (client address
-pool + DNS), a passive IKEv2 peer, and an EAP identity bound to your
-certificate:
+`setupIkev2Server` creates an address pool and mode-config (client
+addresses and DNS), a passive IKEv2 peer, and an `eap-radius` identity
+bound to the router's certificate:
 
 ```jennifer
 mt.setupIkev2Server($c, "roadwarriors", "router-le-cert",
     "10.200.0.10-10.200.0.200", "1.1.1.1");
 ```
 
-This is the most involved to finish end-to-end - the certificate trust
-chain must be right on the client, and EAP users come from RADIUS
-([radius.md](radius.md)) or a user manager. Verify against a real
-device; between networks you control, WireGuard is far simpler.
+Users come from RADIUS ([radius.md](radius.md); User Manager is one).
+The client must trust the certificate chain. Test with a real device;
+between networks you control, WireGuard is simpler.
 
 ## Pitfalls
 
-- **One user database.** Disabling a user (`disableVpnUser`) or deleting
-  it affects every server it could use.
-- **Firewall.** The `enable*Server` helpers open the needed input ports
-  (and remove them on disable). A hand-built firewall that drops input
-  first still needs those accepts above the drop.
-- **L2TP behind NAT** relies on NAT-T (udp/4500) - the helper opens it;
-  the client's own NAT usually just works.
-- **Push a route/DNS to clients** via the PPP profile
-  (`pppProfiles(c)`, then the generic `set` on `PPP_PROFILE_PATH`) - the
-  default profile gives an address but no split-tunnel routes.
-- **Certificates need a correct clock** ([clock.md](clock.md)) or TLS
-  VPNs fail before they start.
-
-## Related
-
-- [certificates.md](certificates.md), [radius.md](radius.md),
-  [cloud.md](cloud.md), [ipsec.md](ipsec.md),
-  [wireguard.md](wireguard.md) (the modern site-to-site / road-warrior
-  alternative).
+- One user database: disabling or deleting a user (`disableVpnUser`)
+  affects every server it could use.
+- The `enable*Server` helpers add input accepts and the `disable*Server`
+  helpers remove them. On a firewall that drops input early, those
+  accepts must sit above the drop.
+- L2TP behind NAT relies on NAT-T (udp 4500), which `enableL2tpServer`
+  opens.
+- The default PPP profile hands out an address but no routes or DNS.
+  Push those through the profile: `pppProfiles(c)`, then the generic
+  `set` on `PPP_PROFILE_PATH`.
+- TLS VPNs fail when the router clock is wrong ([clock.md](clock.md)).

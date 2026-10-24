@@ -1,40 +1,43 @@
 # routeros
 
-[![test](https://github.com/jennifer-language/deck-routeros/actions/workflows/test.yml/badge.svg)](https://github.com/jennifer-language/deck-routeros/actions/workflows/test.yml)
-[![Documentation](https://img.shields.io/badge/docs-github%20pages-blue)](https://jennifer-language.github.io/deck-routeros/)
-[![release](https://img.shields.io/github/v/release/jennifer-language/deck-routeros)](https://github.com/jennifer-language/deck-routeros/releases/latest)
+[![test](https://github.com/deckyard/deck-routeros/actions/workflows/test.yml/badge.svg)](https://github.com/deckyard/deck-routeros/actions/workflows/test.yml)
+[![Documentation](https://img.shields.io/badge/docs-github%20pages-blue)](https://deckyard.github.io/deck-routeros/)
+[![release](https://img.shields.io/github/v/release/deckyard/deck-routeros)](https://github.com/deckyard/deck-routeros/releases/latest)
 
-A **thick layer over the MikroTik RouterOS API** for the
-[Jennifer](https://jennifer-lang.dev/) language.
+`@deckyard/routeros` configures MikroTik routers from
+[Jennifer](https://jennifer-lang.dev/). It wraps the bundled `mikrotik` module
+(the RouterOS binary API: command paths, `=key=value` words, reply sentences) in
+typed verbs and structs for interfaces, bridges, VLANs, the firewall, DHCP, DNS,
+VPNs, queues, users, certificates, system maintenance and more. Input is
+validated before anything is sent; local validation failures throw
+`Error{kind: "routeros"}`, router and transport failures `Error{kind: "mikrotik"}`.
 
-The bundled `mikrotik` module speaks the raw binary API: command paths,
-`=key=value` words, reply sentences. routeros wraps that in plain verbs and
-typed structs so you can configure interfaces, bridges, and the firewall
-without knowing RouterOS internals. All input is validated before it touches
-the wire; every failure is an `Error{kind: "routeros"}` (or
-`kind: "mikrotik"` from the transport) with a human-readable message.
+## Install
 
-## Usage
+```sh
+jvc add @deckyard/routeros
+```
+
+jvc vendors the deck's `src/` to `vendor/deckyard/routeros/`. Without jvc,
+unpack the `src/` subtree of a release archive
+(`deckyard-routeros-<version>.tar.gz`) there.
+
+Requires Jennifer 0.25.0 or newer, the default `jennifer` binary (the transport
+needs `net`; `jennifer-tiny` stubs it) and a router with the `api` (8728) or
+`api-ssl` (8729) service enabled. Login works on RouterOS 6.43+ and v7; the
+transport falls back to MD5 challenge-response for older routers.
+
+## Example
 
 ```jennifer
-import "@jennifer/routeros/" as mt;
+import "@deckyard/routeros/" as mt;
 
 def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
+$c = mt.setVerbose($c, true);   # print each command, credentials redacted
 
-# see what gets sent (credentials are redacted); MT_VERBOSE=1 does the same
-$c = mt.setVerbose($c, true);
-
-# bridges
 mt.addBridge($c, "brlan");
 mt.addBridgePort($c, "brlan", "ether2");
-
-# interfaces
-mt.disableInterface($c, "ether5");
-mt.commentInterface($c, "ether1", "uplink");
-
-# firewall
 mt.allowService($c, "tcp", 22, "ssh management");
-mt.blockAddress($c, "203.0.113.7", "known scanner");
 
 def r as mt.FirewallRule init mt.firewallRule(mt.CHAIN_FORWARD, mt.ACTION_DROP);
 $r = mt.withProtocol($r, "tcp");
@@ -45,28 +48,24 @@ mt.addFirewallRule($c, $r);
 mt.disconnect($c);
 ```
 
-See [`examples/`](examples/) for one runnable example per topic, e.g.
+Every topic has a read-only example in [`examples/`](examples/):
 `MT_HOST=... MT_USER=... MT_PASSWORD=... jennifer run examples/firewall.j`.
 
 ## Documentation
 
-- [docs/cheatsheet.md](docs/cheatsheet.md) - the full API surface, project layout, tests, requirements
-- [docs/index.md](docs/index.md) - per-topic guides with background and worked examples
-- [examples/](examples/) - one runnable, read-only example per topic (`examples/<topic>.j`)
-- [RouterOS documentation](https://help.mikrotik.com/docs/) - MikroTik's official reference for
-  everything behind the paths this module wraps
+The [book](https://deckyard.github.io/deck-routeros/) has one guide per topic
+and the [cheatsheet](docs/cheatsheet.md) with every function, constant and
+struct. MikroTik's [RouterOS documentation](https://help.mikrotik.com/docs/)
+covers the menus behind the paths.
 
 ## Disclaimer
 
-MikroTik and RouterOS are trademarks of SIA Mikrotīkls. This project is
-an independent, community-written client library; it is **not
-affiliated with, endorsed, or supported by SIA Mikrotīkls**. It
-configures live network equipment - review what a call does before
-pointing it at production hardware. **Use at your own risk**; no
+MikroTik and RouterOS are trademarks of SIA Mikrotikls. This is an independent
+library, not affiliated with, endorsed or supported by SIA Mikrotikls. It
+changes the configuration of live network equipment: review what a call does
+before running it against production hardware. Use at your own risk; no
 warranty of any kind.
 
 ## License
 
-Licensed under the **GNU LGPL v3.0 only** - see [LICENSE](LICENSE).
-Copyright © 2026 mplx &lt;jennifer@mplx.dev&gt;. Every source file carries
-an `SPDX-License-Identifier: LGPL-3.0-only` header.
+LGPL-3.0-only, see [LICENSE](LICENSE). Copyright (C) 2026 mplx &lt;mplx@jennifer-lang.dev&gt;.

@@ -1,39 +1,21 @@
 <!-- SPDX-License-Identifier: LGPL-3.0-only -->
-<!-- SPDX-FileCopyrightText: 2026 mplx <jennifer@mplx.dev> -->
+<!-- SPDX-FileCopyrightText: 2026 mplx <mplx@jennifer-lang.dev> -->
 
 # Connection tracking
 
 File: `src/topics/contrack.j`. Paths:
 `/ip/firewall/connection/tracking` (`CONNTRACK_SETTINGS_PATH`),
 `/ip/firewall/connection` (`CONNECTION_PATH`).
+Reference: [cheatsheet](cheatsheet.md#connection-tracking).
 
-## Background
-
-Connection tracking is the state behind stateful firewalling and NAT -
-every flow the router has seen, with its addresses, protocol, and (for
-TCP) state. Reading it answers operational questions the config alone
-cannot: *what is this device actually talking to*, *is the table
-filling up*, *why is that flow stuck*.
-
-## Structs
-
-```jennifer
-mt.ConntrackSettings { enabled, totalEntries, maxEntries }   # ints
-mt.Connection { id, protocol, srcAddress, dstAddress, tcpState, timeout, connectionMark }
-```
-
-## Functions
-
-| Function | Purpose |
-|---|---|
-| `conntrackSettings(c)` → `ConntrackSettings` | fill level and capacity |
-| `connections(c)` → `list of Connection` | the whole table (large) |
-| `connectionsFor(c, address)` | flows involving one host |
-| `dropConnectionsFor(c, address)` → count | reset a host's flows |
+Connection tracking is the state behind stateful filtering and NAT:
+every flow the router has seen, with addresses, protocol and, for TCP,
+state. Reading it shows what a device is talking to and whether the
+table is filling up.
 
 ## Examples
 
-Is the table healthy?
+Table fill:
 
 ```jennifer
 def s as mt.ConntrackSettings init mt.conntrackSettings($c);
@@ -41,7 +23,7 @@ io.printf("%d of %d connections (%d%% full)\n",
     $s.totalEntries, $s.maxEntries, $s.totalEntries * 100 // $s.maxEntries);
 ```
 
-What is one device doing?
+One device's flows:
 
 ```jennifer
 def conns as list of mt.Connection init mt.connectionsFor($c, "192.168.88.50");
@@ -50,8 +32,7 @@ for (def con in $conns) {
 }
 ```
 
-Cut a host off instantly (without a firewall rule), or clear flows stuck
-after a routing change:
+Reset a host's flows, e.g. after a routing change:
 
 ```jennifer
 def n as int init mt.dropConnectionsFor($c, "192.168.88.55");
@@ -60,19 +41,20 @@ io.printf("dropped %d connections\n", $n);
 
 ## Pitfalls
 
-- **The table is huge on a busy router** - `connections(c)` may return
-  thousands of rows. Prefer `connectionsFor`.
-- Dropping connections is not blocking - the host can immediately open
-  new ones. To *keep* it out, add a firewall rule
-  ([firewall.md](firewall.md)) or an address-list drop
-  ([addresslist.md](addresslist.md)); drop the connections to make the
-  block take effect on existing flows.
-- A near-full table (`totalEntries` approaching `maxEntries`) drops new
-  connections - a symptom of a scan, a P2P host, or a too-small table.
-- NAT'd flows appear in translated form; the same flow may show its
-  original and NAT'd addresses.
+- `connectionsFor` and `dropConnectionsFor` match by substring on the
+  `address:port` strings, not by exact host. `"192.168.88.5"` also
+  matches 192.168.88.50-59, so `dropConnectionsFor` can drop other
+  hosts' connections.
+  For an exact match, filter `connections(c)` on `srcAddress` /
+  `dstAddress` and remove by id with the generic `remove`.
+- `connections(c)` returns thousands of rows on a busy router.
+- Dropping connections does not block: the host can reconnect at once.
+  To keep it out, add a firewall rule ([firewall.md](firewall.md)) or
+  an address-list drop ([addresslist.md](addresslist.md)), then drop
+  its connections so the block applies to existing flows.
+- When `totalEntries` reaches `maxEntries`, new connections are
+  dropped: a scan, a P2P host or a table too small.
+- NAT'd flows appear in translated form.
 
-## Related
-
-- [firewall.md](firewall.md), [nat.md](nat.md),
-  [mangle.md](mangle.md) (connection marks appear here).
+See also: [nat.md](nat.md), [mangle.md](mangle.md) (connection marks
+appear in `connectionMark`).

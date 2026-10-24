@@ -1,87 +1,50 @@
 # EoIP tunnels
 
 File: `src/topics/eoip.j`. Path: `/interface/eoip` (`EOIP_PATH`).
+Reference: [cheatsheet](cheatsheet.md#eoip-tunnels).
 
-## Background
+EoIP carries ethernet frames inside IP packets between two MikroTik
+routers. Bridge the tunnel into the LAN on both ends and the sites share
+one layer-2 network: one broadcast domain, one subnet. A routed VPN such
+as WireGuard alone does not do that.
 
-EoIP is MikroTik's "very long ethernet cable": it carries raw ethernet
-frames inside IP packets between two MikroTik routers. Bridge the
-tunnel interface into the LAN on both ends, and the two sites share
-*one* layer-2 network - same broadcast domain, same subnet, devices see
-each other as if plugged into the same switch. That is something a
-routed VPN (like WireGuard alone) deliberately does not do.
+- **Both ends** create a tunnel with the other as `remote-address` and
+  the **same tunnel id** (0-65535). Mismatched ids fail silently: the
+  tunnels never come up.
+- **EoIP is not encrypted.** Across the internet, set the coupled IPsec
+  secret (`addSecureEoipTunnel`) or run EoIP over WireGuard with the
+  peer's VPN address as remote.
+- **Everything crosses**: broadcasts, DHCP, mDNS. Run one DHCP server
+  for both sites, or separate them deliberately.
+- EoIP is MikroTik-proprietary; the far end must be a MikroTik.
 
-Three facts define every EoIP setup:
+`addEoipTunnel` refuses a taken name and a tunnel with the same remote
+and id, naming the tunnel that holds it.
 
-1. **It takes two.** Each router creates a tunnel pointing its
-   `remote-address` at the other, and both must use the **same tunnel
-   id** (0-65535). Mismatched ids fail silently - the tunnels just
-   never come up.
-2. **EoIP is not encrypted.** On a trusted path (a leased line, inside
-   a WireGuard tunnel) that is fine; across the open internet it is
-   not. Either set the coupled IPsec secret (`addSecureEoipTunnel`) or
-   run EoIP over WireGuard - remote = the peer's VPN address.
-3. **Layer 2 means everything crosses**: broadcasts, DHCP, mDNS. That
-   is the point - and the caveat (one DHCP server for both sites, or
-   careful separation).
+## One LAN across two sites, over WireGuard
 
-## Struct
+WireGuard provides the encrypted path, EoIP the layer 2 on top:
 
 ```jennifer
-mt.EoipTunnel {
-    id, name,
-    remoteAddress, localAddress,   # localAddress "" = automatic
-    tunnelId,                      # int, both ends must match
-    mac, mtu, keepalive,
-    running, disabled, comment
-}
-```
+# a WireGuard tunnel connects the sites: A = 10.100.0.1, B = 10.100.0.2
 
-## Functions
-
-| Function | Purpose |
-|---|---|
-| `addEoipTunnel(c, name, remoteAddress, tunnelId)` → id | plain tunnel |
-| `addSecureEoipTunnel(c, name, remoteAddress, tunnelId, ipsecSecret)` → id | with coupled IPsec |
-| `eoipTunnels(c)` → `list of EoipTunnel` | all tunnels |
-| `eoipTunnelByName(c, name)` → `EoipTunnel` | one tunnel |
-| `removeEoipTunnel(c, name)` | delete (detach bridge ports first) |
-| `enableEoipTunnel(c, name)` / `disableEoipTunnel(c, name)` | up / down |
-
-Validation: the remote must be an IP address, the tunnel id 0-65535, a
-name may not be taken, and a same-remote/same-id tunnel is refused with
-the owning tunnel named. The IPsec secret is write-only.
-
-## Example: one LAN across two sites, over WireGuard
-
-The recommended stack - WireGuard provides the encrypted path, EoIP
-provides layer 2 on top:
-
-```jennifer
-# assumption: a WireGuard tunnel already connects the sites
-# (site A = 10.100.0.1, site B = 10.100.0.2; see wireguard.md)
-
-# --- site A ---
+# site A
 mt.addEoipTunnel($c, "eoipbranch", "10.100.0.2", 7);
 mt.addBridgePort($c, "brlan", "eoipbranch");
 
-# --- site B (its own client) ---
+# site B, on its own client
 # mt.addEoipTunnel($cb, "eoipmain", "10.100.0.1", 7);
 # mt.addBridgePort($cb, "brlan", "eoipmain");
 ```
 
-After both ends are up, a device at site B gets its DHCP lease from
-site A's server - one LAN.
+A device at site B then gets its lease from site A's DHCP server.
 
-## Example: direct with coupled IPsec
-
-When there is no WireGuard and the routers reach each other by public
-address:
+## Direct, with coupled IPsec
 
 ```jennifer
 mt.addSecureEoipTunnel($c, "eoipbranch", "203.0.113.99", 7,
     "a long random shared secret");
-# the far end mirrors it with the SAME secret and id
+# the far end mirrors it with the same secret and id
 ```
 
 ## Monitoring
@@ -94,30 +57,20 @@ for (def t in $tunnels) {
 }
 ```
 
-`running == false` on both ends usually means the path is down or the
-tunnel ids differ; on one end only, check that the remote addresses
-mirror each other.
+Keepalive defaults to `10s,10`, so `running` goes false when the far end
+stops answering. False on both ends usually means the path is down or the
+ids differ; on one end only, check that the remote addresses mirror each
+other.
 
 ## Pitfalls
 
-- **MTU shrinks.** EoIP adds encapsulation overhead (more with IPsec),
-  so full-size 1500-byte LAN frames may not fit the path. Symptoms are
-  the classic "ping works, downloads hang" - lower the tunnel MTU
-  (generic `set`) or enable `clamp-tcp-mss`.
-- **Bridging both ends of two parallel tunnels builds a loop.** One
-  EoIP per site pair into the same bridge, or run (R)STP on the
+- Encapsulation (more with IPsec) shrinks the usable MTU, so full
+  1500-byte frames may not fit. The symptom is "ping works, downloads
+  hang": lower the tunnel MTU with the generic `set`, or enable
+  `clamp-tcp-mss`.
+- Two parallel tunnels between the same sites, bridged on both ends,
+  form a loop. Use one tunnel per site pair, or run (R)STP on the
   bridges.
-- Keepalive defaults to `10s,10`: the tunnel reports `running=false`
-  when the far end stops answering - that is your health signal.
-- EoIP is MikroTik-proprietary: the other end must be a MikroTik (or
-  something implementing the same GRE dialect).
-- The stretched LAN shares *everything*, including broadcast storms
-  and rogue DHCP servers. For routed site-to-site connectivity without
-  those risks, plain WireGuard (see [wireguard.md](wireguard.md)) is
-  the simpler answer.
-
-## Related
-
-- [wireguard.md](wireguard.md) (the encrypted path underneath),
-  [bridges.md](bridges.md) (where the tunnel ends up),
-  [dhcp.md](dhcp.md) (one server serving both sites).
+- The stretched LAN also carries broadcast storms and rogue DHCP
+  servers. For routed site-to-site links, plain WireGuard
+  ([wireguard.md](wireguard.md)) is simpler.
