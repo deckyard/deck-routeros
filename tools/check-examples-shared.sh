@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 #
 # The examples are documentation that has to keep working: the docs quote them,
 # so a broken example means stale docs. Running them is cheap and catches what
 # the unit suites cannot - the end-to-end path through the public surface.
 #
-# A deck whose examples need inputs or a network host overrides this script.
-# `EXAMPLES_SKIP_RUN=1` reduces it to a parse check.
+# This is the shared runner. The workflows call tools/check-examples.sh, which
+# is the deck's own file and by default only hands over to this one. A deck
+# whose examples need inputs or a network host replaces that wrapper instead -
+# building fixtures, or setting `EXAMPLES_SKIP_RUN=1` to reduce this to a parse
+# check - and leaves this file identical to every other deck's.
 #
-# Usage: tools/check-examples.sh
+# `JENNIFER` names the interpreter, so the jennifer-tiny job can reuse this.
+#
+# Usage: tools/check-examples-shared.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
