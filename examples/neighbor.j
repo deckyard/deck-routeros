@@ -1,10 +1,10 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 /**
- * neighbor example - discovered neighbors (LLDP/CDP/MNDP).
+ * neighbor example - list the neighbors heard via LLDP, CDP and MNDP.
  *
  * Read-only unless noted; mutating calls are shown as comments.
  * Set the router credentials in the environment:

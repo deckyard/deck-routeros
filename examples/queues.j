@@ -1,13 +1,13 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 /**
  * queues example - simple queues and hierarchical QoS.
  *
- * Read-only unless noted; mutating calls are shown as comments.
- * Set the router credentials in the environment:
+ * Reads only; mutating calls are shown as comments.
+ * Run with the router credentials in the environment:
  *   MT_HOST=192.168.88.1 MT_USER=admin MT_PASSWORD=secret jennifer run examples/queues.j
  */
 

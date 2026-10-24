@@ -1,13 +1,12 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 /**
  * wireguard example - WireGuard VPN tunnels.
  *
- * Read-only unless noted; mutating calls are shown as comments.
- * Set the router credentials in the environment:
+ * Read-only: mutating calls are shown as comments.
  *   MT_HOST=192.168.88.1 MT_USER=admin MT_PASSWORD=secret jennifer run examples/wireguard.j
  */
 
