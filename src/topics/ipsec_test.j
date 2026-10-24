@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the ipsec topic.
@@ -90,4 +90,47 @@ func testFirstChainRowIdEmptyChain() {
 
 func testIpsecModeConfigPathConstant() {
     testing.assertEqual(IPSEC_MODE_CONFIG_PATH, "/ip/ipsec/mode-config");
+}
+
+# Verbs: local validation before any I/O
+
+func failSetupIpsecTunnelEmptyPsk() {
+    setupIpsecTunnel(
+        offlineClient(),
+        "site2",
+        "203.0.113.2",
+        "",
+        "192.168.88.0/24",
+        "192.168.89.0/24");
+}
+
+func testSetupIpsecTunnelRejectsEmptyPsk() {
+    testing.assertThrows("failSetupIpsecTunnelEmptyPsk", "routeros");
+}
+
+func failSetupIpsecTunnelSubnetNoPrefix() {
+    setupIpsecTunnel(
+        offlineClient(),
+        "site2",
+        "203.0.113.2",
+        "s3cret-psk",
+        "192.168.88.0/24",
+        "192.168.89.0");
+}
+
+func testSetupIpsecTunnelRejectsSubnetWithoutPrefix() {
+    testing.assertThrows("failSetupIpsecTunnelSubnetNoPrefix", "routeros");
+}
+
+func failSetupIkev2ServerSpacedName() {
+    setupIkev2Server(
+        offlineClient(),
+        "road warriors",
+        "vpncert",
+        "10.20.0.10-10.20.0.250",
+        "1.1.1.1");
+}
+
+func testSetupIkev2ServerRejectsSpacedName() {
+    testing.assertThrows("failSetupIkev2ServerSpacedName", "routeros");
 }

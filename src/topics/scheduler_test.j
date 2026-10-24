@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the scheduler topic.
@@ -129,4 +129,30 @@ func testScheduledTaskFromSparseRow() {
     testing.assertEqual($t.runCount, 0);
     testing.assertFalse($t.disabled);
     testing.assertEqual($t.onEvent, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failScheduleAtStartupEmptySource() {
+    scheduleAtStartup(offlineClient(), "boot", "   ");
+}
+
+func testScheduleAtStartupRejectsEmptySource() {
+    testing.assertThrows("failScheduleAtStartupEmptySource", "routeros");
+}
+
+func failScheduleDailyBadTime() {
+    scheduleDaily(offlineClient(), "nightly", "25:00:00", "/system/backup/save");
+}
+
+func testScheduleDailyRejectsBadTime() {
+    testing.assertThrows("failScheduleDailyBadTime", "routeros");
+}
+
+func failScheduleScriptSpacedName() {
+    scheduleScript(offlineClient(), "every ten", "10m", "/log/info tick");
+}
+
+func testScheduleScriptRejectsSpacedName() {
+    testing.assertThrows("failScheduleScriptSpacedName", "routeros");
 }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the netwatch topic.
@@ -62,4 +62,30 @@ func testNetwatchFromSparseRow() {
     testing.assertFalse($n.up);
     testing.assertFalse($n.disabled);
     testing.assertEqual($n.comment, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failWatchHostEmpty() {
+    watchHost(offlineClient(), "  ", "uplink");
+}
+
+func testWatchHostRejectsEmptyHost() {
+    testing.assertThrows("failWatchHostEmpty", "routeros");
+}
+
+func failWatchHostScriptedNoScripts() {
+    watchHostScripted(offlineClient(), "8.8.8.8", "", "  ", "uplink");
+}
+
+func testWatchHostScriptedRejectsNoScripts() {
+    testing.assertThrows("failWatchHostScriptedNoScripts", "routeros");
+}
+
+func failWatchHostWithBadInterval() {
+    watchHostWith(offlineClient(), "8.8.8.8", "10x", "uplink");
+}
+
+func testWatchHostWithRejectsBadInterval() {
+    testing.assertThrows("failWatchHostWithBadInterval", "routeros");
 }

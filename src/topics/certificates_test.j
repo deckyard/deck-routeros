@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the certificates topic.
@@ -119,4 +119,50 @@ func testEnsurePemKeyAcceptsForms() {
     ensurePemKey("-----BEGIN PRIVATE KEY-----\nMIG...\n-----END PRIVATE KEY-----\n");
     ensurePemKey("-----BEGIN EC PRIVATE KEY-----\nMHc...\n-----END EC PRIVATE KEY-----\n");
     testing.assertTrue(true);
+}
+
+# Verbs: local validation before any I/O
+
+func failAssignServiceCertificateSsh() {
+    assignServiceCertificate(offlineClient(), "ssh", "webcert");
+}
+
+func testAssignServiceCertificateRejectsNonTlsService() {
+    testing.assertThrows("failAssignServiceCertificateSsh", "routeros");
+}
+
+func failEnableLetsEncryptSpacedName() {
+    enableLetsEncrypt(offlineClient(), "router example.org");
+}
+
+func testEnableLetsEncryptRejectsSpacedName() {
+    testing.assertThrows("failEnableLetsEncryptSpacedName", "routeros");
+}
+
+func failGenerateSelfSignedTooLong() {
+    generateSelfSigned(offlineClient(), "webcert", "router.example.org", 7301);
+}
+
+func testGenerateSelfSignedRejectsOverlongValidity() {
+    testing.assertThrows("failGenerateSelfSignedTooLong", "routeros");
+}
+
+func failGenerateSelfSignedNoCommonName() {
+    generateSelfSigned(offlineClient(), "webcert", "  ", 365);
+}
+
+func testGenerateSelfSignedRejectsEmptyCommonName() {
+    testing.assertThrows("failGenerateSelfSignedNoCommonName", "routeros");
+}
+
+func failImportCertificatePemJunkKey() {
+    importCertificatePem(
+        offlineClient(),
+        "webcert",
+        "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+        "not a key");
+}
+
+func testImportCertificatePemRejectsJunkKey() {
+    testing.assertThrows("failImportCertificatePemJunkKey", "routeros");
 }

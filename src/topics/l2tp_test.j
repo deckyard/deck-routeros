@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the l2tp topic.
@@ -41,4 +41,22 @@ func testL2tpClientFromRow() {
     testing.assertEqual($cl.user, "branch");
     testing.assertTrue($cl.running);
     testing.assertEqual($cl.comment, "to HQ");
+}
+
+# Verbs: local validation before any I/O
+
+func failEnableL2tpServerEmptySecret() {
+    enableL2tpServer(offlineClient(), "  ");
+}
+
+func testEnableL2tpServerRejectsEmptySecret() {
+    testing.assertThrows("failEnableL2tpServerEmptySecret", "routeros");
+}
+
+func failAddL2tpClientEmptyPassword() {
+    addL2tpClient(offlineClient(), "l2tp-hq", "vpn.example.org", "branch", "");
+}
+
+func testAddL2tpClientRejectsEmptyPassword() {
+    testing.assertThrows("failAddL2tpClientEmptyPassword", "routeros");
 }

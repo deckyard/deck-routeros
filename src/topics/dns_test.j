@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the dns topic.
@@ -111,4 +111,54 @@ func testDnsAdlistFromRow() {
     testing.assertEqual($a.url, "https://example.org/hosts.txt");
     testing.assertEqual($a.matchCount, "48211");
     testing.assertFalse($a.disabled);
+}
+
+# Verbs: local validation before any I/O
+
+func failSetDnsServersEmptyEntry() {
+    setDnsServers(offlineClient(), "1.1.1.1,,9.9.9.9");
+}
+
+func testSetDnsServersRejectsEmptyEntry() {
+    testing.assertThrows("failSetDnsServersEmptyEntry", "routeros");
+}
+
+func failSetDnsServersHostname() {
+    setDnsServers(offlineClient(), "dns.google");
+}
+
+func testSetDnsServersRejectsHostname() {
+    testing.assertThrows("failSetDnsServersHostname", "routeros");
+}
+
+func failAddDnsEntryBadAddress() {
+    addDnsEntry(offlineClient(), "nas.lan", "192.168.88.300");
+}
+
+func testAddDnsEntryRejectsBadAddress() {
+    testing.assertThrows("failAddDnsEntryBadAddress", "routeros");
+}
+
+func failDnsCacheForEmptyName() {
+    dnsCacheFor(offlineClient(), "");
+}
+
+func testDnsCacheForRejectsEmptyName() {
+    testing.assertThrows("failDnsCacheForEmptyName", "routeros");
+}
+
+func failResolvedAddressesSpacedName() {
+    resolvedAddresses(offlineClient(), "example .org");
+}
+
+func testResolvedAddressesRejectsSpacedName() {
+    testing.assertThrows("failResolvedAddressesSpacedName", "routeros");
+}
+
+func failAddAdlistNotHttp() {
+    addAdlist(offlineClient(), "ftp://lists.example.org/hosts.txt");
+}
+
+func testAddAdlistRejectsNonHttpUrl() {
+    testing.assertThrows("failAddAdlistNotHttp", "routeros");
 }

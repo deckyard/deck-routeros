@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the sms topic.
@@ -76,4 +76,54 @@ func failPhoneNumberDigitless() {
 
 func testPhoneNumberRejectsDigitless() {
     testing.assertThrows("failPhoneNumberDigitless", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failEnableSmsReceiveEmptyPort() {
+    enableSmsReceive(offlineClient(), "  ");
+}
+
+func testEnableSmsReceiveRejectsEmptyPort() {
+    testing.assertThrows("failEnableSmsReceiveEmptyPort", "routeros");
+}
+
+func failRemoveSmsMessageEmptyId() {
+    removeSmsMessage(offlineClient(), "");
+}
+
+func testRemoveSmsMessageRejectsEmptyId() {
+    testing.assertThrows("failRemoveSmsMessageEmptyId", "routeros");
+}
+
+func failRestrictSmsKeepZero() {
+    restrictSms(offlineClient(), "+43123456789", 0);
+}
+
+func testRestrictSmsRejectsKeepZero() {
+    testing.assertThrows("failRestrictSmsKeepZero", "routeros");
+}
+
+func failRestrictSmsBadNumber() {
+    restrictSms(offlineClient(), "call me", 10);
+}
+
+func testRestrictSmsRejectsBadNumber() {
+    testing.assertThrows("failRestrictSmsBadNumber", "routeros");
+}
+
+func failSendSmsBadNumber() {
+    sendSms(offlineClient(), "lte1", "not-a-number", "hello");
+}
+
+func testSendSmsRejectsBadNumber() {
+    testing.assertThrows("failSendSmsBadNumber", "routeros");
+}
+
+func failSendSmsEmptyMessage() {
+    sendSms(offlineClient(), "lte1", "+43123456789", "");
+}
+
+func testSendSmsRejectsEmptyMessage() {
+    testing.assertThrows("failSendSmsEmptyMessage", "routeros");
 }

@@ -1,10 +1,18 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the core topic.
 # Spliced into routeros_test.j via include - run with:
 #   jennifer test src/routeros_test.j
+
+# A client that never connected: its zero-value session has no socket, so a
+# verb that got past its local validation fails with kind "closed" instead of
+# reaching the network. The verb tests in every topic build on it.
+func offlineClient() {
+    def c as Client;
+    return $c;
+}
 
 func testApiPathAddsLeadingSlash() {
     testing.assertEqual(apiPath("interface"), "/interface");
@@ -454,4 +462,118 @@ func testTruthyWordRejectsEverythingElse() {
     testing.assertFalse(truthyWord("no"));
     testing.assertFalse(truthyWord("false"));
     testing.assertFalse(truthyWord("maybe"));
+}
+
+# Verbs: local validation before any I/O
+
+func failConnectWithPortZero() {
+    connectWith("192.168.88.1", 0, "admin", "secret", false);
+}
+
+func testConnectWithRejectsPortZero() {
+    testing.assertThrows("failConnectWithPortZero", "routeros");
+}
+
+func failConnectWithPortTooBig() {
+    connectWith("192.168.88.1", 70000, "admin", "secret", true);
+}
+
+func testConnectWithRejectsPortTooBig() {
+    testing.assertThrows("failConnectWithPortTooBig", "routeros");
+}
+
+func failGetAllEmptyPath() {
+    getAll(offlineClient(), "");
+}
+
+func testGetAllRejectsEmptyPath() {
+    testing.assertThrows("failGetAllEmptyPath", "routeros");
+}
+
+func failAddRootPath() {
+    add(offlineClient(), "/", {"name": "brlan"});
+}
+
+func testAddRejectsRootPath() {
+    testing.assertThrows("failAddRootPath", "routeros");
+}
+
+func failSetEmptyId() {
+    set(offlineClient(), "/interface/bridge", "", {"comment": "lan"});
+}
+
+func testSetRejectsEmptyId() {
+    testing.assertThrows("failSetEmptyId", "routeros");
+}
+
+func failUpdateEmptyId() {
+    update(offlineClient(), "/interface/bridge", "  ", {"comment": "lan"});
+}
+
+func testUpdateRejectsEmptyId() {
+    testing.assertThrows("failUpdateEmptyId", "routeros");
+}
+
+func failRemoveEmptyId() {
+    remove(offlineClient(), "/interface/bridge", "");
+}
+
+func testRemoveRejectsEmptyId() {
+    testing.assertThrows("failRemoveEmptyId", "routeros");
+}
+
+func failEnableEmptyId() {
+    enable(offlineClient(), "/ip/firewall/filter", "");
+}
+
+func testEnableRejectsEmptyId() {
+    testing.assertThrows("failEnableEmptyId", "routeros");
+}
+
+func failDisableEmptyId() {
+    disable(offlineClient(), "/ip/firewall/filter", "");
+}
+
+func testDisableRejectsEmptyId() {
+    testing.assertThrows("failDisableEmptyId", "routeros");
+}
+
+func failFindByNameEmptyPath() {
+    findByName(offlineClient(), "  ", "brlan");
+}
+
+func testFindByNameRejectsEmptyPath() {
+    testing.assertThrows("failFindByNameEmptyPath", "routeros");
+}
+
+func failIdByNameRootPath() {
+    idByName(offlineClient(), "/", "brlan");
+}
+
+func testIdByNameRejectsRootPath() {
+    testing.assertThrows("failIdByNameRootPath", "routeros");
+}
+
+func failRemoveByNameEmptyPath() {
+    removeByName(offlineClient(), "", "brlan");
+}
+
+func testRemoveByNameRejectsEmptyPath() {
+    testing.assertThrows("failRemoveByNameEmptyPath", "routeros");
+}
+
+func failMoveRuleToTopEmptyId() {
+    moveRuleToTop(offlineClient(), "/ip/firewall/filter", "");
+}
+
+func testMoveRuleToTopRejectsEmptyId() {
+    testing.assertThrows("failMoveRuleToTopEmptyId", "routeros");
+}
+
+func failMoveRuleToBottomEmptyId() {
+    moveRuleToBottom(offlineClient(), "/ip/firewall/filter", " ");
+}
+
+func testMoveRuleToBottomRejectsEmptyId() {
+    testing.assertThrows("failMoveRuleToBottomEmptyId", "routeros");
 }

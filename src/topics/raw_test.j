@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the raw topic.
@@ -55,4 +55,41 @@ func testWithInterfaceListMatchers() {
     def attrs as map of string to string init ruleAttrs($r);
     testing.assertEqual($attrs["in-interface-list"], "WAN");
     testing.assertEqual($attrs["out-interface-list"], "LAN");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failAddRawRulePortWithoutProtocol() {
+    def r as FirewallRule init firewallRule(CHAIN_PREROUTING, ACTION_DROP);
+    $r = withSrcPort($r, "53");
+    addRawRule(offlineClient(), $r);
+}
+
+func testAddRawRuleRejectsPortWithoutProtocol() {
+    testing.assertThrows("failAddRawRulePortWithoutProtocol", "routeros");
+}
+
+func failDropRawAddressListSpacedName() {
+    dropRawAddressList(offlineClient(), "bad actors", "drop bad actors");
+}
+
+func testDropRawAddressListRejectsSpacedName() {
+    testing.assertThrows("failDropRawAddressListSpacedName", "routeros");
+}
+
+func failRemoveRawRuleEmptyId() {
+    removeRawRule(offlineClient(), "");
+}
+
+func testRemoveRawRuleRejectsEmptyId() {
+    testing.assertThrows("failRemoveRawRuleEmptyId", "routeros");
+}
+
+func failMoveRawRuleBeforeItself() {
+    moveRawRule(offlineClient(), " *7 ", "*7");
+}
+
+func testMoveRawRuleRejectsSelfMove() {
+    testing.assertThrows("failMoveRawRuleBeforeItself", "routeros");
 }

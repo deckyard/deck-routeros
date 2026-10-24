@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the eoip topic.
@@ -94,4 +94,30 @@ func testFindEoipRowRemoteMismatchIsMiss() {
     ];
     def row as map of string to string init findEoipRow($rows, "10.100.0.9", 7);
     testing.assertEqual(len($row), 0);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddEoipTunnelBadRemote() {
+    addEoipTunnel(offlineClient(), "eoipsite2", "site2.example", 7);
+}
+
+func testAddEoipTunnelRejectsNonAddressRemote() {
+    testing.assertThrows("failAddEoipTunnelBadRemote", "routeros");
+}
+
+func failAddEoipTunnelIdTooBig() {
+    addEoipTunnel(offlineClient(), "eoipsite2", "203.0.113.2", 65536);
+}
+
+func testAddEoipTunnelRejectsTunnelIdTooBig() {
+    testing.assertThrows("failAddEoipTunnelIdTooBig", "routeros");
+}
+
+func failAddSecureEoipTunnelEmptySecret() {
+    addSecureEoipTunnel(offlineClient(), "eoipsite2", "203.0.113.2", 7, "  ");
+}
+
+func testAddSecureEoipTunnelRejectsEmptySecret() {
+    testing.assertThrows("failAddSecureEoipTunnelEmptySecret", "routeros");
 }

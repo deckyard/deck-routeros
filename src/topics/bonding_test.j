@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the bonding topic.
@@ -128,4 +128,30 @@ func failPrimaryNotMember() {
 
 func testEnsurePrimaryInSlavesRejectsOutsider() {
     testing.assertThrows("failPrimaryNotMember", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddBondUnknownMode() {
+    addBond(offlineClient(), "bond1", "ether1,ether2", "round-robin");
+}
+
+func testAddBondRejectsUnknownMode() {
+    testing.assertThrows("failAddBondUnknownMode", "routeros");
+}
+
+func failAddLacpBondSingleSlave() {
+    addLacpBond(offlineClient(), "bondtrunk", "ether1");
+}
+
+func testAddLacpBondRejectsSingleSlave() {
+    testing.assertThrows("failAddLacpBondSingleSlave", "routeros");
+}
+
+func failAddFailoverBondForeignPrimary() {
+    addFailoverBond(offlineClient(), "bondwan", "ether1,ether2", "ether3");
+}
+
+func testAddFailoverBondRejectsForeignPrimary() {
+    testing.assertThrows("failAddFailoverBondForeignPrimary", "routeros");
 }

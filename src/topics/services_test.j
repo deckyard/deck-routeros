@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the services topic.
@@ -70,4 +70,46 @@ func testServiceUsingPortIgnoresOwnPort() {
     def rows as list of map of string to string init [{"name": "ssh", "port": "22"}];
     testing.assertEqual(serviceUsingPort($rows, 22, "ssh"), "");
     testing.assertEqual(serviceUsingPort($rows, 22, "www"), "ssh");
+}
+
+# Verbs: local validation before any I/O
+
+func failDisableServiceUnknown() {
+    disableService(offlineClient(), "http");
+}
+
+func testDisableServiceRejectsUnknownName() {
+    testing.assertThrows("failDisableServiceUnknown", "routeros");
+}
+
+func failEnableServiceUnknown() {
+    enableService(offlineClient(), "SSH");
+}
+
+func testEnableServiceRejectsUnknownName() {
+    testing.assertThrows("failEnableServiceUnknown", "routeros");
+}
+
+func failRestrictServiceBadAddress() {
+    restrictService(offlineClient(), "winbox", "192.168.88.0/33");
+}
+
+func testRestrictServiceRejectsBadAddress() {
+    testing.assertThrows("failRestrictServiceBadAddress", "routeros");
+}
+
+func failServiceByNameUnknown() {
+    serviceByName(offlineClient(), "smtp");
+}
+
+func testServiceByNameRejectsUnknownName() {
+    testing.assertThrows("failServiceByNameUnknown", "routeros");
+}
+
+func failSetServicePortZero() {
+    setServicePort(offlineClient(), "ssh", 0);
+}
+
+func testSetServicePortRejectsZero() {
+    testing.assertThrows("failSetServicePortZero", "routeros");
 }

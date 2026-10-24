@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the addresslist topic.
@@ -95,4 +95,47 @@ func testAddressListEntryFromSparseRow() {
     testing.assertEqual($a.timeout, "");
     testing.assertFalse($a.dynamic);
     testing.assertEqual($a.comment, "");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failAddToAddressListSpacedName() {
+    addToAddressList(offlineClient(), "bad actors", "203.0.113.7", "");
+}
+
+func testAddToAddressListRejectsSpacedName() {
+    testing.assertThrows("failAddToAddressListSpacedName", "routeros");
+}
+
+func failAddToAddressListBadAddress() {
+    addToAddressList(offlineClient(), "blocked", "203.0.113.0/40", "");
+}
+
+func testAddToAddressListRejectsBadNetwork() {
+    testing.assertThrows("failAddToAddressListBadAddress", "routeros");
+}
+
+func failAddToAddressListTimedBadTimeout() {
+    addToAddressListTimed(offlineClient(), "blocked", "203.0.113.7", "soon", "");
+}
+
+func testAddToAddressListTimedRejectsBadTimeout() {
+    testing.assertThrows("failAddToAddressListTimedBadTimeout", "routeros");
+}
+
+func failDropAddressListEmptyName() {
+    dropAddressList(offlineClient(), "", CHAIN_INPUT, "drop");
+}
+
+func testDropAddressListRejectsEmptyName() {
+    testing.assertThrows("failDropAddressListEmptyName", "routeros");
+}
+
+func failDropAddressListEmptyChain() {
+    dropAddressList(offlineClient(), "blocked", " ", "drop");
+}
+
+func testDropAddressListRejectsEmptyChain() {
+    testing.assertThrows("failDropAddressListEmptyChain", "routeros");
 }

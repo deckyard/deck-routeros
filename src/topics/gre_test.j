@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the gre topic.
@@ -41,4 +41,22 @@ func testGreFromSparseRow() {
     testing.assertEqual($t.keepalive, "");
     testing.assertFalse($t.running);
     testing.assertEqual($t.comment, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddGreTunnelEmptyName() {
+    addGreTunnel(offlineClient(), "", "203.0.113.2");
+}
+
+func testAddGreTunnelRejectsEmptyName() {
+    testing.assertThrows("failAddGreTunnelEmptyName", "routeros");
+}
+
+func failAddSecureGreTunnelEmptySecret() {
+    addSecureGreTunnel(offlineClient(), "gresite2", "203.0.113.2", "");
+}
+
+func testAddSecureGreTunnelRejectsEmptySecret() {
+    testing.assertThrows("failAddSecureGreTunnelEmptySecret", "routeros");
 }

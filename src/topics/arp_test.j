@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the arp topic.
@@ -86,4 +86,38 @@ func testFindStaticArpRowMissingDynamicKeyIsStatic() {
     ];
     def row as map of string to string init findStaticArpRow($rows, "10.0.0.1", "ether2");
     testing.assertEqual(rowValue($row, ".id"), "*1");
+}
+
+# Verbs: local validation before any I/O
+
+func failMacForAddressNotAnAddress() {
+    macForAddress(offlineClient(), "192.168.88");
+}
+
+func testMacForAddressRejectsBadAddress() {
+    testing.assertThrows("failMacForAddressNotAnAddress", "routeros");
+}
+
+func failAddressesForMacBadMac() {
+    addressesForMac(offlineClient(), "AA:BB:CC:DD:EE");
+}
+
+func testAddressesForMacRejectsBadMac() {
+    testing.assertThrows("failAddressesForMacBadMac", "routeros");
+}
+
+func failAddStaticArpBadMac() {
+    addStaticArp(offlineClient(), "192.168.88.10", "AA-BB-CC-DD-EE-FF", "brlan");
+}
+
+func testAddStaticArpRejectsBadMac() {
+    testing.assertThrows("failAddStaticArpBadMac", "routeros");
+}
+
+func failAddStaticArpBadAddress() {
+    addStaticArp(offlineClient(), "192.168.88.300", "AA:BB:CC:DD:EE:FF", "brlan");
+}
+
+func testAddStaticArpRejectsBadAddress() {
+    testing.assertThrows("failAddStaticArpBadAddress", "routeros");
 }

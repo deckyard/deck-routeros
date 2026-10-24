@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the nat topic.
@@ -100,4 +100,39 @@ func testNatFromRowMasquerade() {
     testing.assertEqual($n.toAddresses, "");
     testing.assertEqual($n.dstPort, "");
     testing.assertFalse($n.disabled);
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failForwardPortIcmp() {
+    forwardPort(offlineClient(), "icmp", 8080, "192.168.88.10", 80, "web");
+}
+
+func testForwardPortRejectsNonTcpUdpProtocol() {
+    testing.assertThrows("failForwardPortIcmp", "routeros");
+}
+
+func failForwardPortBadTarget() {
+    forwardPort(offlineClient(), "tcp", 8080, "nas.lan", 80, "web");
+}
+
+func testForwardPortRejectsNonAddressTarget() {
+    testing.assertThrows("failForwardPortBadTarget", "routeros");
+}
+
+func failRemoveNatRuleEmptyId() {
+    removeNatRule(offlineClient(), "");
+}
+
+func testRemoveNatRuleRejectsEmptyId() {
+    testing.assertThrows("failRemoveNatRuleEmptyId", "routeros");
+}
+
+func failMoveNatRuleEmptyId() {
+    moveNatRule(offlineClient(), "", "*1");
+}
+
+func testMoveNatRuleRejectsEmptyId() {
+    testing.assertThrows("failMoveNatRuleEmptyId", "routeros");
 }

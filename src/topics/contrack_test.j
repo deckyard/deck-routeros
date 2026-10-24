@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the contrack topic.
@@ -41,4 +41,23 @@ func testConnectionFromSparseRow() {
     def con as Connection init connectionFromRow($row);
     testing.assertEqual($con.tcpState, "");
     testing.assertEqual($con.connectionMark, "");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failConnectionsForBadAddress() {
+    connectionsFor(offlineClient(), "192.168.88.300");
+}
+
+func testConnectionsForRejectsBadAddress() {
+    testing.assertThrows("failConnectionsForBadAddress", "routeros");
+}
+
+func failDropConnectionsForNetwork() {
+    dropConnectionsFor(offlineClient(), "192.168.88.0/24");
+}
+
+func testDropConnectionsForRejectsNetwork() {
+    testing.assertThrows("failDropConnectionsForNetwork", "routeros");
 }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the script topic.
@@ -36,4 +36,22 @@ func testScriptFromSparseRow() {
     testing.assertEqual($s.runCount, 0);
     testing.assertEqual($s.lastStarted, "");
     testing.assertEqual($s.comment, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddScriptEmptySource() {
+    addScript(offlineClient(), "backup", "  ", "nightly backup");
+}
+
+func testAddScriptRejectsEmptySource() {
+    testing.assertThrows("failAddScriptEmptySource", "routeros");
+}
+
+func failUpdateScriptEmptySource() {
+    updateScript(offlineClient(), "backup", "");
+}
+
+func testUpdateScriptRejectsEmptySource() {
+    testing.assertThrows("failUpdateScriptEmptySource", "routeros");
 }

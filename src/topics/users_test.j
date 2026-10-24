@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the users topic.
@@ -111,4 +111,61 @@ func testUserSessionFromConsoleRow() {
     def s as UserSession init userSessionFromRow($row);
     testing.assertEqual($s.address, "");
     testing.assertEqual($s.via, "console");
+}
+
+# Verbs: local validation before any I/O
+
+# An offline client that claims to be logged in as "admin", for the verbs
+# that refuse to act on the session's own account.
+func offlineAdminClient() {
+    def c as Client init offlineClient();
+    return Client{session: $c.session, user: "admin", verbose: false};
+}
+
+func failAddUserEmptyPassword() {
+    addUser(offlineClient(), "alice", "   ", "read");
+}
+
+func testAddUserRejectsEmptyPassword() {
+    testing.assertThrows("failAddUserEmptyPassword", "routeros");
+}
+
+func failDisableUserSelf() {
+    disableUser(offlineAdminClient(), "admin");
+}
+
+func testDisableUserRefusesOwnAccount() {
+    testing.assertThrows("failDisableUserSelf", "routeros");
+}
+
+func failRemoveUserSelf() {
+    removeUser(offlineAdminClient(), "admin");
+}
+
+func testRemoveUserRefusesOwnAccount() {
+    testing.assertThrows("failRemoveUserSelf", "routeros");
+}
+
+func failSetUserGroupSelf() {
+    setUserGroup(offlineAdminClient(), "admin", "read");
+}
+
+func testSetUserGroupRefusesOwnAccount() {
+    testing.assertThrows("failSetUserGroupSelf", "routeros");
+}
+
+func failRestrictUserBadAddress() {
+    restrictUser(offlineClient(), "alice", "192.168.88.0/24, 10.0.0.300");
+}
+
+func testRestrictUserRejectsBadAddress() {
+    testing.assertThrows("failRestrictUserBadAddress", "routeros");
+}
+
+func failSetUserPasswordEmpty() {
+    setUserPassword(offlineClient(), "alice", "");
+}
+
+func testSetUserPasswordRejectsEmpty() {
+    testing.assertThrows("failSetUserPasswordEmpty", "routeros");
 }

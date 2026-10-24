@@ -1,18 +1,15 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 /**
- * White-box unit tests for the routeros module.
+ * White-box tests for the routeros module: `jennifer test src/routeros_test.j`.
  *
- * Runs as the co-located test overlay: `jennifer test src/routeros_test.j`.
- * The tests are split into topic files under `topic/`, spliced together
- * here with `include` - one test file per implementation topic file.
- * Everything network-free is covered: path normalization, validation,
- * reply-row folding, builders, and normalization. Functions that need a
- * live router (connect, add, set, remove, ...) are thin compositions of
- * these tested helpers over `mikrotik.run`/`print` and are exercised
- * against real hardware, not here.
+ * One test file per topic under `topics/`, spliced in with `include`. The
+ * tests cover validation, reply-row folding, builders and log redaction,
+ * and call the verbs on a never-connected client (`offlineClient` in
+ * `core_test.j`) to check that bad input is rejected before any I/O. Nothing
+ * here opens a connection; behaviour against a router is not tested here.
  */
 
 use testing;

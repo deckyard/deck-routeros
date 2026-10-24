@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the ethernet topic.
@@ -136,4 +136,38 @@ func failMtuTooBig() {
 
 func testEnsureMtuRejectsTooBig() {
     testing.assertThrows("failMtuTooBig", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failForceEthernetLinkUnknownSpeed() {
+    forceEthernetLink(offlineClient(), "ether1", "1000Mbps", true);
+}
+
+func testForceEthernetLinkRejectsUnknownSpeed() {
+    testing.assertThrows("failForceEthernetLinkUnknownSpeed", "routeros");
+}
+
+func failSetEthernetMtuTooSmall() {
+    setEthernetMtu(offlineClient(), "ether1", 67);
+}
+
+func testSetEthernetMtuRejectsTooSmall() {
+    testing.assertThrows("failSetEthernetMtuTooSmall", "routeros");
+}
+
+func failSetEthernetMtuTooBig() {
+    setEthernetMtu(offlineClient(), "ether1", 65536);
+}
+
+func testSetEthernetMtuRejectsTooBig() {
+    testing.assertThrows("failSetEthernetMtuTooBig", "routeros");
+}
+
+func failSetPoeUnknownMode() {
+    setPoe(offlineClient(), "ether5", "on");
+}
+
+func testSetPoeRejectsUnknownMode() {
+    testing.assertThrows("failSetPoeUnknownMode", "routeros");
 }

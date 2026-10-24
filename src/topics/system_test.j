@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the system topic.
@@ -150,4 +150,22 @@ func failDeviceModeUnknown() {
 
 func testEnsureDeviceModeRejectsUnknown() {
     testing.assertThrows("failDeviceModeUnknown", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failSetIdentityBlank() {
+    setIdentity(offlineClient(), "   ");
+}
+
+func testSetIdentityRejectsBlankName() {
+    testing.assertThrows("failSetIdentityBlank", "routeros");
+}
+
+func failUpdateDeviceModeUnknown() {
+    updateDeviceMode(offlineClient(), "basic");
+}
+
+func testUpdateDeviceModeRejectsUnknownMode() {
+    testing.assertThrows("failUpdateDeviceModeUnknown", "routeros");
 }

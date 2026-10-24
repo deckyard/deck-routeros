@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the ipv6 topic.
@@ -111,4 +111,62 @@ func failIpv6CidrGarbage() {
 
 func testIpv6CidrRejectsGarbage() {
     testing.assertThrows("failIpv6CidrGarbage", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddIpv6AddressIpv4() {
+    addIpv6Address(offlineClient(), "192.168.88.1/24", "ether2");
+}
+
+func testAddIpv6AddressRejectsIpv4() {
+    testing.assertThrows("failAddIpv6AddressIpv4", "routeros");
+}
+
+func failAddIpv6AddressWithEmptyInterface() {
+    addIpv6AddressWith(offlineClient(), "2001:db8:1::1/64", "  ", true, false);
+}
+
+func testAddIpv6AddressWithRejectsEmptyInterface() {
+    testing.assertThrows("failAddIpv6AddressWithEmptyInterface", "routeros");
+}
+
+func failRemoveIpv6AddressNoPrefix() {
+    removeIpv6Address(offlineClient(), "2001:db8:1::1");
+}
+
+func testRemoveIpv6AddressRejectsMissingPrefix() {
+    testing.assertThrows("failRemoveIpv6AddressNoPrefix", "routeros");
+}
+
+func failIpv6AddressesOnEmptyInterface() {
+    ipv6AddressesOn(offlineClient(), "");
+}
+
+func testIpv6AddressesOnRejectsEmptyInterface() {
+    testing.assertThrows("failIpv6AddressesOnEmptyInterface", "routeros");
+}
+
+func failAdvertiseIpv6OnSpacedInterface() {
+    advertiseIpv6On(offlineClient(), "ether 2");
+}
+
+func testAdvertiseIpv6OnRejectsSpacedInterface() {
+    testing.assertThrows("failAdvertiseIpv6OnSpacedInterface", "routeros");
+}
+
+func failStopAdvertisingIpv6OnEmptyInterface() {
+    stopAdvertisingIpv6On(offlineClient(), "");
+}
+
+func testStopAdvertisingIpv6OnRejectsEmptyInterface() {
+    testing.assertThrows("failStopAdvertisingIpv6OnEmptyInterface", "routeros");
+}
+
+func failSetIpv6NdFlagsEmptyInterface() {
+    setIpv6NdFlags(offlineClient(), "", true, true);
+}
+
+func testSetIpv6NdFlagsRejectsEmptyInterface() {
+    testing.assertThrows("failSetIpv6NdFlagsEmptyInterface", "routeros");
 }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the queues topic.
@@ -217,4 +217,46 @@ func testTreeQueueFamilyUnknownNameIsEmpty() {
         {".id": "*1", "name": "qosup", "parent": "pppoewan"}
     ];
     testing.assertEqual(len(treeQueueFamily($rows, "nosuch")), 0);
+}
+
+# Verbs: local validation before any I/O
+
+func failLimitBandwidthSpacedName() {
+    limitBandwidth(offlineClient(), "guest wifi", "192.168.88.0/24", "10M", "50M");
+}
+
+func testLimitBandwidthRejectsSpacedName() {
+    testing.assertThrows("failLimitBandwidthSpacedName", "routeros");
+}
+
+func failSetBandwidthLimitBadRate() {
+    setBandwidthLimit(offlineClient(), "guests", "10 Mbps", "50M");
+}
+
+func testSetBandwidthLimitRejectsBadRate() {
+    testing.assertThrows("failSetBandwidthLimitBadRate", "routeros");
+}
+
+func failAddQueueTreeRootEmptyName() {
+    addQueueTreeRoot(offlineClient(), "", "global", "100M");
+}
+
+func testAddQueueTreeRootRejectsEmptyName() {
+    testing.assertThrows("failAddQueueTreeRootEmptyName", "routeros");
+}
+
+func failAddQueueTreeChildPriorityNine() {
+    addQueueTreeChild(offlineClient(), "voip", "qosup", "voip", "1M", "5M", 9);
+}
+
+func testAddQueueTreeChildRejectsPriorityNine() {
+    testing.assertThrows("failAddQueueTreeChildPriorityNine", "routeros");
+}
+
+func failAddQueueTreeChildEmptyMark() {
+    addQueueTreeChild(offlineClient(), "voip", "qosup", "", "1M", "5M", 1);
+}
+
+func testAddQueueTreeChildRejectsEmptyMark() {
+    testing.assertThrows("failAddQueueTreeChildEmptyMark", "routeros");
 }

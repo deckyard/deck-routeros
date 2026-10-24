@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the capsman topic.
@@ -25,4 +25,34 @@ func testManagedApFromSparseRow() {
     def ap as ManagedAp init managedApFromRow($row);
     testing.assertEqual($ap.address, "");
     testing.assertEqual($ap.state, "");
+}
+
+# Verbs on a router with no readable CAPsMAN menu (offlineClient() has no
+# socket, so every menu read fails and counts as absent).
+
+func testCapsmanStatusWithoutMenuIsVersionZero() {
+    def s as CapsmanStatus init capsmanStatus(offlineClient());
+    testing.assertFalse($s.enabled);
+    testing.assertEqual($s.version, 0);
+    testing.assertEqual($s.managedAps, 0);
+}
+
+func failEnableCapsmanWithoutMenu() {
+    enableCapsman(offlineClient());
+}
+
+func testEnableCapsmanRejectsRouterWithoutMenu() {
+    testing.assertThrows("failEnableCapsmanWithoutMenu", "routeros");
+}
+
+func failDisableCapsmanWithoutMenu() {
+    disableCapsman(offlineClient());
+}
+
+func testDisableCapsmanRejectsRouterWithoutMenu() {
+    testing.assertThrows("failDisableCapsmanWithoutMenu", "routeros");
+}
+
+func testManagedApsEmptyWithoutMenu() {
+    testing.assertEqual(len(managedAps(offlineClient())), 0);
 }

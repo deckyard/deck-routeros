@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the ppp topic.
@@ -121,4 +121,46 @@ func testPppoeServerFromRow() {
     testing.assertEqual($s.interfaceName, "ether2");
     testing.assertEqual($s.defaultProfile, "default");
     testing.assertFalse($s.disabled);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddVpnUserEmptyPassword() {
+    addVpnUser(offlineClient(), "alice", "  ", "l2tp", "");
+}
+
+func testAddVpnUserRejectsEmptyPassword() {
+    testing.assertThrows("failAddVpnUserEmptyPassword", "routeros");
+}
+
+func failAddVpnUserUnknownService() {
+    addVpnUser(offlineClient(), "alice", "s3cret", "wireguard", "");
+}
+
+func testAddVpnUserRejectsUnknownService() {
+    testing.assertThrows("failAddVpnUserUnknownService", "routeros");
+}
+
+func failSetupPppoeEmptyPassword() {
+    setupPppoe(offlineClient(), "pppoe-out1", "ether1", "customer@isp", "");
+}
+
+func testSetupPppoeRejectsEmptyPassword() {
+    testing.assertThrows("failSetupPppoeEmptyPassword", "routeros");
+}
+
+func failSetPppoeCredentialsEmptyUser() {
+    setPppoeCredentials(offlineClient(), "pppoe-out1", "", "s3cret");
+}
+
+func testSetPppoeCredentialsRejectsEmptyUser() {
+    testing.assertThrows("failSetPppoeCredentialsEmptyUser", "routeros");
+}
+
+func failAddPppoeServerSpacedService() {
+    addPppoeServer(offlineClient(), "guest net", "ether3");
+}
+
+func testAddPppoeServerRejectsSpacedServiceName() {
+    testing.assertThrows("failAddPppoeServerSpacedService", "routeros");
 }

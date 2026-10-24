@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the log topic.
@@ -130,4 +130,46 @@ func testLoggingRuleFromSparseRow() {
     def rule as LoggingRule init loggingRuleFromRow($row);
     testing.assertEqual($rule.prefix, "");
     testing.assertFalse($rule.disabled);
+}
+
+# Verbs: local validation before any I/O
+
+func failRecentLogEntriesZero() {
+    recentLogEntries(offlineClient(), 0);
+}
+
+func testRecentLogEntriesRejectsZero() {
+    testing.assertThrows("failRecentLogEntriesZero", "routeros");
+}
+
+func failAddLoggingRuleEmptyTopic() {
+    addLoggingRule(offlineClient(), "firewall,,info", "remote");
+}
+
+func testAddLoggingRuleRejectsEmptyTopic() {
+    testing.assertThrows("failAddLoggingRuleEmptyTopic", "routeros");
+}
+
+func failRemoveLoggingRuleSpacedTopic() {
+    removeLoggingRule(offlineClient(), "system info", "remote");
+}
+
+func testRemoveLoggingRuleRejectsSpacedTopic() {
+    testing.assertThrows("failRemoveLoggingRuleSpacedTopic", "routeros");
+}
+
+func failSetupRemoteLoggingHostname() {
+    setupRemoteLogging(offlineClient(), "syslog.example.org", 514, "info");
+}
+
+func testSetupRemoteLoggingRejectsHostname() {
+    testing.assertThrows("failSetupRemoteLoggingHostname", "routeros");
+}
+
+func failSetupRemoteLoggingPortZero() {
+    setupRemoteLogging(offlineClient(), "192.168.88.10", 0, "info");
+}
+
+func testSetupRemoteLoggingRejectsPortZero() {
+    testing.assertThrows("failSetupRemoteLoggingPortZero", "routeros");
 }

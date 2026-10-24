@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the hotspot topic.
@@ -77,4 +77,69 @@ func testHotspotSessionFromSparseRow() {
     testing.assertEqual($s.bytesIn, 0);
     testing.assertEqual($s.bytesOut, 0);
     testing.assertEqual($s.idleTime, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failSetupHotspotEmptyName() {
+    setupHotspot(
+        offlineClient(),
+        "  ",
+        "ether3",
+        "10.5.50.0/24",
+        "10.5.50.1",
+        "10.5.50.10",
+        "10.5.50.254");
+}
+
+func testSetupHotspotRejectsEmptyName() {
+    testing.assertThrows("failSetupHotspotEmptyName", "routeros");
+}
+
+func failAddHotspotUserEmptyPassword() {
+    addHotspotUser(offlineClient(), "guest1", "", "lobby");
+}
+
+func testAddHotspotUserRejectsEmptyPassword() {
+    testing.assertThrows("failAddHotspotUserEmptyPassword", "routeros");
+}
+
+func failAddHotspotVoucherBadLimit() {
+    addHotspotVoucher(offlineClient(), "v1001", "k7q2", "two hours", "");
+}
+
+func testAddHotspotVoucherRejectsBadLimit() {
+    testing.assertThrows("failAddHotspotVoucherBadLimit", "routeros");
+}
+
+func failAddHotspotVoucherEmptyLimit() {
+    addHotspotVoucher(offlineClient(), "v1001", "k7q2", " ", "");
+}
+
+func testAddHotspotVoucherRejectsEmptyLimit() {
+    testing.assertThrows("failAddHotspotVoucherEmptyLimit", "routeros");
+}
+
+func failBypassHotspotMacBadMac() {
+    bypassHotspotMac(offlineClient(), "AA:BB:CC:DD:EE", "printer");
+}
+
+func testBypassHotspotMacRejectsBadMac() {
+    testing.assertThrows("failBypassHotspotMacBadMac", "routeros");
+}
+
+func failRemoveHotspotBypassBadMac() {
+    removeHotspotBypass(offlineClient(), "AA-BB-CC-DD-EE-FF");
+}
+
+func testRemoveHotspotBypassRejectsBadMac() {
+    testing.assertThrows("failRemoveHotspotBypassBadMac", "routeros");
+}
+
+func failAllowBeforeLoginEmptyHost() {
+    allowBeforeLogin(offlineClient(), "   ", "payment page");
+}
+
+func testAllowBeforeLoginRejectsEmptyHost() {
+    testing.assertThrows("failAllowBeforeLoginEmptyHost", "routeros");
 }

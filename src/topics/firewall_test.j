@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the firewall topic.
@@ -188,4 +188,57 @@ func failRuleAttrsPortWithoutProtocol() {
 
 func testRuleAttrsRejectsPortWithoutProtocol() {
     testing.assertThrows("failRuleAttrsPortWithoutProtocol", "routeros");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failAddFirewallRulePortWithoutProtocol() {
+    def r as FirewallRule init firewallRule(CHAIN_INPUT, ACTION_ACCEPT);
+    $r = withDstPort($r, "22");
+    addFirewallRule(offlineClient(), $r);
+}
+
+func testAddFirewallRuleRejectsPortWithoutProtocol() {
+    testing.assertThrows("failAddFirewallRulePortWithoutProtocol", "routeros");
+}
+
+func failRemoveFirewallRuleEmptyId() {
+    removeFirewallRule(offlineClient(), " ");
+}
+
+func testRemoveFirewallRuleRejectsEmptyId() {
+    testing.assertThrows("failRemoveFirewallRuleEmptyId", "routeros");
+}
+
+func failMoveFirewallRuleBeforeItself() {
+    moveFirewallRule(offlineClient(), "*3", "*3");
+}
+
+func testMoveFirewallRuleRejectsSelfMove() {
+    testing.assertThrows("failMoveFirewallRuleBeforeItself", "routeros");
+}
+
+func failAllowServicePortOutOfRange() {
+    allowService(offlineClient(), "tcp", 65536, "too high");
+}
+
+func testAllowServiceRejectsPortOutOfRange() {
+    testing.assertThrows("failAllowServicePortOutOfRange", "routeros");
+}
+
+func failAllowServiceUnknownProtocol() {
+    allowService(offlineClient(), "smtp", 25, "mail");
+}
+
+func testAllowServiceRejectsUnknownProtocol() {
+    testing.assertThrows("failAllowServiceUnknownProtocol", "routeros");
+}
+
+func failBlockAddressEmpty() {
+    blockAddress(offlineClient(), "", "nobody");
+}
+
+func testBlockAddressRejectsEmptyAddress() {
+    testing.assertThrows("failBlockAddressEmpty", "routeros");
 }

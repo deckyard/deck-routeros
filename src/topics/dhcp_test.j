@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the dhcp topic.
@@ -130,4 +130,62 @@ func testDhcpRelayFromRow() {
     testing.assertEqual($r.interfaceName, "vlanoffice");
     testing.assertEqual($r.dhcpServer, "10.0.0.5");
     testing.assertFalse($r.disabled);
+}
+
+# Verbs: local validation before any I/O
+
+func failSetupDhcpGatewayOutside() {
+    setupDhcp(
+        offlineClient(),
+        "lan",
+        "brlan",
+        "192.168.88.0/24",
+        "192.168.89.1",
+        "192.168.88.10",
+        "192.168.88.254",
+        "192.168.88.1");
+}
+
+func testSetupDhcpRejectsGatewayOutsideNetwork() {
+    testing.assertThrows("failSetupDhcpGatewayOutside", "routeros");
+}
+
+func failSetupDhcpEmptyDnsEntry() {
+    setupDhcp(
+        offlineClient(),
+        "lan",
+        "brlan",
+        "192.168.88.0/24",
+        "192.168.88.1",
+        "192.168.88.10",
+        "192.168.88.254",
+        "1.1.1.1,,9.9.9.9");
+}
+
+func testSetupDhcpRejectsEmptyDnsEntry() {
+    testing.assertThrows("failSetupDhcpEmptyDnsEntry", "routeros");
+}
+
+func failAddStaticLeaseBadMac() {
+    addStaticLease(offlineClient(), "192.168.88.20", "AABBCCDDEEFF", "printer");
+}
+
+func testAddStaticLeaseRejectsBadMac() {
+    testing.assertThrows("failAddStaticLeaseBadMac", "routeros");
+}
+
+func failRemoveLeaseByMacBadMac() {
+    removeLeaseByMac(offlineClient(), "GG:BB:CC:DD:EE:FF");
+}
+
+func testRemoveLeaseByMacRejectsBadMac() {
+    testing.assertThrows("failRemoveLeaseByMacBadMac", "routeros");
+}
+
+func failAddDhcpRelayBadServer() {
+    addDhcpRelay(offlineClient(), "relay1", "vlan20", "dhcp.example.org");
+}
+
+func testAddDhcpRelayRejectsNonAddressServer() {
+    testing.assertThrows("failAddDhcpRelayBadServer", "routeros");
 }

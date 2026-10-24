@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the clock topic.
@@ -66,4 +66,22 @@ func failNtpServersSpacedEntry() {
 
 func testNormalizedNtpServersRejectsSpacedEntry() {
     testing.assertThrows("failNtpServersSpacedEntry", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failSetTimezoneEmpty() {
+    setTimezone(offlineClient(), "   ");
+}
+
+func testSetTimezoneRejectsEmpty() {
+    testing.assertThrows("failSetTimezoneEmpty", "routeros");
+}
+
+func failUseNtpEmptyEntry() {
+    useNtp(offlineClient(), "pool.ntp.org,,time.cloudflare.com");
+}
+
+func testUseNtpRejectsEmptyEntry() {
+    testing.assertThrows("failUseNtpEmptyEntry", "routeros");
 }

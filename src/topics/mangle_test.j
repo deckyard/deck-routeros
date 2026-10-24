@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the mangle topic.
@@ -93,4 +93,41 @@ func testMssClampAttrsDirections() {
     testing.assertEqual($inAttrs["in-interface"], "pppoewan");
     testing.assertEqual(rowValue($inAttrs, "out-interface"), "");
     testing.assertEqual($inAttrs["comment"], "mss clamp: pppoewan (in)");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failSetupPacketMarkEmptyName() {
+    def m as FirewallRule init firewallRule(CHAIN_FORWARD, ACTION_ACCEPT);
+    $m = withProtocol($m, "udp");
+    setupPacketMark(offlineClient(), "", $m);
+}
+
+func testSetupPacketMarkRejectsEmptyName() {
+    testing.assertThrows("failSetupPacketMarkEmptyName", "routeros");
+}
+
+func failMarkRoutingForBadPrefix() {
+    markRoutingFor(offlineClient(), "viawan2", "192.168.88.0/33");
+}
+
+func testMarkRoutingForRejectsBadPrefix() {
+    testing.assertThrows("failMarkRoutingForBadPrefix", "routeros");
+}
+
+func failMarkRoutingForHostName() {
+    markRoutingFor(offlineClient(), "viawan2", "laptop.lan");
+}
+
+func testMarkRoutingForRejectsHostName() {
+    testing.assertThrows("failMarkRoutingForHostName", "routeros");
+}
+
+func failMoveMangleRuleEmptyId() {
+    moveMangleRule(offlineClient(), "", "");
+}
+
+func testMoveMangleRuleRejectsEmptyId() {
+    testing.assertThrows("failMoveMangleRuleEmptyId", "routeros");
 }

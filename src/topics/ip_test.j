@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the ip topic.
@@ -24,4 +24,14 @@ func testIpAddressFromRow() {
     testing.assertFalse($a.dynamic);
     testing.assertFalse($a.disabled);
     testing.assertEqual($a.comment, "lan gateway");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddIpAddressNoPrefix() {
+    addIpAddress(offlineClient(), "192.168.88.1", "ether2");
+}
+
+func testAddIpAddressRejectsMissingPrefix() {
+    testing.assertThrows("failAddIpAddressNoPrefix", "routeros");
 }

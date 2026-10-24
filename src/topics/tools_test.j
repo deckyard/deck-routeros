@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the tools topic.
@@ -201,4 +201,109 @@ func failEmailTlsUnknown() {
 
 func testEnsureEmailTlsRejectsUnknown() {
     testing.assertThrows("failEmailTlsUnknown", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failPingSpacedHost() {
+    ping(offlineClient(), "my router");
+}
+
+func testPingRejectsSpacedHost() {
+    testing.assertThrows("failPingSpacedHost", "routeros");
+}
+
+func failPingWithCountZero() {
+    pingWith(offlineClient(), "1.1.1.1", 0);
+}
+
+func testPingWithRejectsCountZero() {
+    testing.assertThrows("failPingWithCountZero", "routeros");
+}
+
+func failPingWithCountTooBig() {
+    pingWith(offlineClient(), "1.1.1.1", 101);
+}
+
+func testPingWithRejectsCountTooBig() {
+    testing.assertThrows("failPingWithCountTooBig", "routeros");
+}
+
+func failIsReachableEmptyHost() {
+    isReachable(offlineClient(), "   ");
+}
+
+func testIsReachableRejectsEmptyHost() {
+    testing.assertThrows("failIsReachableEmptyHost", "routeros");
+}
+
+func failBandwidthTestUnknownDirection() {
+    bandwidthTest(offlineClient(), "192.168.88.2", 10, "sideways");
+}
+
+func testBandwidthTestRejectsUnknownDirection() {
+    testing.assertThrows("failBandwidthTestUnknownDirection", "routeros");
+}
+
+func failBandwidthTestWithTooLong() {
+    bandwidthTestWith(offlineClient(), "192.168.88.2", 301, "both", "admin", "secret");
+}
+
+func testBandwidthTestWithRejectsTooLong() {
+    testing.assertThrows("failBandwidthTestWithTooLong", "routeros");
+}
+
+func failTracerouteEmptyHost() {
+    traceroute(offlineClient(), "");
+}
+
+func testTracerouteRejectsEmptyHost() {
+    testing.assertThrows("failTracerouteEmptyHost", "routeros");
+}
+
+func failFetchUrlNotHttp() {
+    fetchUrl(offlineClient(), "ftp://example.org/file.txt");
+}
+
+func testFetchUrlRejectsNonHttpUrl() {
+    testing.assertThrows("failFetchUrlNotHttp", "routeros");
+}
+
+func failDownloadFileSpacedName() {
+    downloadFile(offlineClient(), "https://example.org/a.rsc", "my script.rsc");
+}
+
+func testDownloadFileRejectsSpacedFileName() {
+    testing.assertThrows("failDownloadFileSpacedName", "routeros");
+}
+
+func failConfigureEmailPortZero() {
+    configureEmail(offlineClient(), "smtp.example.org", 0, "router@example.org", "", "");
+}
+
+func testConfigureEmailRejectsPortZero() {
+    testing.assertThrows("failConfigureEmailPortZero", "routeros");
+}
+
+func failConfigureEmailWithUnknownTls() {
+    configureEmailWith(
+        offlineClient(),
+        "smtp.example.org",
+        587,
+        "router@example.org",
+        "router",
+        "secret",
+        "ssl");
+}
+
+func testConfigureEmailWithRejectsUnknownTlsMode() {
+    testing.assertThrows("failConfigureEmailWithUnknownTls", "routeros");
+}
+
+func failSendEmailEmptyRecipient() {
+    sendEmail(offlineClient(), " ", "test", "hello");
+}
+
+func testSendEmailRejectsEmptyRecipient() {
+    testing.assertThrows("failSendEmailEmptyRecipient", "routeros");
 }

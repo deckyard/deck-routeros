@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the vrrp topic.
@@ -127,4 +127,31 @@ func testFindVrrpRowSameVridOtherInterfaceIsFree() {
     ];
     def row as map of string to string init findVrrpRow($rows, "brguest", 10);
     testing.assertEqual(len($row), 0);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddVrrpVridZero() {
+    addVrrp(offlineClient(), "vrrplan", "brlan", 0, 100);
+}
+
+func testAddVrrpRejectsVridZero() {
+    testing.assertThrows("failAddVrrpVridZero", "routeros");
+}
+
+func failSetupVrrpVirtualNoPrefix() {
+    setupVrrp(offlineClient(), "vrrplan", "brlan", 10, 200, "192.168.88.1");
+}
+
+func testSetupVrrpRejectsVirtualAddressWithoutPrefix() {
+    testing.assertThrows("failSetupVrrpVirtualNoPrefix", "routeros");
+}
+
+# 255 is reserved by RFC 5798 for the router that owns the address.
+func failSetVrrpPriorityOwner() {
+    setVrrpPriority(offlineClient(), "vrrplan", 255);
+}
+
+func testSetVrrpPriorityRejectsOwnerPriority() {
+    testing.assertThrows("failSetVrrpPriorityOwner", "routeros");
 }

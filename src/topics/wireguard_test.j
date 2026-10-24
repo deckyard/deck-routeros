@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the wireguard topic.
@@ -121,4 +121,41 @@ func testWireguardPeerFromRowDialOut() {
     testing.assertEqual($p.keepalive, "25s");
     testing.assertEqual($p.lastHandshake, "");
     testing.assertFalse($p.disabled);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddWireguardSpacedName() {
+    addWireguard(offlineClient(), "wg home", 13231);
+}
+
+func testAddWireguardRejectsSpacedName() {
+    testing.assertThrows("failAddWireguardSpacedName", "routeros");
+}
+
+func failAddWireguardPortZero() {
+    addWireguard(offlineClient(), "wghome", 0);
+}
+
+func testAddWireguardRejectsPortZero() {
+    testing.assertThrows("failAddWireguardPortZero", "routeros");
+}
+
+func failSetupWireguardServerNoPrefix() {
+    setupWireguardServer(offlineClient(), "wghome", 13231, "10.10.0.1");
+}
+
+func testSetupWireguardServerRejectsAddressWithoutPrefix() {
+    testing.assertThrows("failSetupWireguardServerNoPrefix", "routeros");
+}
+
+func testWireguardInterfacesEmptyWhenMenuUnreadable() {
+    # RouterOS v6 has no /interface/wireguard; an unreadable menu means none
+    def ws as list of WireguardInterface init wireguardInterfaces(offlineClient());
+    testing.assertEqual(len($ws), 0);
+}
+
+func testWireguardPeersEmptyWhenMenuUnreadable() {
+    def ps as list of WireguardPeer init wireguardPeers(offlineClient());
+    testing.assertEqual(len($ps), 0);
 }

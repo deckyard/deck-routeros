@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the bridges topic.
@@ -113,4 +113,30 @@ func testBridgePortFromRowSoftwareForwarding() {
     };
     def p as BridgePort init bridgePortFromRow($row);
     testing.assertFalse($p.hardwareOffload);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddBridgeSpacedName() {
+    addBridge(offlineClient(), "br lan");
+}
+
+func testAddBridgeRejectsSpacedName() {
+    testing.assertThrows("failAddBridgeSpacedName", "routeros");
+}
+
+func failAddBridgePortEmptyInterface() {
+    addBridgePort(offlineClient(), "brlan", "");
+}
+
+func testAddBridgePortRejectsEmptyInterface() {
+    testing.assertThrows("failAddBridgePortEmptyInterface", "routeros");
+}
+
+func failSetPortPvidOutOfRange() {
+    setPortPvid(offlineClient(), "brlan", "ether2", 4095);
+}
+
+func testSetPortPvidRejectsOutOfRange() {
+    testing.assertThrows("failSetPortPvidOutOfRange", "routeros");
 }

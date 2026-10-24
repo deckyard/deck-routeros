@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the disk topic.
@@ -79,4 +79,20 @@ func testIsUnknownCommandRecognisesTheTrap() {
 func testIsUnknownCommandKeepsRealFailures() {
     testing.assertFalse(isUnknownCommand("mikrotik", "!trap: device is busy"));
     testing.assertFalse(isUnknownCommand("routeros", "no such command"));
+}
+
+# Verbs: local validation before any I/O
+
+func failFormatDiskNtfs() {
+    formatDisk(offlineClient(), "usb1", "ntfs", "data");
+}
+
+func testFormatDiskRejectsUnknownFilesystem() {
+    testing.assertThrows("failFormatDiskNtfs", "routeros");
+}
+
+func testDisksEmptyWhenMenuUnreadable() {
+    # a router without the disk menu (or an unreadable one) has no disks
+    def ds as list of Disk init disks(offlineClient());
+    testing.assertEqual(len($ds), 0);
 }

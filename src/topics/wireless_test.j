@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the wireless topic.
@@ -113,4 +113,66 @@ func testWifiClientFromRow() {
     testing.assertEqual($w.txRate, "866Mbps");
     testing.assertEqual($w.rxRate, "780Mbps");
     testing.assertEqual($w.uptime, "1h2m3s");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failSetupWifiAccessPointEmptySsid() {
+    setupWifiAccessPoint(offlineClient(), "wlan1", "  ", "correct-horse");
+}
+
+func testSetupWifiAccessPointRejectsEmptySsid() {
+    testing.assertThrows("failSetupWifiAccessPointEmptySsid", "routeros");
+}
+
+func failSetupWifiAccessPointShortPassword() {
+    setupWifiAccessPoint(offlineClient(), "wlan1", "home", "1234567");
+}
+
+func testSetupWifiAccessPointRejectsShortPassword() {
+    testing.assertThrows("failSetupWifiAccessPointShortPassword", "routeros");
+}
+
+func failSetWifiSsidTooLong() {
+    setWifiSsid(offlineClient(), "wlan1", strings.repeat("a", 33));
+}
+
+func testSetWifiSsidRejectsTooLong() {
+    testing.assertThrows("failSetWifiSsidTooLong", "routeros");
+}
+
+func failSetWifiPasswordTooShort() {
+    setWifiPassword(offlineClient(), "wlan1", "short");
+}
+
+func testSetWifiPasswordRejectsTooShort() {
+    testing.assertThrows("failSetWifiPasswordTooShort", "routeros");
+}
+
+func failAddVirtualApSpacedName() {
+    addVirtualAp(offlineClient(), "wlan1", "guest ap", "guests", "guest-pass-1");
+}
+
+func testAddVirtualApRejectsSpacedName() {
+    testing.assertThrows("failAddVirtualApSpacedName", "routeros");
+}
+
+func failAddVirtualApLongPassword() {
+    addVirtualAp(offlineClient(), "wlan1", "wlanguest", "guests", strings.repeat("p", 64));
+}
+
+func testAddVirtualApRejectsLongPassword() {
+    testing.assertThrows("failAddVirtualApLongPassword", "routeros");
+}
+
+# The readers treat a menu they cannot read as absent (a router without the
+# classic wireless package) and return an empty list instead of throwing.
+
+func testWirelessInterfacesEmptyWhenMenuUnreadable() {
+    testing.assertEqual(len(wirelessInterfaces(offlineClient())), 0);
+}
+
+func testWifiClientsEmptyWhenMenuUnreadable() {
+    testing.assertEqual(len(wifiClients(offlineClient())), 0);
 }

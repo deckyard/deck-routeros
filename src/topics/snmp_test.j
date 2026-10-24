@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the snmp topic.
@@ -49,4 +49,22 @@ func testSnmpCommunityFromRowDefaultPublic() {
     testing.assertEqual($com.name, "public");
     testing.assertEqual($com.addresses, "");
     testing.assertFalse($com.writeAccess);
+}
+
+# Verbs: local validation before any I/O
+
+func failEnableSnmpSpacedCommunity() {
+    enableSnmp(offlineClient(), "public ro", "");
+}
+
+func testEnableSnmpRejectsSpacedCommunity() {
+    testing.assertThrows("failEnableSnmpSpacedCommunity", "routeros");
+}
+
+func failEnableSnmpBadAddress() {
+    enableSnmp(offlineClient(), "monitoring", "192.168.88.0/33");
+}
+
+func testEnableSnmpRejectsBadAddress() {
+    testing.assertThrows("failEnableSnmpBadAddress", "routeros");
 }

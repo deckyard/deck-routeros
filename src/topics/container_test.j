@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the container topic.
@@ -122,4 +122,46 @@ func failJoinListNamesEmptyEntry() {
 
 func testJoinListNamesRejectsEmptyEntry() {
     testing.assertThrows("failJoinListNamesEmptyEntry", "routeros");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddContainerEmptyImage() {
+    addContainer(offlineClient(), "pihole", "  ", "veth1", "usb1/pihole");
+}
+
+func testAddContainerRejectsEmptyImage() {
+    testing.assertThrows("failAddContainerEmptyImage", "routeros");
+}
+
+func failAddContainerEnvEmptyKey() {
+    addContainerEnv(offlineClient(), "piholeenv", "", "Europe/Vienna");
+}
+
+func testAddContainerEnvRejectsEmptyKey() {
+    testing.assertThrows("failAddContainerEnvEmptyKey", "routeros");
+}
+
+func failAddContainerMountEmptyDst() {
+    addContainerMount(offlineClient(), "piholemounts", "usb1/pihole/etc", "");
+}
+
+func testAddContainerMountRejectsEmptyDst() {
+    testing.assertThrows("failAddContainerMountEmptyDst", "routeros");
+}
+
+func failRemoveContainerEnvListSpaced() {
+    removeContainerEnvList(offlineClient(), "pihole env");
+}
+
+func testRemoveContainerEnvListRejectsSpacedName() {
+    testing.assertThrows("failRemoveContainerEnvListSpaced", "routeros");
+}
+
+func failRemoveContainerMountListEmpty() {
+    removeContainerMountList(offlineClient(), "");
+}
+
+func testRemoveContainerMountListRejectsEmptyName() {
+    testing.assertThrows("failRemoveContainerMountListEmpty", "routeros");
 }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the switch topic.
@@ -37,4 +37,17 @@ func testSwitchHostFromSparseRow() {
     def h as SwitchHost init switchHostFromRow($row);
     testing.assertEqual($h.vlanId, 0);
     testing.assertFalse($h.dynamic);
+}
+
+# Verbs: reads that fall back to an empty list
+
+# A pure-CPU board has no /interface/ethernet/switch menu and the read
+# fails; both readers turn a failed read into an empty list. The offline
+# client's read fails too, so it lands on the same branch.
+func testSwitchChipsEmptyWhenReadFails() {
+    testing.assertEqual(len(switchChips(offlineClient())), 0);
+}
+
+func testSwitchHostsEmptyWhenReadFails() {
+    testing.assertEqual(len(switchHosts(offlineClient())), 0);
 }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the vlans topic.
@@ -58,4 +58,30 @@ func testVlanFromSparseRow() {
     testing.assertEqual($v.interfaceName, "");
     testing.assertFalse($v.running);
     testing.assertEqual($v.comment, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failAddVlanIdZero() {
+    addVlan(offlineClient(), "vlan10", 0, "ether1");
+}
+
+func testAddVlanRejectsIdZero() {
+    testing.assertThrows("failAddVlanIdZero", "routeros");
+}
+
+func failAddVlanIdTooBig() {
+    addVlan(offlineClient(), "vlan4095", 4095, "ether1");
+}
+
+func testAddVlanRejectsIdTooBig() {
+    testing.assertThrows("failAddVlanIdTooBig", "routeros");
+}
+
+func failAddVlanSpacedName() {
+    addVlan(offlineClient(), "guest vlan", 20, "ether1");
+}
+
+func testAddVlanRejectsSpacedName() {
+    testing.assertThrows("failAddVlanSpacedName", "routeros");
 }

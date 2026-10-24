@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the routing topic.
@@ -145,4 +145,54 @@ func testFindRoutingRuleRowMissOnTableMismatch() {
     ];
     def row as map of string to string init findRoutingRuleRow($rows, "10.30.0.0/24", "otherisp");
     testing.assertEqual(len($row), 0);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddRouteNoPrefix() {
+    addRoute(offlineClient(), "10.20.0.0", "192.168.88.254", "branch office");
+}
+
+func testAddRouteRejectsMissingPrefix() {
+    testing.assertThrows("failAddRouteNoPrefix", "routeros");
+}
+
+func failAddRouteWithDistanceTooFar() {
+    addRouteWithDistance(offlineClient(), "10.20.0.0/16", "192.168.88.254", 256, "");
+}
+
+func testAddRouteWithDistanceRejectsDistanceAbove255() {
+    testing.assertThrows("failAddRouteWithDistanceTooFar", "routeros");
+}
+
+func failAddRouteWithDistanceZero() {
+    addRouteWithDistance(offlineClient(), "10.20.0.0/16", "192.168.88.254", 0, "");
+}
+
+func testAddRouteWithDistanceRejectsZero() {
+    testing.assertThrows("failAddRouteWithDistanceZero", "routeros");
+}
+
+func failAddDefaultRouteEmptyGateway() {
+    addDefaultRoute(offlineClient(), "  ", "uplink");
+}
+
+func testAddDefaultRouteRejectsEmptyGateway() {
+    testing.assertThrows("failAddDefaultRouteEmptyGateway", "routeros");
+}
+
+func failUseRoutingTableBadSource() {
+    useRoutingTable(offlineClient(), "192.168.88.999", "viaisp2", "");
+}
+
+func testUseRoutingTableRejectsBadSource() {
+    testing.assertThrows("failUseRoutingTableBadSource", "routeros");
+}
+
+func failUseRoutingTableOnlySpacedTable() {
+    useRoutingTableOnly(offlineClient(), "192.168.88.0/24", "via isp2", "");
+}
+
+func testUseRoutingTableOnlyRejectsSpacedTable() {
+    testing.assertThrows("failUseRoutingTableOnlySpacedTable", "routeros");
 }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the interfaces topic.
@@ -35,4 +35,22 @@ func testInterfaceFromSparseRow() {
     testing.assertFalse($i.running);
     testing.assertFalse($i.disabled);
     testing.assertEqual($i.comment, "");
+}
+
+# Verbs: local validation before any I/O
+
+func failRenameInterfaceSpacedName() {
+    renameInterface(offlineClient(), "ether1", "wan uplink");
+}
+
+func testRenameInterfaceRejectsSpacedName() {
+    testing.assertThrows("failRenameInterfaceSpacedName", "routeros");
+}
+
+func failRenameInterfaceEmptyName() {
+    renameInterface(offlineClient(), "ether1", "  ");
+}
+
+func testRenameInterfaceRejectsEmptyName() {
+    testing.assertThrows("failRenameInterfaceEmptyName", "routeros");
 }

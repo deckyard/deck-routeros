@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the interfacelist topic.
@@ -30,4 +30,22 @@ func testMemberRowMatchesListAndInterface() {
     testing.assertEqual(rowValue($row, ".id"), "*3");
     def miss as map of string to string init memberRow($rows, "WAN", "ether2");
     testing.assertEqual(len($miss), 0);
+}
+
+# Verbs: local validation before any I/O
+
+func failAddInterfaceListEmptyName() {
+    addInterfaceList(offlineClient(), "", "uplinks");
+}
+
+func testAddInterfaceListRejectsEmptyName() {
+    testing.assertThrows("failAddInterfaceListEmptyName", "routeros");
+}
+
+func failAddToInterfaceListSpacedList() {
+    addToInterfaceList(offlineClient(), "W AN", "ether1");
+}
+
+func testAddToInterfaceListRejectsSpacedList() {
+    testing.assertThrows("failAddToInterfaceListSpacedList", "routeros");
 }

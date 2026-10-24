@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - white-box tests for the wifi (wave2) topic.
@@ -54,4 +54,41 @@ func testWifiRegistrationFromRow() {
     testing.assertEqual($r.mac, "AA:BB:CC:DD:EE:FF");
     testing.assertEqual($r.signal, "-52");
     testing.assertEqual($r.uptime, "1h2m3s");
+}
+
+# Verbs: local validation before any I/O. offlineClient() has no socket, so a
+# verb that got past its checks would fail with kind "closed", not "routeros".
+
+func failSetupWifiTooLongSsid() {
+    setupWifi(offlineClient(), "wifi1", strings.repeat("s", 33), "correct-horse");
+}
+
+func testSetupWifiRejectsTooLongSsid() {
+    testing.assertThrows("failSetupWifiTooLongSsid", "routeros");
+}
+
+func failSetWifiPassphraseTooLong() {
+    setWifiPassphrase(offlineClient(), "wifi1", strings.repeat("p", 64));
+}
+
+func testSetWifiPassphraseRejectsTooLong() {
+    testing.assertThrows("failSetWifiPassphraseTooLong", "routeros");
+}
+
+func failAddVirtualWifiEmptyName() {
+    addVirtualWifi(offlineClient(), "wifi1", "", "guests", "guest-pass-1");
+}
+
+func testAddVirtualWifiRejectsEmptyName() {
+    testing.assertThrows("failAddVirtualWifiEmptyName", "routeros");
+}
+
+# Without a readable wifiwave2 menu the readers return an empty list.
+
+func testWifiInterfacesEmptyWhenMenuUnreadable() {
+    testing.assertEqual(len(wifiInterfaces(offlineClient())), 0);
+}
+
+func testWifiRegistrationsEmptyWhenMenuUnreadable() {
+    testing.assertEqual(len(wifiRegistrations(offlineClient())), 0);
 }
