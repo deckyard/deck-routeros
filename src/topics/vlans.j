@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - VLAN tagged interfaces.
@@ -9,19 +9,16 @@
 export def const VLAN_PATH as string init "/interface/vlan";
 
 /**
- * One VLAN interface: a tagged virtual interface on top of a parent.
+ * One VLAN interface: an 802.1Q-tagged virtual interface on a parent.
  *
- * Traffic through it carries the VLAN tag, so several separate networks
- * can share one physical cable or bridge.
- *
- * @field {string} id            internal RouterOS id
- * @field {string} name          interface name (e.g. "vlanoffice")
- * @field {int}    vlanId        the 802.1Q tag, 1-4094
- * @field {string} interfaceName parent interface the VLAN rides on
- * @field {string} mtu           MTU as reported
- * @field {bool}   running       true when the parent is up
- * @field {bool}   disabled      true when the VLAN is switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} interface name, e.g. "vlanoffice"
+ * @field vlanId {int} 802.1Q tag, 1-4094
+ * @field interfaceName {string} parent interface
+ * @field mtu {string} MTU as reported
+ * @field running {bool} true when the parent is up
+ * @field disabled {bool} true when the VLAN is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct Vlan {
     id as string,
@@ -37,7 +34,7 @@ export def struct Vlan {
 /**
  * List every VLAN interface on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Vlan} all VLAN interfaces
  */
 export func vlans(c as Client) {
@@ -50,10 +47,10 @@ export func vlans(c as Client) {
 }
 
 /**
- * Look one VLAN interface up by its name.
+ * Look up one VLAN interface by name.
  *
- * @param {Client} c    an open client
- * @param {string} name VLAN interface name
+ * @param c {Client} an open client
+ * @param name {string} VLAN interface name
  * @return {Vlan} the VLAN
  * @throws {Error} kind "routeros" when no VLAN has that name
  */
@@ -66,19 +63,16 @@ export func vlanByName(c as Client, name as string) {
 }
 
 /**
- * Create a VLAN interface: a tagged network on top of an existing one.
+ * Create a VLAN interface on a parent interface.
  *
- * Traffic on the new interface carries 802.1Q tag `vlanId`, so several
- * networks can share the parent's cable - the device on the other end
- * (a managed switch or another router) must have the same VLAN id
- * configured. The VLAN interface then behaves like any other interface:
- * give it an address (`addIpAddress`), serve DHCP on it (`setupDhcp`),
- * or put it in a bridge.
+ * Frames sent through it leave the parent tagged with `vlanId`; the
+ * device at the other end must use the same id. The result is an
+ * ordinary interface: address it, serve DHCP on it, or bridge it.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the new interface (e.g. "vlanoffice")
- * @param {int}    vlanId        the 802.1Q tag, 1-4094 (both ends must match)
- * @param {string} interfaceName parent interface to ride on (e.g. "ether2", a bridge)
+ * @param c {Client} an open client
+ * @param name {string} new interface name, e.g. "vlanoffice"
+ * @param vlanId {int} 802.1Q tag, 1-4094
+ * @param interfaceName {string} parent interface, e.g. "ether2" or a bridge
  * @return {string} the RouterOS id of the new VLAN interface
  * @throws {Error} kind "routeros" on a bad name, an id outside 1-4094,
  *                 or an unknown parent interface
@@ -99,8 +93,8 @@ export func addVlan(c as Client, name as string, vlanId as int, interfaceName as
 /**
  * Delete a VLAN interface by name.
  *
- * @param {Client} c    an open client
- * @param {string} name the VLAN interface name
+ * @param c {Client} an open client
+ * @param name {string} VLAN interface name
  * @throws {Error} kind "routeros" when no VLAN has that name
  */
 export func removeVlan(c as Client, name as string) {
@@ -110,8 +104,8 @@ export func removeVlan(c as Client, name as string) {
 /**
  * Switch a VLAN interface on.
  *
- * @param {Client} c    an open client
- * @param {string} name the VLAN interface name
+ * @param c {Client} an open client
+ * @param name {string} VLAN interface name
  * @throws {Error} kind "routeros" when no VLAN has that name
  */
 export func enableVlan(c as Client, name as string) {
@@ -121,8 +115,8 @@ export func enableVlan(c as Client, name as string) {
 /**
  * Switch a VLAN interface off.
  *
- * @param {Client} c    an open client
- * @param {string} name the VLAN interface name
+ * @param c {Client} an open client
+ * @param name {string} VLAN interface name
  * @throws {Error} kind "routeros" when no VLAN has that name
  */
 export func disableVlan(c as Client, name as string) {
@@ -132,7 +126,7 @@ export func disableVlan(c as Client, name as string) {
 /**
  * Validate an 802.1Q VLAN id.
  *
- * @param {int} vlanId the candidate id
+ * @param vlanId {int} the candidate id
  * @throws {Error} kind "routeros" when outside 1-4094
  * @internal
  */
@@ -145,7 +139,7 @@ func ensureVlanId(vlanId as int) {
 /**
  * Fold a reply row into a Vlan.
  *
- * @param {map of string to string} row an "/interface/vlan/print" row
+ * @param row {map of string to string} an "/interface/vlan/print" row
  * @return {Vlan} the typed VLAN interface
  * @internal
  */

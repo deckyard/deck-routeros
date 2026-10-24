@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - IP addresses on interfaces.
@@ -11,13 +11,14 @@ export def const IP_ADDRESS_PATH as string init "/ip/address";
 /**
  * One IP address assigned to an interface.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} address       the address with prefix (e.g. "192.168.88.1/24")
- * @field {string} network       the network the prefix implies (e.g. "192.168.88.0")
- * @field {string} interfaceName interface the address sits on
- * @field {bool}   dynamic       true when DHCP/PPP assigned it (not removable)
- * @field {bool}   disabled      true when the address is switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field address {string} address with prefix, e.g. "192.168.88.1/24"
+ * @field network {string} network address the prefix implies, e.g. "192.168.88.0"
+ * @field interfaceName {string} interface the address sits on
+ * @field dynamic {bool} true when a DHCP client or PPP session assigned it;
+ *        such addresses cannot be removed by hand
+ * @field disabled {bool} true when the address is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct IpAddress {
     id as string,
@@ -32,8 +33,8 @@ export def struct IpAddress {
 /**
  * List every IP address on the router.
  *
- * @param {Client} c an open client
- * @return {list of IpAddress} all addresses, static and dynamic
+ * @param c {Client} an open client
+ * @return {list of IpAddress} static and dynamic addresses
  */
 export func ipAddresses(c as Client) {
     def rows as list of map of string to string init getAll($c, IP_ADDRESS_PATH);
@@ -45,14 +46,15 @@ export func ipAddresses(c as Client) {
 }
 
 /**
- * Give an interface an IP address.
+ * Assign an IP address to an interface.
  *
- * @param {Client} c             an open client
- * @param {string} address       the address WITH prefix length (e.g.
- *                               "192.168.88.1/24" - the prefix tells the
- *                               router how large the network is)
- * @param {string} interfaceName interface (or bridge) to put it on
- * @return {string} the RouterOS id of the new address
+ * The prefix length is required: it sets the size of the connected
+ * network, and a bare address would become a /32.
+ *
+ * @param c {Client} an open client
+ * @param address {string} address with prefix length, e.g. "192.168.88.1/24"
+ * @param interfaceName {string} interface or bridge to put it on
+ * @return {string} id of the new address
  * @throws {Error} kind "routeros" on a malformed address, a missing
  *                 prefix, or an unknown interface
  */
@@ -65,9 +67,11 @@ export func addIpAddress(c as Client, address as string, interfaceName as string
 /**
  * Remove an IP address from whatever interface it sits on.
  *
- * @param {Client} c       an open client
- * @param {string} address the address with prefix, exactly as listed
- *                         (e.g. "192.168.88.1/24")
+ * Matches the address string exactly as RouterOS lists it, prefix
+ * included.
+ *
+ * @param c {Client} an open client
+ * @param address {string} address with prefix, e.g. "192.168.88.1/24"
  * @throws {Error} kind "routeros" when the router has no such address
  */
 export func removeIpAddress(c as Client, address as string) {
@@ -82,7 +86,7 @@ export func removeIpAddress(c as Client, address as string) {
 /**
  * Fold a reply row into an IpAddress.
  *
- * @param {map of string to string} row an "/ip/address/print" row
+ * @param row {map of string to string} an "/ip/address/print" row
  * @return {IpAddress} the typed address
  * @internal
  */

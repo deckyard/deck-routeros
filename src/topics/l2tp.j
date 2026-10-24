@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - L2TP: the works-on-every-device remote-access VPN.
+# routeros - L2TP/IPsec remote-access VPN server and dial-out clients.
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the L2TP server settings (single row). */
 export def const L2TP_SERVER_PATH as string init "/interface/l2tp-server/server";
 
-/** RouterOS API path of the L2TP client list (dial OUT to a server). */
+/** RouterOS API path of the L2TP client list (dial-out tunnels). */
 export def const L2TP_CLIENT_PATH as string init "/interface/l2tp-client";
 
 /**
  * The L2TP server settings.
  *
- * @field {bool}   enabled        true when the server accepts connections
- * @field {bool}   useIpsec       true when L2TP/IPsec (encrypted) is required
- * @field {string} defaultProfile the PPP profile applied to logins
+ * @field enabled {bool} true when the server accepts connections
+ * @field useIpsec {bool} true when `use-ipsec` is anything but "no" (or unset)
+ * @field defaultProfile {string} PPP profile applied to logins
  */
 export def struct L2tpServer {
     enabled as bool,
@@ -25,15 +25,15 @@ export def struct L2tpServer {
 };
 
 /**
- * One L2TP client (this router dialing out to an L2TP server).
+ * One L2TP client: this router dialing out to an L2TP server.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          the client interface name
- * @field {string} connectTo     the server address
- * @field {string} user          the login on the server
- * @field {bool}   running       true when the tunnel is up
- * @field {bool}   disabled      true when switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} client interface name
+ * @field connectTo {string} server address
+ * @field user {string} login on the server
+ * @field running {bool} true when the tunnel is up
+ * @field disabled {bool} true when switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct L2tpClient {
     id as string,
@@ -48,7 +48,7 @@ export def struct L2tpClient {
 /**
  * Read the L2TP server settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {L2tpServer} the server state
  */
 export func l2tpServerStatus(c as Client) {
@@ -56,17 +56,16 @@ export func l2tpServerStatus(c as Client) {
 }
 
 /**
- * Turn on an L2TP/IPsec remote-access VPN server.
+ * Turn on an L2TP/IPsec remote-access server.
  *
- * The remote-access VPN that needs no client software: Windows, macOS,
- * iOS, and Android all dial L2TP/IPsec natively. Enables the server,
- * requires IPsec encryption with the given pre-shared key (plain L2TP
- * is cleartext - never enable it without this), and opens the firewall
- * for L2TP (udp/1701), IKE (udp/500), NAT-T (udp/4500), and ESP. Add
- * logins with `addVpnUser`. Idempotent.
+ * Windows, macOS, iOS and Android dial L2TP/IPsec without extra
+ * software. Sets `use-ipsec=required` with the given pre-shared key
+ * (plain L2TP is cleartext) and accepts L2TP (udp 1701), IKE (udp 500),
+ * NAT-T (udp 4500) and ESP in the input chain. Add logins with
+ * `addVpnUser`. Idempotent.
  *
- * @param {Client} c           an open client
- * @param {string} ipsecSecret the shared secret every client also enters
+ * @param c {Client} an open client
+ * @param ipsecSecret {string} pre-shared key every client also enters
  * @throws {Error} kind "routeros" on an empty secret
  * @example
  *   mt.enableL2tpServer($c, "a long random ipsec secret");
@@ -91,7 +90,7 @@ export func enableL2tpServer(c as Client, ipsecSecret as string) {
 /**
  * Turn the L2TP server off and remove its firewall openings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableL2tpServer(c as Client) {
     apiRun($c, L2TP_SERVER_PATH + "/set", {"enabled": "no"});
@@ -101,7 +100,7 @@ export func disableL2tpServer(c as Client) {
 /**
  * List the L2TP clients (dial-out tunnels).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of L2tpClient} all L2TP clients
  */
 export func l2tpClients(c as Client) {
@@ -114,15 +113,19 @@ export func l2tpClients(c as Client) {
 }
 
 /**
- * Dial out to a remote L2TP server (create an L2TP client).
+ * Dial out to a remote L2TP server.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the client interface
- * @param {string} serverAddress the server's address or DNS name
- * @param {string} user          the login on the server
- * @param {string} password      its password
- * @return {string} the RouterOS id of the (new or existing) client
- * @throws {Error} kind "routeros" on bad input
+ * When a client of that name exists, its id is returned and nothing is
+ * changed.
+ *
+ * @param c {Client} an open client
+ * @param name {string} client interface name
+ * @param serverAddress {string} server address or DNS name
+ * @param user {string} login on the server
+ * @param password {string} password for that login
+ * @return {string} the RouterOS id of the new or existing client
+ * @throws {Error} kind "routeros" on an empty or spaced name or user, an
+ *         empty password, or an empty or spaced server address
  */
 export func addL2tpClient(
     c as Client,
@@ -145,8 +148,8 @@ export func addL2tpClient(
 /**
  * Remove an L2TP client.
  *
- * @param {Client} c    an open client
- * @param {string} name the client interface name
+ * @param c {Client} an open client
+ * @param name {string} client interface name
  * @throws {Error} kind "routeros" when no such client exists
  */
 export func removeL2tpClient(c as Client, name as string) {
@@ -156,7 +159,7 @@ export func removeL2tpClient(c as Client, name as string) {
 /**
  * Fold a reply row into an L2tpServer.
  *
- * @param {map of string to string} row the "/interface/l2tp-server/server" row
+ * @param row {map of string to string} the "/interface/l2tp-server/server" row
  * @return {L2tpServer} the typed server state
  * @internal
  */
@@ -171,7 +174,7 @@ func l2tpServerFromRow(row as map of string to string) {
 /**
  * Fold a reply row into an L2tpClient.
  *
- * @param {map of string to string} row an "/interface/l2tp-client/print" row
+ * @param row {map of string to string} an "/interface/l2tp-client/print" row
  * @return {L2tpClient} the typed client
  * @internal
  */

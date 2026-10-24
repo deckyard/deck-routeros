@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - disks: USB / NVMe / SATA storage on the router.
+# routeros - disks: USB / NVMe / SATA storage.
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the disk list. */
@@ -20,20 +20,19 @@ def const DISK_FORMAT_COMMAND_LEGACY as string init "/format-drive";
 /**
  * One storage device attached to the router.
  *
- * `name` is what you pass to `diskByName` / `formatDisk` / `ejectDisk`.
- * RouterOS leaves its own `name` property empty on plain USB storage
- * (7.21.5 does, at least) and reports the label everything else calls
- * the disk - "usb1", "usb1-part1" - in `slot` instead, so `name` falls
- * back to `slot` and the lookups accept either.
+ * `name` is what `diskByName`, `formatDisk` and `ejectDisk` take.
+ * RouterOS (7.21.5 at least) leaves its own `name` property empty on plain
+ * USB storage and reports the usual label ("usb1", "usb1-part1") in
+ * `slot`, so `name` falls back to `slot` and the lookups accept either.
  *
- * @field {string} id        internal RouterOS id
- * @field {string} name      the device name (e.g. "usb1", "nvme1"), from `slot` when unnamed
- * @field {string} model     the disk model / label as reported
- * @field {string} kind      the device type as reported ("hardware", "partition", "raid", ...)
- * @field {string} fs        the filesystem ("ext4", "fat32", "", ...)
- * @field {int}    sizeBytes total capacity in bytes (0 when not reported)
- * @field {int}    freeBytes free space in bytes (0 when not reported)
- * @field {string} slot      the physical slot / interface as reported
+ * @field id {string}        internal RouterOS id
+ * @field name {string}      the device name (e.g. "usb1", "nvme1"), from `slot` when unnamed
+ * @field model {string}     the disk model / label as reported
+ * @field kind {string}      the device type as reported ("hardware", "partition", "raid", ...)
+ * @field fs {string}        the filesystem ("ext4", "fat32", "", ...)
+ * @field sizeBytes {int} total capacity in bytes (0 when not reported)
+ * @field freeBytes {int} free space in bytes (0 when not reported)
+ * @field slot {string}      the physical slot / interface as reported
  */
 export def struct Disk {
     id as string,
@@ -49,10 +48,10 @@ export def struct Disk {
 /**
  * List the storage devices on the router.
  *
- * Returns an empty list on routers with no attached storage. Container
- * root-dirs, backups, and downloaded files all live on these.
+ * Returns an empty list when the router has no storage or the disk menu
+ * cannot be read (any read error, a dropped connection included).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Disk} all disks
  */
 export func disks(c as Client) {
@@ -72,14 +71,14 @@ export func disks(c as Client) {
 /**
  * Look one disk up by its name.
  *
- * Matches RouterOS's own `name` property first and the `slot` label
- * second, so the name `disks(c)` reports always finds the disk again -
- * see the `Disk` struct on why those differ.
+ * Matches RouterOS's `name` property first, then the `slot` label, so
+ * the name `disks(c)` reports always finds the disk again (see `Disk`).
  *
- * @param {Client} c    an open client
- * @param {string} name the disk name (e.g. "usb1")
+ * @param c {Client}    an open client
+ * @param name {string} the disk name (e.g. "usb1")
  * @return {Disk} the disk
- * @throws {Error} kind "routeros" when no disk has that name
+ * @throws {Error} kind "routeros" on an empty name or when no disk has
+ *                 that name
  */
 export func diskByName(c as Client, name as string) {
     def row as map of string to string init diskRowByName($c, $name);
@@ -90,27 +89,24 @@ export func diskByName(c as Client, name as string) {
 }
 
 /**
- * Format a storage device - ERASES EVERYTHING ON IT.
+ * Format a storage device, erasing everything on it.
  *
- * This is destructive and irreversible: every file, backup, and
- * container filesystem on the disk is gone. There is no undo and no
- * confirmation prompt from this call. Double-check the device name
- * (`disks(c)` / `diskByName`), and never point it at a disk holding
- * data you have not backed up elsewhere.
+ * Irreversible, with no confirmation: every file, backup and container
+ * filesystem on the disk is lost. Check the name against `disks(c)`
+ * first.
  *
- * Pick the filesystem for the use: "ext4" for a router-only disk
- * (containers, logs), "exfat"/"fat32" for a disk you also read on a PC.
- *
- * Formatting the whole device ("usb1") and formatting its partition
+ * "ext4" suits a router-only disk (containers, logs); "exfat" or "fat32"
+ * a disk also read on a PC. The whole device ("usb1") and its partition
  * ("usb1-part1") are different targets; a container root-dir lives on
- * the partition.
+ * the partition. Tries `/disk/format` (RouterOS 7.21+) and falls back to
+ * `/disk/format-drive` when the router answers "no such command".
  *
- * @param {Client} c          an open client
- * @param {string} name       the disk to format
- * @param {string} filesystem "ext4", "fat32", "exfat", "btrfs", or "vfat"
- * @param {string} label      a volume label ("" for none)
- * @throws {Error} kind "routeros" on an unknown disk or filesystem,
- *                 kind "mikrotik" when the format fails
+ * @param c {Client}          an open client
+ * @param name {string}       the disk to format
+ * @param filesystem {string} "ext4", "fat32", "exfat", "btrfs", or "vfat"
+ * @param label {string}      a volume label ("" for none)
+ * @throws {Error} kind "routeros" on an unknown filesystem, an empty name
+ *                 or an unknown disk, kind "mikrotik" when the format fails
  * @example
  *   mt.formatDisk($c, "usb1", "ext4", "container-storage");
  */
@@ -137,9 +133,10 @@ export func formatDisk(c as Client, name as string, filesystem as string, label 
 /**
  * Eject a removable disk so it is safe to unplug.
  *
- * @param {Client} c    an open client
- * @param {string} name the disk to eject
- * @throws {Error} kind "routeros" when no disk has that name
+ * @param c {Client}    an open client
+ * @param name {string} the disk to eject
+ * @throws {Error} kind "routeros" on an empty name or when no disk has
+ *                 that name
  */
 export func ejectDisk(c as Client, name as string) {
     apiRun($c, DISK_PATH + "/eject", {".id": requiredDiskId($c, $name)});
@@ -148,8 +145,8 @@ export func ejectDisk(c as Client, name as string) {
 /**
  * Resolve a disk name to its RouterOS id.
  *
- * @param {Client} c    an open client
- * @param {string} name the disk name or slot label
+ * @param c {Client}    an open client
+ * @param name {string} the disk name or slot label
  * @return {string} the disk id
  * @throws {Error} kind "routeros" when no disk matches
  * @internal
@@ -169,8 +166,8 @@ func requiredDiskId(c as Client, name as string) {
  * Reads the whole (tiny) table rather than filtering server-side on
  * `?name=`, because the `slot` fallback needs both properties.
  *
- * @param {Client} c    an open client
- * @param {string} name the disk name or slot label
+ * @param c {Client}    an open client
+ * @param name {string} the disk name or slot label
  * @return {map of string to string} the matching row, or an empty map
  * @throws {Error} kind "routeros" on an empty name
  * @internal
@@ -184,8 +181,8 @@ func diskRowByName(c as Client, name as string) {
  * Pick the disk row whose `name` - or, failing that, whose `slot` -
  * matches.
  *
- * @param {list of map of string to string} rows "/disk/print" rows
- * @param {string} name the disk name or slot label
+ * @param rows {list of map of string to string} "/disk/print" rows
+ * @param name {string} the disk name or slot label
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -203,8 +200,8 @@ func diskRowMatching(rows as list of map of string to string, name as string) {
  * Used to fall back to a command's older spelling without swallowing a
  * genuine error (a busy disk, a refused format).
  *
- * @param {string} kind    the error kind
- * @param {string} message the error message
+ * @param kind {string}    the error kind
+ * @param message {string} the error message
  * @return {bool} true when the router did not recognise the command
  * @internal
  */
@@ -218,7 +215,7 @@ func isUnknownCommand(kind as string, message as string) {
 /**
  * Fold a reply row into a Disk.
  *
- * @param {map of string to string} row a "/disk/print" row
+ * @param row {map of string to string} a "/disk/print" row
  * @return {Disk} the typed disk
  * @internal
  */

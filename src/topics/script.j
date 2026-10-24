@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - the script repository: named RouterOS scripts.
@@ -11,13 +11,13 @@ export def const SCRIPT_PATH as string init "/system/script";
 /**
  * One stored RouterOS script.
  *
- * @field {string} id          internal RouterOS id
- * @field {string} name        the script name (how the scheduler / netwatch refer to it)
- * @field {string} source      the RouterOS script source
- * @field {string} policy      the permissions it runs with, comma-separated
- * @field {int}    runCount    how many times it has run
- * @field {string} lastStarted when it last ran, as reported
- * @field {string} comment     free-text comment, "" when unset
+ * @field id {string} RouterOS item id
+ * @field name {string} script name, the handle the scheduler and netwatch use
+ * @field source {string} RouterOS script source
+ * @field policy {string} comma-separated permissions it runs with
+ * @field runCount {int} number of runs so far
+ * @field lastStarted {string} time of the last run, as RouterOS prints it
+ * @field comment {string} free-text comment, "" when unset
  */
 export def struct Script {
     id as string,
@@ -32,8 +32,8 @@ export def struct Script {
 /**
  * List the stored scripts.
  *
- * @param {Client} c an open client
- * @return {list of Script} all scripts
+ * @param c {Client} an open client
+ * @return {list of Script} every script
  */
 export func scripts(c as Client) {
     def rows as list of map of string to string init getAll($c, SCRIPT_PATH);
@@ -45,10 +45,10 @@ export func scripts(c as Client) {
 }
 
 /**
- * Look one script up by name.
+ * Look up a script by name.
  *
- * @param {Client} c    an open client
- * @param {string} name the script name
+ * @param c {Client} an open client
+ * @param name {string} script name
  * @return {Script} the script
  * @throws {Error} kind "routeros" when no script has that name
  */
@@ -63,19 +63,17 @@ export func scriptByName(c as Client, name as string) {
 /**
  * Store a named RouterOS script.
  *
- * A stored script is written once and reused: the scheduler and netwatch
- * can run it by name (`scheduleScript(c, name, interval, source)` also
- * takes a stored script's name as its source), and `runScript` triggers
- * it on demand. `source` is RouterOS scripting, not Jennifer. Fails if
- * the name is taken.
+ * The scheduler and netwatch can run it by name (`scheduleScript` takes
+ * a stored script's name as its source) and `runScript` runs it on
+ * demand. `source` is RouterOS script, not Jennifer.
  *
- * @param {Client} c       an open client
- * @param {string} name    name for the script
- * @param {string} source  the RouterOS script source
- * @param {string} comment friendly note ("" for none)
+ * @param c {Client} an open client
+ * @param name {string} script name, no spaces
+ * @param source {string} RouterOS script source
+ * @param comment {string} free-text note, "" for none
  * @return {string} the RouterOS id of the new script
- * @throws {Error} kind "routeros" on a bad name, empty source, or a
- *                 script that already exists
+ * @throws {Error} kind "routeros" on a bad name, an empty source, or a
+ *         name that is already taken (use `updateScript`)
  * @example
  *   mt.addScript($c, "backup-and-mail",
  *       "/system backup save name=nightly; /tool e-mail send to=noc@example.org subject=backup file=nightly.backup");
@@ -99,10 +97,10 @@ export func addScript(c as Client, name as string, source as string, comment as 
 /**
  * Replace the source of an existing script.
  *
- * @param {Client} c      an open client
- * @param {string} name   the script name
- * @param {string} source the new RouterOS script source
- * @throws {Error} kind "routeros" on empty source or an unknown script
+ * @param c {Client} an open client
+ * @param name {string} script name
+ * @param source {string} new RouterOS script source
+ * @throws {Error} kind "routeros" on an empty source or an unknown script
  */
 export func updateScript(c as Client, name as string, source as string) {
     if (strings.trim($source) == "") {
@@ -112,17 +110,16 @@ export func updateScript(c as Client, name as string, source as string) {
 }
 
 /**
- * Run a stored script now.
+ * Run a stored script now, with the script's own policies.
  *
- * It runs on the router with the script's own policies (RouterOS
- * script, not Jennifer) - a typo or a missing permission shows up in
- * the router log at run time, not here.
+ * A typo or a missing permission in the script shows up in the router
+ * log at run time, not here.
  *
- * @param {Client} c    an open client
- * @param {string} name the script name
+ * @param c {Client} an open client
+ * @param name {string} script name
  * @return {string} the script's return value, "" when it returns nothing
  * @throws {Error} kind "routeros" when no script has that name,
- *                 kind "mikrotik" when the script itself errors
+ *         kind "mikrotik" when the script itself errors
  */
 export func runScript(c as Client, name as string) {
     return apiRun($c, SCRIPT_PATH + "/run", {".id": requiredId($c, SCRIPT_PATH, $name, "script")});
@@ -131,11 +128,11 @@ export func runScript(c as Client, name as string) {
 /**
  * Delete a stored script.
  *
- * A scheduler entry that runs it by name will fail once it is gone -
- * remove or repoint the schedule too.
+ * Scheduler entries that run it by name fail afterwards; remove or
+ * repoint them too.
  *
- * @param {Client} c    an open client
- * @param {string} name the script name
+ * @param c {Client} an open client
+ * @param name {string} script name
  * @throws {Error} kind "routeros" when no script has that name
  */
 export func removeScript(c as Client, name as string) {
@@ -143,9 +140,9 @@ export func removeScript(c as Client, name as string) {
 }
 
 /**
- * Fold a reply row into a Script.
+ * Fold a "/system/script/print" row into a Script.
  *
- * @param {map of string to string} row a "/system/script/print" row
+ * @param row {map of string to string} the reply row
  * @return {Script} the typed script
  * @internal
  */

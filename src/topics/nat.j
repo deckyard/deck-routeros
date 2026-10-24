@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - firewall NAT: masquerade and port forwarding.
@@ -8,38 +8,37 @@
 /** RouterOS API path of the firewall NAT-rule list. */
 export def const NAT_PATH as string init "/ip/firewall/nat";
 
-/** NAT chain for rewriting the source of outgoing traffic. */
+/** NAT chain that rewrites the source of outgoing traffic. */
 export def const CHAIN_SRCNAT as string init "srcnat";
 
-/** NAT chain for rewriting the destination of incoming traffic. */
+/** NAT chain that rewrites the destination of incoming traffic. */
 export def const CHAIN_DSTNAT as string init "dstnat";
 
-/** NAT action that hides a LAN behind the router's own address. */
+/** NAT action that replaces the source with the out-interface's address. */
 export def const ACTION_MASQUERADE as string init "masquerade";
 
-/** NAT action that redirects traffic to another address/port. */
+/** NAT action that redirects traffic to another address and port. */
 export def const ACTION_DST_NAT as string init "dst-nat";
 
 /**
- * One firewall NAT rule, as read back from the router.
+ * One firewall NAT rule as read back from the router.
  *
- * Create the two everyday kinds with `addMasquerade` (share the
- * router's address) and `forwardPort` (publish an inside service);
- * anything more exotic goes through the generic `add` on NAT_PATH.
+ * `addMasquerade` and `forwardPort` create the two everyday kinds; other
+ * rules go through the generic `add` on NAT_PATH.
  *
- * @field {string} id           internal RouterOS id
- * @field {string} chain        "srcnat" (outgoing) or "dstnat" (incoming)
- * @field {string} action       "masquerade", "dst-nat", ...
- * @field {string} protocol     matched IP protocol, "" for any
- * @field {string} srcAddress   matched source address/network, "" for any
- * @field {string} dstAddress   matched destination address/network, "" for any
- * @field {string} dstPort      matched destination port(s), "" for any
- * @field {string} toAddresses  where dst-nat sends the traffic
- * @field {string} toPorts      which port dst-nat sends it to
- * @field {string} inInterface  interface the packet arrives on, "" for any
- * @field {string} outInterface interface the packet leaves on, "" for any
- * @field {string} comment      free-text comment; the handle for the *ByComment helpers
- * @field {bool}   disabled     true when the rule is switched off
+ * @field id {string} internal RouterOS id
+ * @field chain {string} "srcnat" (outgoing) or "dstnat" (incoming)
+ * @field action {string} "masquerade", "dst-nat", ...
+ * @field protocol {string} matched IP protocol, "" for any
+ * @field srcAddress {string} matched source address or network, "" for any
+ * @field dstAddress {string} matched destination address or network, "" for any
+ * @field dstPort {string} matched destination port(s), "" for any
+ * @field toAddresses {string} dst-nat target address
+ * @field toPorts {string} dst-nat target port
+ * @field inInterface {string} incoming interface match, "" for any
+ * @field outInterface {string} outgoing interface match, "" for any
+ * @field comment {string} comment; the *ByComment handle
+ * @field disabled {bool} true when the rule is switched off
  */
 export def struct NatRule {
     id as string,
@@ -58,10 +57,10 @@ export def struct NatRule {
 };
 
 /**
- * List every firewall NAT rule on the router.
+ * List the firewall NAT rules in table order.
  *
- * @param {Client} c an open client
- * @return {list of NatRule} all NAT rules, ids populated
+ * @param c {Client} an open client
+ * @return {list of NatRule} all NAT rules
  */
 export func natRules(c as Client) {
     def rows as list of map of string to string init getAll($c, NAT_PATH);
@@ -73,18 +72,16 @@ export func natRules(c as Client) {
 }
 
 /**
- * Let the LAN reach the internet through the router's address
- * (masquerade - the NAT rule every home/office router needs).
+ * Masquerade traffic leaving through an interface, so the LAN reaches the
+ * internet with the router's address.
  *
- * All traffic leaving through `outInterface` (the WAN side) gets the
- * router's public address as its source. Idempotent: if a masquerade
- * rule for that interface already exists, its id is returned instead of
- * creating a duplicate.
+ * Idempotent: when a srcnat masquerade rule for that out-interface
+ * exists, its id is returned and `comment` is ignored.
  *
- * @param {Client} c            an open client
- * @param {string} outInterface the internet-facing interface (e.g. "ether1")
- * @param {string} comment      friendly note for a newly created rule ("" for none)
- * @return {string} the RouterOS id of the (new or existing) rule
+ * @param c {Client} an open client
+ * @param outInterface {string} internet-facing interface, e.g. "ether1"
+ * @param comment {string} comment for a new rule, "" for none
+ * @return {string} id of the new or existing rule
  * @throws {Error} kind "routeros" when the interface does not exist
  * @example
  *   mt.addMasquerade($c, "ether1", "lan to internet");
@@ -108,22 +105,23 @@ export func addMasquerade(c as Client, outInterface as string, comment as string
 }
 
 /**
- * Publish an inside service to the world (port forwarding).
+ * Forward a port to a LAN host (dst-nat).
  *
- * Traffic arriving at the router on `publicPort` is redirected to
- * `toAddress`:`toPort` on the LAN. Applies to any incoming interface -
- * prefer `forwardPortOn` to pin it to the WAN interface. Remember the
- * forward only works if the firewall also lets the traffic through the
- * forward chain.
+ * Traffic arriving on `publicPort` from any interface is redirected to
+ * `toAddress`:`toPort`. `forwardPortOn` limits it to the WAN interface,
+ * which keeps the rule from catching LAN connections to the router too.
+ * The firewall forward chain must also let the traffic through. Not
+ * idempotent: each call adds a rule.
  *
- * @param {Client} c          an open client
- * @param {string} protocol   "tcp" or "udp" (port forwarding needs one of the two)
- * @param {int}    publicPort port the outside world connects to (1-65535)
- * @param {string} toAddress  LAN address of the real service
- * @param {int}    toPort     port the service listens on (1-65535)
- * @param {string} comment    friendly handle for the rule (e.g. "web server")
- * @return {string} the RouterOS id of the new rule
- * @throws {Error} kind "routeros" on a bad protocol, port, or address
+ * @param c {Client} an open client
+ * @param protocol {string} "tcp" or "udp"
+ * @param publicPort {int} outside port, 1-65535
+ * @param toAddress {string} LAN address of the service
+ * @param toPort {int} port the service listens on, 1-65535
+ * @param comment {string} rule handle, e.g. "web server"; "" for none
+ * @return {string} id of the new rule
+ * @throws {Error} kind "routeros" on a protocol other than tcp/udp, a
+ *                port out of range, or a malformed address
  * @example
  *   mt.forwardPort($c, "tcp", 8080, "192.168.88.10", 80, "web server");
  */
@@ -138,20 +136,21 @@ export func forwardPort(
 }
 
 /**
- * Like `forwardPort`, but only for traffic arriving on one interface.
+ * Forward a port to a LAN host, for traffic arriving on one interface only.
  *
- * Pinning the rule to the WAN interface keeps the redirect from also
- * hijacking LAN-internal connections to the router.
+ * The interface is looked up on the router before the other inputs are
+ * checked.
  *
- * @param {Client} c           an open client
- * @param {string} inInterface the internet-facing interface (e.g. "ether1")
- * @param {string} protocol    "tcp" or "udp"
- * @param {int}    publicPort  port the outside world connects to (1-65535)
- * @param {string} toAddress   LAN address of the real service
- * @param {int}    toPort      port the service listens on (1-65535)
- * @param {string} comment     friendly handle for the rule
- * @return {string} the RouterOS id of the new rule
- * @throws {Error} kind "routeros" on bad input or an unknown interface
+ * @param c {Client} an open client
+ * @param inInterface {string} internet-facing interface, e.g. "ether1"
+ * @param protocol {string} "tcp" or "udp"
+ * @param publicPort {int} outside port, 1-65535
+ * @param toAddress {string} LAN address of the service
+ * @param toPort {int} port the service listens on, 1-65535
+ * @param comment {string} rule handle, "" for none
+ * @return {string} id of the new rule
+ * @throws {Error} kind "routeros" on an unknown interface or the input
+ *                errors of `forwardPort`
  */
 export func forwardPortOn(
     c as Client,
@@ -166,10 +165,11 @@ export func forwardPortOn(
 }
 
 /**
- * Delete a NAT rule by its RouterOS id.
+ * Delete a NAT rule by id.
  *
- * @param {Client} c  an open client
- * @param {string} id the rule id (as returned by the add calls or `natRules`)
+ * @param c {Client} an open client
+ * @param id {string} rule id
+ * @throws {Error} kind "routeros" on an empty id
  */
 export func removeNatRule(c as Client, id as string) {
     remove($c, NAT_PATH, $id);
@@ -178,8 +178,8 @@ export func removeNatRule(c as Client, id as string) {
 /**
  * Delete the NAT rule that carries a comment.
  *
- * @param {Client} c       an open client
- * @param {string} comment the comment given to the rule when it was created
+ * @param c {Client} an open client
+ * @param comment {string} the rule's comment
  * @throws {Error} kind "routeros" when no NAT rule carries that comment
  */
 export func removeNatRuleByComment(c as Client, comment as string) {
@@ -187,10 +187,10 @@ export func removeNatRuleByComment(c as Client, comment as string) {
 }
 
 /**
- * Switch the NAT rule that carries a comment on.
+ * Enable the NAT rule that carries a comment.
  *
- * @param {Client} c       an open client
- * @param {string} comment the rule's comment
+ * @param c {Client} an open client
+ * @param comment {string} the rule's comment
  * @throws {Error} kind "routeros" when no NAT rule carries that comment
  */
 export func enableNatRuleByComment(c as Client, comment as string) {
@@ -198,12 +198,11 @@ export func enableNatRuleByComment(c as Client, comment as string) {
 }
 
 /**
- * Switch the NAT rule that carries a comment off.
+ * Disable the NAT rule that carries a comment, e.g. to close a port
+ * forward without deleting it.
  *
- * Handy for temporarily closing a port forward without losing it.
- *
- * @param {Client} c       an open client
- * @param {string} comment the rule's comment
+ * @param c {Client} an open client
+ * @param comment {string} the rule's comment
  * @throws {Error} kind "routeros" when no NAT rule carries that comment
  */
 export func disableNatRuleByComment(c as Client, comment as string) {
@@ -211,15 +210,14 @@ export func disableNatRuleByComment(c as Client, comment as string) {
 }
 
 /**
- * Move a NAT rule so it is evaluated directly before another one.
+ * Move a NAT rule directly above another one.
  *
- * Order decides which translation wins: a broad `masquerade` on
- * srcnat, or a `dst-nat` port forward that a catch-all above it would
- * otherwise shadow.
+ * The first matching rule translates: a catch-all dst-nat above a port
+ * forward shadows it.
  *
- * @param {Client} c        an open client
- * @param {string} id       the rule to move
- * @param {string} beforeId the rule it must end up above, "" for the bottom
+ * @param c {Client} an open client
+ * @param id {string} rule to move
+ * @param beforeId {string} rule to land above, "" for the bottom
  * @throws {Error} kind "routeros" on an empty id or a self-move
  */
 export func moveNatRule(c as Client, id as string, beforeId as string) {
@@ -229,9 +227,10 @@ export func moveNatRule(c as Client, id as string, beforeId as string) {
 /**
  * Move the NAT rule carrying one comment above the rule carrying another.
  *
- * @param {Client} c             an open client
- * @param {string} comment       the rule to move
- * @param {string} beforeComment the rule it must end up above, "" for the bottom
+ * @param c {Client} an open client
+ * @param comment {string} comment of the rule to move
+ * @param beforeComment {string} comment of the rule to land above, "" for
+ *        the bottom
  * @throws {Error} kind "routeros" when either comment matches no rule
  * @example
  *   mt.moveNatRuleByComment($c, "web server", "masquerade out");
@@ -248,7 +247,7 @@ export func moveNatRuleByComment(c as Client, comment as string, beforeComment a
 /**
  * Validate a port-forward protocol: dst-nat needs tcp or udp.
  *
- * @param {string} protocol the candidate
+ * @param protocol {string} the candidate
  * @throws {Error} kind "routeros" on anything but "tcp" / "udp"
  * @internal
  */
@@ -261,8 +260,8 @@ func ensureForwardProtocol(protocol as string) {
 /**
  * Find an existing masquerade rule for an outgoing interface.
  *
- * @param {list of map of string to string} rows "/ip/firewall/nat/print" rows
- * @param {string} outInterface the interface to look for
+ * @param rows {list of map of string to string} "/ip/firewall/nat/print" rows
+ * @param outInterface {string} the interface to look for
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -282,13 +281,13 @@ func findMasqueradeRow(rows as list of map of string to string, outInterface as 
  * Validate and create a dst-nat port forward; empty inInterface omits
  * the interface match.
  *
- * @param {Client} c           an open client
- * @param {string} inInterface interface match, "" for any
- * @param {string} protocol    "tcp" or "udp"
- * @param {int}    publicPort  outside port
- * @param {string} toAddress   inside address
- * @param {int}    toPort      inside port
- * @param {string} comment     friendly handle, "" for none
+ * @param c {Client}           an open client
+ * @param inInterface {string} interface match, "" for any
+ * @param protocol {string}    "tcp" or "udp"
+ * @param publicPort {int}  outside port
+ * @param toAddress {string}   inside address
+ * @param toPort {int}      inside port
+ * @param comment {string}     friendly handle, "" for none
  * @return {string} the RouterOS id of the new rule
  * @throws {Error} kind "routeros" on bad input
  * @internal
@@ -325,8 +324,8 @@ func natForward(
 /**
  * Resolve a NAT rule comment to the rule's id.
  *
- * @param {Client} c       an open client
- * @param {string} comment the rule's comment
+ * @param c {Client}       an open client
+ * @param comment {string} the rule's comment
  * @return {string} the rule id
  * @throws {Error} kind "routeros" when no NAT rule carries that comment
  * @internal
@@ -338,7 +337,7 @@ func natIdByComment(c as Client, comment as string) {
 /**
  * Fold a reply row into a NatRule.
  *
- * @param {map of string to string} row an "/ip/firewall/nat/print" row
+ * @param row {map of string to string} an "/ip/firewall/nat/print" row
  * @return {NatRule} the typed rule
  * @internal
  */

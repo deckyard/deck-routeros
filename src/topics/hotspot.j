@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - hotspot: a captive guest portal.
@@ -8,30 +8,30 @@
 /** RouterOS API path of the hotspot server list. */
 export def const HOTSPOT_PATH as string init "/ip/hotspot";
 
-/** RouterOS API path of the hotspot server profiles. */
+/** RouterOS API path of the hotspot server profile list. */
 export def const HOTSPOT_PROFILE_PATH as string init "/ip/hotspot/profile";
 
 /** RouterOS API path of the hotspot user list. */
 export def const HOTSPOT_USER_PATH as string init "/ip/hotspot/user";
 
-/** RouterOS API path of the active hotspot sessions (read-only + kick). */
+/** RouterOS API path of the active hotspot sessions. */
 export def const HOTSPOT_ACTIVE_PATH as string init "/ip/hotspot/active";
 
-/** RouterOS API path of the hotspot IP bindings (bypass / block devices). */
+/** RouterOS API path of the hotspot IP bindings (bypassed or blocked devices). */
 export def const HOTSPOT_BINDING_PATH as string init "/ip/hotspot/ip-binding";
 
-/** RouterOS API path of the walled garden (allowed before login). */
+/** RouterOS API path of the walled garden (destinations allowed before login). */
 export def const WALLED_GARDEN_PATH as string init "/ip/hotspot/walled-garden";
 
 /**
  * One hotspot server: a captive portal guarding an interface.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          server name
- * @field {string} interfaceName the guarded interface (the guest bridge)
- * @field {string} addressPool   pool the guests draw addresses from
- * @field {string} profile       server profile (portal address, login method)
- * @field {bool}   disabled      true when the portal is switched off
+ * @field id {string}            internal RouterOS id
+ * @field name {string}          server name
+ * @field interfaceName {string} guarded interface, usually the guest bridge
+ * @field addressPool {string}   pool guests get addresses from
+ * @field profile {string}       server profile: portal address, login method
+ * @field disabled {bool}        true when switched off
  */
 export def struct HotspotServer {
     id as string,
@@ -43,15 +43,15 @@ export def struct HotspotServer {
 };
 
 /**
- * One hotspot user (a login for the portal).
+ * One hotspot user: a portal login.
  *
- * @field {string} id          internal RouterOS id
- * @field {string} name        login name
- * @field {string} profile     user profile ("default" unless customized)
- * @field {string} limitUptime total connect time allowed, "" for unlimited
- * @field {string} uptime      time used so far
- * @field {bool}   disabled    true when the login is switched off
- * @field {string} comment     free-text comment, "" when unset
+ * @field id {string}          internal RouterOS id
+ * @field name {string}        login name
+ * @field profile {string}     user profile ("default" unless customized)
+ * @field limitUptime {string} total connect time allowed, "" for unlimited
+ * @field uptime {string}      time used so far
+ * @field disabled {bool}      true when switched off
+ * @field comment {string}     free-text comment, "" when unset
  */
 export def struct HotspotUser {
     id as string,
@@ -64,15 +64,15 @@ export def struct HotspotUser {
 };
 
 /**
- * One active hotspot session: a guest logged in right now.
+ * One active hotspot session.
  *
- * @field {string} user     the login used
- * @field {string} address  the guest's IP address
- * @field {string} mac      the guest's MAC address
- * @field {string} uptime   session duration so far
- * @field {string} idleTime time since the guest last sent traffic
- * @field {int}    bytesIn  bytes received from the guest
- * @field {int}    bytesOut bytes sent to the guest
+ * @field user {string}     login used
+ * @field address {string}  guest IP address
+ * @field mac {string}      guest MAC address
+ * @field uptime {string}   session duration so far
+ * @field idleTime {string} time since the guest last sent traffic
+ * @field bytesIn {int}     bytes received from the guest
+ * @field bytesOut {int}    bytes sent to the guest
  */
 export def struct HotspotSession {
     user as string,
@@ -87,7 +87,7 @@ export def struct HotspotSession {
 /**
  * List the hotspot servers.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of HotspotServer} all portals
  */
 export func hotspotServers(c as Client) {
@@ -100,32 +100,29 @@ export func hotspotServers(c as Client) {
 }
 
 /**
- * Stand up a captive guest portal on an interface, in one call.
+ * Set up a captive guest portal on an interface.
  *
- * Builds what RouterOS's setup wizard would: the DHCP stack for the
- * guest network (via `setupDhcp` - pool, server, network entry), a
- * hotspot profile, and the hotspot server guarding the interface.
- * Guests then get an address, and every web request is redirected to
- * the login page until they authenticate (`addHotspotUser` /
- * `addHotspotVoucher` create logins; `bypassHotspotMac` exempts
- * devices).
+ * Builds what the RouterOS setup wizard builds: the guest DHCP stack
+ * (`setupDhcp`, with the gateway as DNS server), a hotspot profile named
+ * like the portal, and the hotspot server. Every web request is then
+ * redirected to the login page until the guest logs in.
  *
- * Use a DEDICATED guest interface or bridge - a hotspot intercepts ALL
- * traffic on its interface, and putting it on the management LAN locks
- * everyone (including you) behind the portal. As with `setupDhcp`, the
- * interface itself needs an address inside the network first
- * (`addIpAddress`). Idempotent by name.
+ * Use a dedicated guest interface or bridge: the hotspot intercepts all
+ * traffic on its interface, and on the management LAN it locks everyone
+ * out, you included. The interface needs an address inside the network
+ * first (`addIpAddress`). When a hotspot server with this name exists,
+ * its id is returned and nothing is changed.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the portal (and its DHCP pieces)
- * @param {string} interfaceName the guest interface/bridge (e.g. "brguest")
- * @param {string} network       the guest network as CIDR (e.g. "10.5.50.0/24")
- * @param {string} gateway       the router's address in it (e.g. "10.5.50.1")
- * @param {string} rangeFrom     first guest address
- * @param {string} rangeTo       last guest address
+ * @param c {Client}             an open client
+ * @param name {string}          name of the portal, its profile and DHCP pieces
+ * @param interfaceName {string} guest interface or bridge (e.g. "brguest")
+ * @param network {string}       guest network in CIDR form (e.g. "10.5.50.0/24")
+ * @param gateway {string}       router address in that network (e.g. "10.5.50.1")
+ * @param rangeFrom {string}     first guest address
+ * @param rangeTo {string}       last guest address
  * @return {string} the RouterOS id of the hotspot server
- * @throws {Error} kind "routeros" on bad input (the `setupDhcp` checks
- *                 all apply)
+ * @throws {Error} kind "routeros" on an empty or spaced name, or any input
+ *                 `setupDhcp` rejects
  * @example
  *   mt.addBridge($c, "brguest");
  *   mt.addBridgePort($c, "brguest", "wifiguest");
@@ -158,15 +155,14 @@ export func setupHotspot(
 }
 
 /**
- * Tear a portal down: server, profile, and the DHCP stack.
+ * Remove a portal: server, profile and DHCP stack.
  *
- * Each piece is removed if present. Users, bindings, and walled-garden
- * entries are left (they are portal-independent) - remove them
- * explicitly if wanted.
+ * Each piece is removed when present. Users, bindings and walled-garden
+ * entries do not belong to one portal and stay.
  *
- * @param {Client} c       an open client
- * @param {string} name    the name given to `setupHotspot`
- * @param {string} network the guest network as CIDR, as given to `setupHotspot`
+ * @param c {Client}       an open client
+ * @param name {string}    the name given to `setupHotspot`
+ * @param network {string} the CIDR string given to `setupHotspot`
  * @throws {Error} kind "routeros" when nothing of the portal exists
  */
 export func teardownHotspot(c as Client, name as string, network as string) {
@@ -197,7 +193,7 @@ export func teardownHotspot(c as Client, name as string, network as string) {
 /**
  * List the portal logins.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of HotspotUser} all hotspot users
  */
 export func hotspotUsers(c as Client) {
@@ -212,13 +208,13 @@ export func hotspotUsers(c as Client) {
 /**
  * Create a portal login.
  *
- * @param {Client} c        an open client
- * @param {string} name     login name guests type
- * @param {string} password its password
- * @param {string} comment  friendly note ("" for none)
+ * @param c {Client}        an open client
+ * @param name {string}     login name
+ * @param password {string} login password, not empty
+ * @param comment {string}  free-text note, "" for none
  * @return {string} the RouterOS id of the user
- * @throws {Error} kind "routeros" on a bad name, empty password, or a
- *                 login that already exists
+ * @throws {Error} kind "routeros" on an empty or spaced name, an empty
+ *                 password, or a login that already exists
  */
 export func addHotspotUser(c as Client, name as string, password as string, comment as string) {
     return hotspotUserAdd($c, $name, $password, "", $comment);
@@ -227,16 +223,18 @@ export func addHotspotUser(c as Client, name as string, password as string, comm
 /**
  * Create a time-limited portal login (a voucher).
  *
- * The classic front-desk pattern: a login that stops working after its
- * total connect time is used up (e.g. a day pass).
+ * The login stops working once its total connect time is used up (a day
+ * pass). Connect time, not calendar time.
  *
- * @param {Client} c           an open client
- * @param {string} name        login name on the voucher
- * @param {string} password    its password
- * @param {string} uptimeLimit total connect time ("4h", "1d", "1w")
- * @param {string} comment     friendly note ("" for none)
+ * @param c {Client}           an open client
+ * @param name {string}        login name
+ * @param password {string}    login password, not empty
+ * @param uptimeLimit {string} total connect time: "4h", "1d", "1d12h" or
+ *                            "HH:MM:SS"
+ * @param comment {string}     free-text note, "" for none
  * @return {string} the RouterOS id of the user
- * @throws {Error} kind "routeros" on bad input or an existing login
+ * @throws {Error} kind "routeros" on a malformed limit, an empty or spaced
+ *                 name, an empty password, or an existing login
  */
 export func addHotspotVoucher(
     c as Client,
@@ -252,8 +250,8 @@ export func addHotspotVoucher(
 /**
  * Delete a portal login.
  *
- * @param {Client} c    an open client
- * @param {string} name the login name
+ * @param c {Client}    an open client
+ * @param name {string} login name
  * @throws {Error} kind "routeros" when no such login exists
  */
 export func removeHotspotUser(c as Client, name as string) {
@@ -261,9 +259,9 @@ export func removeHotspotUser(c as Client, name as string) {
 }
 
 /**
- * Who is logged into the portal right now, with usage.
+ * List the active portal sessions with their usage counters.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of HotspotSession} the active sessions
  */
 export func hotspotActive(c as Client) {
@@ -276,10 +274,10 @@ export func hotspotActive(c as Client) {
 }
 
 /**
- * Log a guest out now (they land back on the login page).
+ * End a guest's session now; the guest is sent back to the login page.
  *
- * @param {Client} c    an open client
- * @param {string} user the login whose session to end
+ * @param c {Client}    an open client
+ * @param user {string} login whose session to end
  * @throws {Error} kind "routeros" when that login has no active session
  */
 export func kickHotspotUser(c as Client, user as string) {
@@ -292,14 +290,14 @@ export func kickHotspotUser(c as Client, user as string) {
 }
 
 /**
- * Let a device through the portal without logging in (bypass).
+ * Let a device through the portal without logging in (a bypass binding).
  *
- * For the printer, the TV, the payment terminal - devices that cannot
- * click a login page. Idempotent by MAC.
+ * For devices that cannot use a login page: printers, TVs, payment
+ * terminals. Idempotent by MAC.
  *
- * @param {Client} c       an open client
- * @param {string} mac     the device's MAC address
- * @param {string} comment friendly note (e.g. "lobby printer")
+ * @param c {Client}       an open client
+ * @param mac {string}     device MAC, any case; sent uppercased
+ * @param comment {string} free-text note (e.g. "lobby printer"), "" for none
  * @return {string} the RouterOS id of the binding
  * @throws {Error} kind "routeros" on a malformed MAC
  */
@@ -319,11 +317,12 @@ export func bypassHotspotMac(c as Client, mac as string, comment as string) {
 }
 
 /**
- * Remove a device's portal bypass; it must log in again.
+ * Remove a device's portal bypass, so it has to log in again.
  *
- * @param {Client} c   an open client
- * @param {string} mac the device's MAC address
- * @throws {Error} kind "routeros" when no bypass exists for it
+ * @param c {Client}   an open client
+ * @param mac {string} device MAC, any case
+ * @throws {Error} kind "routeros" on a malformed MAC or when no bypass
+ *                 exists for it
  */
 export func removeHotspotBypass(c as Client, mac as string) {
     ensureMac($mac);
@@ -341,12 +340,13 @@ export func removeHotspotBypass(c as Client, mac as string) {
 /**
  * Allow a destination before login (walled garden).
  *
- * What unauthenticated guests may still reach: your company site, a
- * payment provider, terms-of-service pages. Idempotent by host.
+ * Guests who have not logged in can still reach the host: your own site,
+ * a payment provider, terms pages. Idempotent by host.
  *
- * @param {Client} c       an open client
- * @param {string} dstHost the destination ("example.org"; "*.example.org" works)
- * @param {string} comment friendly note ("" for none)
+ * @param c {Client}       an open client
+ * @param dstHost {string} destination host name; wildcards like
+ *                        "*.example.org" work
+ * @param comment {string} free-text note, "" for none
  * @return {string} the RouterOS id of the entry
  * @throws {Error} kind "routeros" on an empty or spaced host
  */
@@ -368,8 +368,8 @@ export func allowBeforeLogin(c as Client, dstHost as string, comment as string) 
 /**
  * Remove a walled-garden entry.
  *
- * @param {Client} c       an open client
- * @param {string} dstHost the destination it was created for
+ * @param c {Client}       an open client
+ * @param dstHost {string} host the entry was created for
  * @throws {Error} kind "routeros" when no such entry exists
  */
 export func removeWalledGardenEntry(c as Client, dstHost as string) {
@@ -387,11 +387,11 @@ export func removeWalledGardenEntry(c as Client, dstHost as string) {
 /**
  * Validate and create a hotspot user; empty limit omits the cap.
  *
- * @param {Client} c        an open client
- * @param {string} name     login name
- * @param {string} password its password
- * @param {string} limit    limit-uptime, "" for unlimited
- * @param {string} comment  note, "" for none
+ * @param c {Client}        an open client
+ * @param name {string}     login name
+ * @param password {string} its password
+ * @param limit {string}    limit-uptime, "" for unlimited
+ * @param comment {string}  note, "" for none
  * @return {string} the RouterOS id of the user
  * @throws {Error} kind "routeros" on bad input or an existing login
  * @internal
@@ -422,7 +422,7 @@ func hotspotUserAdd(
 /**
  * Fold a reply row into a HotspotServer.
  *
- * @param {map of string to string} row an "/ip/hotspot/print" row
+ * @param row {map of string to string} an "/ip/hotspot/print" row
  * @return {HotspotServer} the typed server
  * @internal
  */
@@ -440,7 +440,7 @@ func hotspotFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a HotspotUser.
  *
- * @param {map of string to string} row an "/ip/hotspot/user/print" row
+ * @param row {map of string to string} an "/ip/hotspot/user/print" row
  * @return {HotspotUser} the typed user
  * @internal
  */
@@ -459,7 +459,7 @@ func hotspotUserFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a HotspotSession.
  *
- * @param {map of string to string} row an "/ip/hotspot/active/print" row
+ * @param row {map of string to string} an "/ip/hotspot/active/print" row
  * @return {HotspotSession} the typed session
  * @internal
  */

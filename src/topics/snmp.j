@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - SNMP: plug the router into your monitoring.
@@ -14,9 +14,9 @@ export def const SNMP_COMMUNITY_PATH as string init "/snmp/community";
 /**
  * The SNMP agent settings.
  *
- * @field {bool}   enabled  true when the agent answers queries
- * @field {string} contact  the contact string monitoring systems display
- * @field {string} location the location string monitoring systems display
+ * @field enabled {bool}  true when the agent answers queries
+ * @field contact {string}  contact string shown by monitoring systems
+ * @field location {string} location string shown by monitoring systems
  */
 export def struct SnmpSettings {
     enabled as bool,
@@ -25,14 +25,14 @@ export def struct SnmpSettings {
 };
 
 /**
- * One SNMP community: a name that grants (read) access.
+ * One SNMP community: a shared string that grants access.
  *
- * @field {string} id          internal RouterOS id
- * @field {string} name        the community string (acts like a password!)
- * @field {string} addresses   networks allowed to query, "" for anywhere
- * @field {bool}   readAccess  true when reading is allowed
- * @field {bool}   writeAccess true when writing is allowed (avoid)
- * @field {bool}   disabled    true when switched off
+ * @field id {string}          internal RouterOS id
+ * @field name {string}        community string; works as a password
+ * @field addresses {string}   networks allowed to query, "" for anywhere
+ * @field readAccess {bool}  true when reading is allowed
+ * @field writeAccess {bool} true when writing is allowed
+ * @field disabled {bool}    true when switched off
  */
 export def struct SnmpCommunity {
     id as string,
@@ -46,7 +46,7 @@ export def struct SnmpCommunity {
 /**
  * Read the SNMP agent settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {SnmpSettings} the agent state
  */
 export func snmpSettings(c as Client) {
@@ -56,9 +56,9 @@ export func snmpSettings(c as Client) {
 /**
  * List the SNMP communities.
  *
- * @param {Client} c an open client
- * @return {list of SnmpCommunity} all communities (including the
- *         default "public" - consider disabling it)
+ * @param c {Client} an open client
+ * @return {list of SnmpCommunity} all communities, including the default
+ *         "public" when it exists
  */
 export func snmpCommunities(c as Client) {
     def rows as list of map of string to string init getAll($c, SNMP_COMMUNITY_PATH);
@@ -70,20 +70,20 @@ export func snmpCommunities(c as Client) {
 }
 
 /**
- * Enable SNMP for a monitoring system, read-only and restricted.
+ * Create or update a read-only community and switch the SNMP agent on.
  *
- * Creates (or updates) a read-only community and switches the agent
- * on. SNMP v2c sends the community string in cleartext, so treat it
- * like a password anyway: pick a non-obvious name, restrict the
- * sources, and consider disabling the default "public" community
- * (generic `disable` on SNMP_COMMUNITY_PATH). Idempotent.
+ * Write access is always off. SNMP v2c sends the community string in
+ * cleartext: pick a non-obvious name, restrict the sources, and disable
+ * the default "public" community (generic `disable` on
+ * `SNMP_COMMUNITY_PATH`). Idempotent.
  *
- * @param {Client} c         an open client
- * @param {string} community the community string your monitoring uses
- * @param {string} addresses allowed sources: IPs/CIDRs, comma-separated;
- *                           "" allows anywhere (not recommended)
+ * @param c {Client}         an open client
+ * @param community {string} community string the monitoring system uses
+ * @param addresses {string} allowed sources, comma-separated IPs or CIDRs;
+ *                           "" allows any source
  * @return {string} the RouterOS id of the community
- * @throws {Error} kind "routeros" on a bad community name or address list
+ * @throws {Error} kind "routeros" on an empty or spaced community name, or an
+ *                 address list with an empty or unparseable entry
  * @example
  *   mt.enableSnmp($c, "mon4711", "10.0.9.0/24");
  *   mt.setSnmpInfo($c, "noc@example.org", "rack 3, office Berlin");
@@ -113,9 +113,9 @@ export func enableSnmp(c as Client, community as string, addresses as string) {
 /**
  * Set the contact and location strings monitoring systems display.
  *
- * @param {Client} c        an open client
- * @param {string} contact  who to call (e.g. "noc@example.org")
- * @param {string} location where the box is (e.g. "rack 3, office Berlin")
+ * @param c {Client}        an open client
+ * @param contact {string}  whom to contact (e.g. "noc@example.org")
+ * @param location {string} where the router is (e.g. "rack 3, office Berlin")
  */
 export func setSnmpInfo(c as Client, contact as string, location as string) {
     apiRun($c, SNMP_PATH + "/set", {"contact": $contact, "location": $location});
@@ -124,7 +124,7 @@ export func setSnmpInfo(c as Client, contact as string, location as string) {
 /**
  * Switch the SNMP agent off.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableSnmp(c as Client) {
     apiRun($c, SNMP_PATH + "/set", {"enabled": "no"});
@@ -133,7 +133,7 @@ export func disableSnmp(c as Client) {
 /**
  * Fold a reply row into the SnmpSettings.
  *
- * @param {map of string to string} row the "/snmp/print" row
+ * @param row {map of string to string} the "/snmp/print" row
  * @return {SnmpSettings} the typed settings
  * @internal
  */
@@ -148,7 +148,7 @@ func snmpFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a SnmpCommunity.
  *
- * @param {map of string to string} row a "/snmp/community/print" row
+ * @param row {map of string to string} a "/snmp/community/print" row
  * @return {SnmpCommunity} the typed community
  * @internal
  */

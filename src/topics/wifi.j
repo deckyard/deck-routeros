@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - wifi: the modern wifiwave2 / ax menu (RouterOS v7).
@@ -8,9 +8,9 @@
 /**
  * RouterOS API path of the modern WiFi interface list.
  *
- * Recent ax hardware uses this menu; older boards use the classic
- * "/interface/wireless" (see the wireless topic). The read functions
- * of each topic return empty lists on the other kind of router.
+ * Used by ax hardware; older boards use the classic "/interface/wireless"
+ * (the wireless topic). Each topic's readers return empty lists on the
+ * other kind of router.
  */
 export def const WIFI_PATH as string init "/interface/wifi";
 
@@ -20,14 +20,14 @@ export def const WIFI_REGISTRATION_PATH as string init "/interface/wifi/registra
 /**
  * One modern (wifiwave2/ax) WiFi interface: a radio or a virtual AP.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} name            interface name (e.g. "wifi1")
- * @field {string} ssid            configured network name
- * @field {string} band            configured band (e.g. "5ghz-ax")
- * @field {string} masterInterface "" for a radio; the radio's name for a virtual AP
- * @field {bool}   running         true when up and serving
- * @field {bool}   disabled        true when switched off
- * @field {string} comment         free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} interface name, e.g. "wifi1"
+ * @field ssid {string} configured network name (`configuration.ssid`)
+ * @field band {string} configured band (`channel.band`), e.g. "5ghz-ax"
+ * @field masterInterface {string} parent radio of a virtual AP, "" for a radio
+ * @field running {bool} true when up and serving
+ * @field disabled {bool} true when switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct WifiInterface {
     id as string,
@@ -43,11 +43,11 @@ export def struct WifiInterface {
 /**
  * One connected client on a modern WiFi interface.
  *
- * @field {string} interfaceName the WiFi interface the client is on
- * @field {string} ssid          the network it joined
- * @field {string} mac           the client's MAC address
- * @field {string} signal        signal as reported (dBm)
- * @field {string} uptime        how long it has been connected
+ * @field interfaceName {string} WiFi interface the client is on
+ * @field ssid {string} network it joined
+ * @field mac {string} client MAC address
+ * @field signal {string} signal in dBm, as reported
+ * @field uptime {string} time connected, as reported
  */
 export def struct WifiRegistration {
     interfaceName as string,
@@ -60,9 +60,10 @@ export def struct WifiRegistration {
 /**
  * List the modern WiFi interfaces (radios and virtual APs).
  *
- * Returns an empty list on routers without the wifiwave2 menu.
+ * Empty on routers without the wifiwave2 menu and on any read error, a
+ * dropped connection included.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of WifiInterface} all modern WiFi interfaces
  */
 export func wifiInterfaces(c as Client) {
@@ -80,16 +81,17 @@ export func wifiInterfaces(c as Client) {
 }
 
 /**
- * Turn a modern radio into a working, protected access point.
+ * Make a modern radio an access point.
  *
- * Sets the SSID and a WPA2+WPA3 passphrase directly on the interface
- * and enables it. Safe to call again to change SSID or passphrase.
- * (The classic-menu counterpart is `setupWifiAccessPoint`.)
+ * Sets mode "ap", the SSID, WPA2-PSK + WPA3-PSK and the passphrase on
+ * the interface itself (no security profile) and enables it.
+ * Idempotent: call again to change the SSID or passphrase. The
+ * classic-menu counterpart is `setupWifiAccessPoint`.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the radio (e.g. "wifi1")
- * @param {string} ssid          network name, 1-32 characters (spaces fine)
- * @param {string} password      passphrase, 8-63 characters
+ * @param c {Client} an open client
+ * @param interfaceName {string} radio, e.g. "wifi1"
+ * @param ssid {string} network name, 1-32 characters, spaces allowed
+ * @param password {string} passphrase, 8-63 characters
  * @throws {Error} kind "routeros" on a bad SSID/passphrase or unknown interface
  * @example
  *   mt.setupWifi($c, "wifi1", "My Home WiFi", "correct horse battery");
@@ -115,9 +117,9 @@ export func setupWifi(c as Client, interfaceName as string, ssid as string, pass
  *
  * Connected clients are dropped and rejoin with the new passphrase.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the WiFi interface
- * @param {string} password      the new passphrase, 8-63 characters
+ * @param c {Client} an open client
+ * @param interfaceName {string} WiFi interface
+ * @param password {string} new passphrase, 8-63 characters
  * @throws {Error} kind "routeros" on a bad passphrase or unknown interface
  */
 export func setWifiPassphrase(c as Client, interfaceName as string, password as string) {
@@ -130,13 +132,13 @@ export func setWifiPassphrase(c as Client, interfaceName as string, password as 
 }
 
 /**
- * Add a second network on a modern radio (a virtual AP) - guest WiFi.
+ * Add a virtual AP on a modern radio, e.g. guest WiFi (WPA2/WPA3-PSK).
  *
- * @param {Client} c               an open client
- * @param {string} masterInterface the radio to piggyback on (e.g. "wifi1")
- * @param {string} name            name for the new interface (e.g. "wifiguest")
- * @param {string} ssid            network name, 1-32 characters
- * @param {string} password        passphrase, 8-63 characters
+ * @param c {Client} an open client
+ * @param masterInterface {string} radio, e.g. "wifi1"
+ * @param name {string} new interface name, e.g. "wifiguest"
+ * @param ssid {string} network name, 1-32 characters
+ * @param password {string} passphrase, 8-63 characters
  * @return {string} the RouterOS id of the new virtual AP
  * @throws {Error} kind "routeros" on bad input or an unknown radio
  */
@@ -167,8 +169,8 @@ export func addVirtualWifi(
 /**
  * Remove a virtual AP; physical radios are refused.
  *
- * @param {Client} c    an open client
- * @param {string} name the virtual AP's interface name
+ * @param c {Client} an open client
+ * @param name {string} virtual AP interface name
  * @throws {Error} kind "routeros" on an unknown interface or a physical radio
  */
 export func removeVirtualWifi(c as Client, name as string) {
@@ -185,9 +187,9 @@ export func removeVirtualWifi(c as Client, name as string) {
 /**
  * List the clients connected to the modern WiFi right now.
  *
- * Returns an empty list on routers without the wifiwave2 menu.
+ * Empty on routers without the wifiwave2 menu and on any read error.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of WifiRegistration} one entry per connected device
  */
 export func wifiRegistrations(c as Client) {
@@ -207,7 +209,7 @@ export func wifiRegistrations(c as Client) {
 /**
  * Fold a reply row into a WifiInterface.
  *
- * @param {map of string to string} row an "/interface/wifi/print" row
+ * @param row {map of string to string} an "/interface/wifi/print" row
  * @return {WifiInterface} the typed interface
  * @internal
  */
@@ -227,7 +229,7 @@ func wifiFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a WifiRegistration.
  *
- * @param {map of string to string} row a wifi registration-table row
+ * @param row {map of string to string} a wifi registration-table row
  * @return {WifiRegistration} the typed client entry
  * @internal
  */

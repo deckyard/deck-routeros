@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - firewall raw: drop / notrack before connection tracking.
@@ -9,22 +9,21 @@
 export def const RAW_PATH as string init "/ip/firewall/raw";
 
 /**
- * One raw-table rule, as read back from the router.
+ * One raw-table rule as read back from the router.
  *
- * Build rules with the firewall `FirewallRule` builder (its chain must
- * be `CHAIN_PREROUTING` or `CHAIN_OUTPUT`, its action `accept`, `drop`,
- * or `ACTION_NOTRACK`); this struct is the query result.
+ * Rules are built with the firewall builder (`firewallRule` and the
+ * `with*` refiners); this struct is the query result.
  *
- * @field {string} id         internal RouterOS id
- * @field {string} chain      "prerouting" or "output"
- * @field {string} action     "accept" / "drop" / "notrack" / ...
- * @field {string} protocol   matched protocol, "" for any
- * @field {string} srcAddress matched source, "" for any
- * @field {string} dstAddress matched destination, "" for any
- * @field {string} srcAddressList source address list, "" for none
- * @field {string} inInterfaceList incoming interface list, "" for none
- * @field {string} comment    free-text comment; the *ByComment handle
- * @field {bool}   disabled   true when switched off
+ * @field id {string} internal RouterOS id
+ * @field chain {string} "prerouting" or "output"
+ * @field action {string} "accept", "drop", "notrack", ...
+ * @field protocol {string} matched protocol, "" for any
+ * @field srcAddress {string} matched source, "" for any
+ * @field dstAddress {string} matched destination, "" for any
+ * @field srcAddressList {string} source address list, "" for none
+ * @field inInterfaceList {string} incoming interface list, "" for none
+ * @field comment {string} comment; the *ByComment handle
+ * @field disabled {bool} true when switched off
  */
 export def struct RawRule {
     id as string,
@@ -40,9 +39,9 @@ export def struct RawRule {
 };
 
 /**
- * List the firewall raw rules.
+ * List the firewall raw rules in table order.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of RawRule} all raw rules
  */
 export func rawRules(c as Client) {
@@ -55,19 +54,22 @@ export func rawRules(c as Client) {
 }
 
 /**
- * Create a raw-table rule from a firewall-builder matcher.
+ * Append a raw-table rule built with the firewall builder.
  *
- * The raw table runs BEFORE connection tracking, so it is the place to
- * drop obvious garbage cheaply (spoofed sources, bogons, a flood) and
- * to `notrack` traffic that should not fill the connection table. Build
- * the rule with `firewallRule(chain, action)` + the `with*` refiners -
- * the chain must be `CHAIN_PREROUTING` (incoming, the usual choice) or
- * `CHAIN_OUTPUT`, and the action `accept` / `drop` / `ACTION_NOTRACK`.
+ * The raw table runs before connection tracking: the cheapest place to
+ * drop spoofed sources, bogons or a flood, and the place to `notrack`
+ * traffic that should stay out of the connection table. Raw takes the
+ * chains CHAIN_PREROUTING (incoming, the usual one) and CHAIN_OUTPUT and
+ * the actions `accept`, `drop` and ACTION_NOTRACK. These limits are not
+ * checked locally: a chain or action raw lacks is refused by the router
+ * (kind "mikrotik").
  *
- * @param {Client}       c    an open client
- * @param {FirewallRule} rule the matcher, built with the firewall builder
- * @return {string} the RouterOS id of the new rule
- * @throws {Error} kind "routeros" on an inconsistent rule
+ * @param c {Client} an open client
+ * @param rule {FirewallRule} the matcher, built with the firewall builder
+ * @return {string} id of the new rule
+ * @throws {Error} kind "routeros" on an inconsistent rule (e.g. a port
+ *                match without a protocol), kind "mikrotik" when the
+ *                router refuses it
  * @example
  *   def r as mt.FirewallRule init mt.firewallRule(mt.CHAIN_PREROUTING, mt.ACTION_DROP);
  *   $r = mt.withInInterfaceList($r, "WAN");
@@ -80,14 +82,14 @@ export func addRawRule(c as Client, rule as FirewallRule) {
 }
 
 /**
- * Drop a source address list early, in raw prerouting (bogon/blocklist
- * filtering at the cheapest point).
+ * Append a raw prerouting rule that drops every source on an address
+ * list, e.g. bogons or a blocklist.
  *
- * @param {Client} c        an open client
- * @param {string} listName the address list whose members are dropped
- * @param {string} comment  handle for the rule
- * @return {string} the RouterOS id of the new rule
- * @throws {Error} kind "routeros" on a bad list name
+ * @param c {Client} an open client
+ * @param listName {string} address list whose members are dropped
+ * @param comment {string} rule handle
+ * @return {string} id of the new rule
+ * @throws {Error} kind "routeros" on an empty or spaced list name
  * @example
  *   mt.dropRawAddressList($c, "bogons", "drop bogons early");
  */
@@ -99,10 +101,11 @@ export func dropRawAddressList(c as Client, listName as string, comment as strin
 }
 
 /**
- * Delete a raw rule by its RouterOS id.
+ * Delete a raw rule by id.
  *
- * @param {Client} c  an open client
- * @param {string} id the rule id
+ * @param c {Client} an open client
+ * @param id {string} rule id
+ * @throws {Error} kind "routeros" on an empty id
  */
 export func removeRawRule(c as Client, id as string) {
     remove($c, RAW_PATH, $id);
@@ -111,8 +114,8 @@ export func removeRawRule(c as Client, id as string) {
 /**
  * Delete the raw rule that carries a comment.
  *
- * @param {Client} c       an open client
- * @param {string} comment the rule's comment
+ * @param c {Client} an open client
+ * @param comment {string} the rule's comment
  * @throws {Error} kind "routeros" when no raw rule carries that comment
  */
 export func removeRawRuleByComment(c as Client, comment as string) {
@@ -120,15 +123,14 @@ export func removeRawRuleByComment(c as Client, comment as string) {
 }
 
 /**
- * Move a raw rule so it is evaluated directly before another one.
+ * Move a raw rule directly above another one.
  *
- * The raw table is the cheapest place to drop traffic, and inside it
- * order still decides: a `notrack` above a `drop` spares the connection
- * tracker work the `drop` would have made pointless.
+ * Order decides inside raw too: a `notrack` above a `drop` spares the
+ * connection tracker work the drop would have made pointless.
  *
- * @param {Client} c        an open client
- * @param {string} id       the rule to move
- * @param {string} beforeId the rule it must end up above, "" for the bottom
+ * @param c {Client} an open client
+ * @param id {string} rule to move
+ * @param beforeId {string} rule to land above, "" for the bottom
  * @throws {Error} kind "routeros" on an empty id or a self-move
  */
 export func moveRawRule(c as Client, id as string, beforeId as string) {
@@ -138,9 +140,10 @@ export func moveRawRule(c as Client, id as string, beforeId as string) {
 /**
  * Move the raw rule carrying one comment above the rule carrying another.
  *
- * @param {Client} c             an open client
- * @param {string} comment       the rule to move
- * @param {string} beforeComment the rule it must end up above, "" for the bottom
+ * @param c {Client} an open client
+ * @param comment {string} comment of the rule to move
+ * @param beforeComment {string} comment of the rule to land above, "" for
+ *        the bottom
  * @throws {Error} kind "routeros" when either comment matches no rule
  */
 export func moveRawRuleByComment(c as Client, comment as string, beforeComment as string) {
@@ -155,8 +158,8 @@ export func moveRawRuleByComment(c as Client, comment as string, beforeComment a
 /**
  * Resolve a raw rule comment to the rule's id.
  *
- * @param {Client} c       an open client
- * @param {string} comment the rule's comment
+ * @param c {Client}       an open client
+ * @param comment {string} the rule's comment
  * @return {string} the rule id
  * @throws {Error} kind "routeros" when no raw rule carries that comment
  * @internal
@@ -168,7 +171,7 @@ func rawIdByComment(c as Client, comment as string) {
 /**
  * Fold a reply row into a RawRule.
  *
- * @param {map of string to string} row an "/ip/firewall/raw/print" row
+ * @param row {map of string to string} an "/ip/firewall/raw/print" row
  * @return {RawRule} the typed rule
  * @internal
  */

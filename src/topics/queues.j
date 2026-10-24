@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - simple queues: bandwidth limiting.
+# routeros - simple queues (bandwidth limits) and the queue tree (QoS).
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the simple-queue list (bandwidth limits). */
@@ -16,19 +16,18 @@ def const RATE_SUFFIX_CHARS as string init "kKmMgG";
 /**
  * One simple queue: a bandwidth limit on a target.
  *
- * Upload is traffic FROM the target (towards the internet), download is
- * traffic TO the target. Rates read like "10M" (10 megabits/s), "512k",
- * "1G"; "0" means unlimited.
+ * Upload is traffic from the target, download is traffic to it. Rates
+ * are bits/s with an optional k, M or G suffix ("10M", "512k"); "0" is
+ * unlimited.
  *
- * @field {string} id          internal RouterOS id
- * @field {string} name        queue name
- * @field {string} target      who is limited: address, network, or interface
- *                             (comma-separated when several)
- * @field {string} maxUpload   upload ceiling (e.g. "10M", "0" = unlimited)
- * @field {string} maxDownload download ceiling (e.g. "20M", "0" = unlimited)
- * @field {bool}   dynamic     true when something else (e.g. PPPoE) created it
- * @field {bool}   disabled    true when the queue is switched off
- * @field {string} comment     free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} queue name
+ * @field target {string} limited address, network or interface, comma-separated
+ * @field maxUpload {string} upload ceiling (e.g. "10M", "0" = unlimited)
+ * @field maxDownload {string} download ceiling (e.g. "20M", "0" = unlimited)
+ * @field dynamic {bool} true when created by something else (e.g. PPPoE)
+ * @field disabled {bool} true when the queue is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct SimpleQueue {
     id as string,
@@ -42,9 +41,9 @@ export def struct SimpleQueue {
 };
 
 /**
- * List every simple queue on the router.
+ * List the simple queues.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of SimpleQueue} all simple queues
  */
 export func simpleQueues(c as Client) {
@@ -57,23 +56,24 @@ export func simpleQueues(c as Client) {
 }
 
 /**
- * Cap the bandwidth of a device, a network, or an interface.
+ * Cap the bandwidth of a device, a network or an interface with a
+ * simple queue.
  *
- * Creates a simple queue. The target may be one IP address
- * ("192.168.88.50"), a network ("192.168.88.0/24"), an interface name,
- * or a comma-separated mix. Rates are written like "10M" (10
- * megabits/s), "512k", "1G", or plain bits/s ("2500000"); "0" leaves
- * that direction unlimited. Upload is traffic FROM the target, download
- * is traffic TO it.
+ * The target is an IP address ("192.168.88.50"), a network
+ * ("192.168.88.0/24"), an interface name, or a comma-separated mix;
+ * interface names are checked against the router. Rates are bits/s with
+ * an optional k, M or G suffix in any case ("10M", "512k", "2500000");
+ * "0" leaves that direction unlimited. Upload is traffic from the
+ * target, download is traffic to it.
  *
- * @param {Client} c        an open client
- * @param {string} name     name for the queue; also the handle for
- *                          `setBandwidthLimit` / `removeSimpleQueue`
- * @param {string} target   who to limit
- * @param {string} upload   upload ceiling (e.g. "5M")
- * @param {string} download download ceiling (e.g. "20M")
+ * @param c {Client} an open client
+ * @param name {string} queue name, the handle for the other simple-queue verbs
+ * @param target {string} addresses, networks or interfaces to limit
+ * @param upload {string} upload ceiling (e.g. "5M")
+ * @param download {string} download ceiling (e.g. "20M")
  * @return {string} the RouterOS id of the new queue
- * @throws {Error} kind "routeros" on a bad name, target, or rate
+ * @throws {Error} kind "routeros" on a bad name, target or rate, or an
+ *         unknown target interface
  * @example
  *   mt.limitBandwidth($c, "guest-wifi", "192.168.90.0/24", "5M", "20M");
  */
@@ -92,10 +92,10 @@ export func limitBandwidth(
 /**
  * Change the bandwidth cap of an existing simple queue.
  *
- * @param {Client} c        an open client
- * @param {string} name     the queue's name
- * @param {string} upload   new upload ceiling (e.g. "10M", "0" = unlimited)
- * @param {string} download new download ceiling
+ * @param c {Client} an open client
+ * @param name {string} queue name
+ * @param upload {string} new upload ceiling (e.g. "10M", "0" = unlimited)
+ * @param download {string} new download ceiling
  * @throws {Error} kind "routeros" on a bad rate or an unknown queue
  */
 export func setBandwidthLimit(c as Client, name as string, upload as string, download as string) {
@@ -110,8 +110,8 @@ export func setBandwidthLimit(c as Client, name as string, upload as string, dow
 /**
  * Delete a simple queue: the target's bandwidth is no longer limited.
  *
- * @param {Client} c    an open client
- * @param {string} name the queue's name
+ * @param c {Client} an open client
+ * @param name {string} queue name
  * @throws {Error} kind "routeros" when no queue has that name
  */
 export func removeSimpleQueue(c as Client, name as string) {
@@ -121,8 +121,8 @@ export func removeSimpleQueue(c as Client, name as string) {
 /**
  * Switch a simple queue on.
  *
- * @param {Client} c    an open client
- * @param {string} name the queue's name
+ * @param c {Client} an open client
+ * @param name {string} queue name
  * @throws {Error} kind "routeros" when no queue has that name
  */
 export func enableSimpleQueue(c as Client, name as string) {
@@ -132,8 +132,8 @@ export func enableSimpleQueue(c as Client, name as string) {
 /**
  * Switch a simple queue off; the limit pauses until enabled again.
  *
- * @param {Client} c    an open client
- * @param {string} name the queue's name
+ * @param c {Client} an open client
+ * @param name {string} queue name
  * @throws {Error} kind "routeros" when no queue has that name
  */
 export func disableSimpleQueue(c as Client, name as string) {
@@ -141,14 +141,13 @@ export func disableSimpleQueue(c as Client, name as string) {
 }
 
 /**
- * Validate and normalize one rate value.
+ * Validate and normalize one rate.
  *
- * Accepts digits with an optional single k / M / G suffix, any case,
- * surrounding whitespace tolerated. Normalizes the suffix to RouterOS's
- * canonical spelling (lowercase k, uppercase M and G). "0" is a valid
- * rate and means unlimited.
+ * Accepts digits with an optional single k, M or G suffix in any case,
+ * whitespace trimmed, and spells the suffix the RouterOS way (k, M, G).
+ * "0" is valid and means unlimited.
  *
- * @param {string} rate the candidate (e.g. "10M", "512k", "2500000")
+ * @param rate {string} candidate rate (e.g. "10M", "512k", "2500000")
  * @return {string} the normalized rate
  * @throws {Error} kind "routeros" on anything else
  * @internal
@@ -194,7 +193,7 @@ func normalizedRate(rate as string) {
  * "10M/20M" -> upload "10M", download "20M". A value without a slash
  * counts for both directions; "" stays "".
  *
- * @param {string} maxLimit the reported "max-limit" value
+ * @param maxLimit {string} the reported "max-limit" value
  * @return {list of string} two elements: upload, download
  * @internal
  */
@@ -214,10 +213,10 @@ func rateHalves(maxLimit as string) {
 /**
  * Classify one queue-target entry.
  *
- * @param {string} entry a single target (no commas)
+ * @param entry {string} one target, no commas
  * @return {string} "cidr", "address", or "name"
- * @throws {Error} kind "routeros" on a malformed CIDR or an empty /
- *                 space-containing name
+ * @throws {Error} kind "routeros" on a malformed CIDR or an empty or
+ *         spaced name
  * @internal
  */
 func targetKind(entry as string) {
@@ -236,11 +235,11 @@ func targetKind(entry as string) {
  * Validate and normalize a queue target list; interface-name entries
  * are checked against the router.
  *
- * @param {Client} c      an open client
- * @param {string} target address / CIDR / interface entries, comma-separated
+ * @param c {Client} an open client
+ * @param target {string} address, CIDR and interface entries, comma-separated
  * @return {string} the normalized target list
  * @throws {Error} kind "routeros" on an empty entry, a malformed
- *                 address, or an unknown interface
+ *         address or an unknown interface
  * @internal
  */
 func normalizedQueueTarget(c as Client, target as string) {
@@ -263,7 +262,7 @@ func normalizedQueueTarget(c as Client, target as string) {
 /**
  * Fold a reply row into a SimpleQueue.
  *
- * @param {map of string to string} row a "/queue/simple/print" row
+ * @param row {map of string to string} a "/queue/simple/print" row
  * @return {SimpleQueue} the typed queue
  * @internal
  */
@@ -284,15 +283,15 @@ func simpleQueueFromRow(row as map of string to string) {
 /**
  * One queue-tree node: a branch of the QoS hierarchy.
  *
- * @field {string} id         internal RouterOS id
- * @field {string} name       node name
- * @field {string} parent     an interface, "global", or another node's name
- * @field {string} packetMark the mangle mark(s) this node serves, "" on inner nodes
- * @field {string} limitAt    guaranteed rate ("" = none)
- * @field {string} maxLimit   ceiling rate ("" = unlimited)
- * @field {int}    priority   1 (first served) to 8 (last), 0 when unset
- * @field {bool}   disabled   true when switched off
- * @field {string} comment    free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} node name
+ * @field parent {string} an interface, "global", or another node's name
+ * @field packetMark {string} mangle packet mark(s) served, "" on inner nodes
+ * @field limitAt {string} guaranteed rate ("" = none)
+ * @field maxLimit {string} ceiling rate ("" = unlimited)
+ * @field priority {int} 1 (first served) to 8 (last), 0 when unset
+ * @field disabled {bool} true when switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct TreeQueue {
     id as string,
@@ -309,7 +308,7 @@ export def struct TreeQueue {
 /**
  * List the queue tree.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of TreeQueue} all nodes
  */
 export func treeQueues(c as Client) {
@@ -322,21 +321,20 @@ export func treeQueues(c as Client) {
 }
 
 /**
- * Plant the root of a QoS hierarchy on an interface.
+ * Create the root of a QoS hierarchy.
  *
- * The root's max-limit is the whole game: set it slightly BELOW the
- * real line rate (e.g. "95M" on a 100M line), so the queue - not the
- * modem across the street - is where packets wait. Children then share
- * that budget. Idempotent by name.
+ * Set `maxLimit` slightly below the real line rate (e.g. "95M" on a
+ * 100M line) so packets queue here, where the tree can order them, and
+ * not in the modem. Children share that budget. When a node of that
+ * name exists, its id is returned and nothing is changed.
  *
- * @param {Client} c        an open client
- * @param {string} name     name for the root (e.g. "qosdown")
- * @param {string} parent   where to shape: an interface name for its
- *                          egress (e.g. "pppoewan" shapes upload,
- *                          "brlan" shapes download), or "global"
- * @param {string} maxLimit the total budget (e.g. "95M")
+ * @param c {Client} an open client
+ * @param name {string} root name (e.g. "qosdown")
+ * @param parent {string} interface whose egress is shaped ("pppoewan"
+ *        shapes upload, "brlan" download), or "global"
+ * @param maxLimit {string} total budget (e.g. "95M")
  * @return {string} the RouterOS id of the root node
- * @throws {Error} kind "routeros" on a bad name, parent, or rate
+ * @throws {Error} kind "routeros" on a bad name or rate, or an unknown interface
  * @example
  *   mt.addQueueTreeRoot($c, "qosup", "pppoewan", "38M");
  */
@@ -355,25 +353,25 @@ export func addQueueTreeRoot(c as Client, name as string, parent as string, maxL
 }
 
 /**
- * Hang a traffic class under a tree node.
+ * Add a traffic class under a tree node.
  *
- * The child serves one packet mark (created with the mangle topic's
- * `setupPacketMark` - a mark no mangle rule sets is refused, because a
- * tree matching phantom marks is the classic silent QoS failure).
- * `limitAt` is the guaranteed share when the line is full; `maxLimit`
- * the ceiling when it is not; `priority` breaks ties between siblings
- * (1 first). Idempotent by name.
+ * The class serves one packet mark, set by a mangle rule (see
+ * `setupPacketMark`). A mark no mangle rule sets is refused: the class
+ * would match nothing, silently. `limitAt` is the guaranteed share when
+ * the line is full, `maxLimit` the ceiling when it is not, and
+ * `priority` decides between siblings (1 first). When a node of that
+ * name exists, its id is returned and nothing is changed.
  *
- * @param {Client} c          an open client
- * @param {string} name       name for the class (e.g. "qosupvoip")
- * @param {string} parentName the tree node above it (e.g. the root)
- * @param {string} packetMark the mangle packet mark to serve
- * @param {string} limitAt    guaranteed rate (e.g. "5M"; "0" for none)
- * @param {string} maxLimit   ceiling rate (e.g. "38M" to allow the whole line)
- * @param {int}    priority   1-8, lower is served first
+ * @param c {Client} an open client
+ * @param name {string} class name (e.g. "qosupvoip")
+ * @param parentName {string} tree node above it (e.g. the root)
+ * @param packetMark {string} mangle packet mark to serve
+ * @param limitAt {string} guaranteed rate (e.g. "5M"; "0" for none)
+ * @param maxLimit {string} ceiling rate (e.g. "38M" for the whole line)
+ * @param priority {int} 1 to 8, lower is served first
  * @return {string} the RouterOS id of the class
- * @throws {Error} kind "routeros" on bad input, an unknown parent
- *                 node, or a mark no mangle rule creates
+ * @throws {Error} kind "routeros" on a bad name, mark, rate or priority,
+ *         an unknown parent node, or a mark no mangle rule sets
  * @example
  *   mt.addQueueTreeChild($c, "qosupvoip", "qosup", "voip", "5M", "38M", 1);
  *   mt.addQueueTreeChild($c, "qosuprest", "qosup", "bulk", "10M", "38M", 8);
@@ -419,12 +417,10 @@ export func addQueueTreeChild(
 }
 
 /**
- * Remove a tree node AND everything hanging under it.
+ * Remove a tree node and every node below it, children first.
  *
- * Children are removed first, so no orphaned branches remain.
- *
- * @param {Client} c    an open client
- * @param {string} name the node to remove (the root removes the whole tree)
+ * @param c {Client} an open client
+ * @param name {string} node name; the root removes the whole tree
  * @throws {Error} kind "routeros" when no tree node has that name
  */
 export func removeTreeQueue(c as Client, name as string) {
@@ -441,8 +437,8 @@ export func removeTreeQueue(c as Client, name as string) {
 /**
  * Switch a tree node on.
  *
- * @param {Client} c    an open client
- * @param {string} name the node's name
+ * @param c {Client} an open client
+ * @param name {string} node name
  * @throws {Error} kind "routeros" when no tree node has that name
  */
 export func enableTreeQueue(c as Client, name as string) {
@@ -452,8 +448,8 @@ export func enableTreeQueue(c as Client, name as string) {
 /**
  * Switch a tree node off (its subtree stops shaping).
  *
- * @param {Client} c    an open client
- * @param {string} name the node's name
+ * @param c {Client} an open client
+ * @param name {string} node name
  * @throws {Error} kind "routeros" when no tree node has that name
  */
 export func disableTreeQueue(c as Client, name as string) {
@@ -463,7 +459,7 @@ export func disableTreeQueue(c as Client, name as string) {
 /**
  * Validate a queue-tree priority.
  *
- * @param {int} priority the candidate
+ * @param priority {int} candidate priority
  * @throws {Error} kind "routeros" when outside 1-8
  * @internal
  */
@@ -474,10 +470,10 @@ func ensureTreePriority(priority as int) {
 }
 
 /**
- * The ids of a node and all its descendants, children before parents.
+ * Collect the ids of a node and its descendants, children before parents.
  *
- * @param {list of map of string to string} rows "/queue/tree/print" rows
- * @param {string} name the top node's name
+ * @param rows {list of map of string to string} "/queue/tree/print" rows
+ * @param name {string} top node name
  * @return {list of string} ids in safe removal order; empty when the
  *         name matches nothing
  * @internal
@@ -510,7 +506,7 @@ func treeQueueFamily(rows as list of map of string to string, name as string) {
 /**
  * Fold a reply row into a TreeQueue.
  *
- * @param {map of string to string} row a "/queue/tree/print" row
+ * @param row {map of string to string} a "/queue/tree/print" row
  * @return {TreeQueue} the typed node
  * @internal
  */

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - IPsec: standards-based site-to-site tunnels.
@@ -23,11 +23,11 @@ export def const IPSEC_MODE_CONFIG_PATH as string init "/ip/ipsec/mode-config";
 /**
  * One configured IPsec peer (the remote router).
  *
- * @field {string} id           internal RouterOS id
- * @field {string} name         peer name (the handle everything hangs off)
- * @field {string} address      the remote router's address or DNS name
- * @field {string} exchangeMode "ike2" for anything set up by this module
- * @field {bool}   disabled     true when switched off
+ * @field id {string} internal RouterOS id
+ * @field name {string} peer name, the handle identity and policy refer to
+ * @field address {string} remote router's address or DNS name
+ * @field exchangeMode {string} "ike2" for peers this deck creates
+ * @field disabled {bool} true when switched off
  */
 export def struct IpsecPeer {
     id as string,
@@ -38,15 +38,15 @@ export def struct IpsecPeer {
 };
 
 /**
- * One IPsec policy: which traffic gets encrypted to which peer.
+ * One IPsec policy: which traffic is encrypted to which peer.
  *
- * @field {string} id         internal RouterOS id
- * @field {string} peer       the peer it belongs to
- * @field {string} srcAddress the local subnet
- * @field {string} dstAddress the remote subnet
- * @field {bool}   tunnel     true for tunnel mode (site-to-site)
- * @field {bool}   active     true when the policy has a live SA
- * @field {bool}   disabled   true when switched off
+ * @field id {string} internal RouterOS id
+ * @field peer {string} peer name
+ * @field srcAddress {string} local subnet
+ * @field dstAddress {string} remote subnet
+ * @field tunnel {bool} true for tunnel mode (site-to-site)
+ * @field active {bool} true when the policy has a live SA
+ * @field disabled {bool} true when switched off
  */
 export def struct IpsecPolicy {
     id as string,
@@ -61,11 +61,11 @@ export def struct IpsecPolicy {
 /**
  * One live IPsec negotiation with a remote router.
  *
- * @field {string} remoteAddress the other end
- * @field {string} state         negotiation state as reported
- * @field {bool}   established   computed: the state equals "established"
- * @field {string} uptime        how long the tunnel has been up
- * @field {string} side          "initiator" or "responder"
+ * @field remoteAddress {string} the other end
+ * @field state {string} negotiation state as reported
+ * @field established {bool} computed: state equals "established"
+ * @field uptime {string} time since the tunnel came up
+ * @field side {string} "initiator" or "responder"
  */
 export def struct IpsecActivePeer {
     remoteAddress as string,
@@ -78,7 +78,7 @@ export def struct IpsecActivePeer {
 /**
  * List the configured IPsec peers.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of IpsecPeer} all peers
  */
 export func ipsecPeers(c as Client) {
@@ -93,7 +93,7 @@ export func ipsecPeers(c as Client) {
 /**
  * List the IPsec policies with their live state.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of IpsecPolicy} all policies; `active` is the health flag
  */
 export func ipsecPolicies(c as Client) {
@@ -106,10 +106,10 @@ export func ipsecPolicies(c as Client) {
 }
 
 /**
- * The live IPsec negotiations right now.
+ * List the live IPsec negotiations (active peers).
  *
- * @param {Client} c an open client
- * @return {list of IpsecActivePeer} check `established`
+ * @param c {Client} an open client
+ * @return {list of IpsecActivePeer} live peers; `established` is the health flag
  */
 export func ipsecActive(c as Client) {
     def rows as list of map of string to string init getAll($c, IPSEC_ACTIVE_PATH);
@@ -121,34 +121,32 @@ export func ipsecActive(c as Client) {
 }
 
 /**
- * Build a complete IKEv2 site-to-site tunnel, in one call.
+ * Build an IKEv2 site-to-site tunnel with a pre-shared key.
  *
- * Connects two LANs across the internet with standards-based IPsec -
- * the choice when the far end is another vendor (Cisco, pfSense, a
- * cloud VPN gateway) or compliance asks for IPsec; between two
- * MikroTiks, WireGuard is simpler (see the docs). Creates everything
- * the tunnel needs:
+ * Use it when the far end is another vendor (Cisco, pfSense, a cloud VPN
+ * gateway) or IPsec is required; between two MikroTiks WireGuard is
+ * simpler. Creates:
  *
- * - the peer (IKEv2) and its pre-shared-key identity,
- * - the policy encrypting localSubnet <-> remoteSubnet,
- * - the NAT bypass (an accept rule placed BEFORE masquerade - without
- *   it, NAT mangles the traffic before IPsec sees it: the classic
- *   silent failure),
- * - firewall input accepts for IKE (udp 500), NAT-T (udp 4500), and
- *   ESP.
+ * - the IKEv2 peer and its pre-shared-key identity;
+ * - a tunnel-mode policy for localSubnet <-> remoteSubnet;
+ * - a srcnat accept placed before the first srcnat rule, so masquerade
+ *   does not rewrite tunnel traffic before IPsec matches it;
+ * - input accepts for IKE (udp 500), NAT-T (udp 4500) and ESP, limited to
+ *   the peer's address when it is an IP.
  *
- * The far end mirrors the call: your address as its peer, the SAME
- * pre-shared key, and the subnets swapped. Idempotent by name.
+ * The far end makes the mirror call: our address as its peer, the same
+ * key, subnets swapped. When a peer of that name exists, its id is
+ * returned and nothing is changed.
  *
- * @param {Client} c            an open client
- * @param {string} name         name for the tunnel (peer, comments)
- * @param {string} peerAddress  the remote router's public address or DNS name
- * @param {string} psk          the shared secret - long and random; it
- *                              is the tunnel's entire authentication
- * @param {string} localSubnet  this site's LAN as CIDR (e.g. "192.168.10.0/24")
- * @param {string} remoteSubnet the far site's LAN as CIDR (e.g. "192.168.20.0/24")
+ * @param c {Client} an open client
+ * @param name {string} tunnel name, used for the peer and rule comments
+ * @param peerAddress {string} remote router's public address or DNS name
+ * @param psk {string} pre-shared key; the tunnel's only authentication, so
+ *        long and random
+ * @param localSubnet {string} this site's LAN in CIDR form (e.g. "192.168.10.0/24")
+ * @param remoteSubnet {string} far site's LAN in CIDR form (e.g. "192.168.20.0/24")
  * @return {string} the RouterOS id of the peer
- * @throws {Error} kind "routeros" on bad input or a taken name
+ * @throws {Error} kind "routeros" on a bad name, host or subnet, or an empty key
  * @example
  *   mt.setupIpsecTunnel($c, "tobranch", "203.0.113.99",
  *       "a long random shared secret", "192.168.10.0/24", "192.168.20.0/24");
@@ -187,11 +185,11 @@ export func setupIpsecTunnel(
 }
 
 /**
- * Tear an IPsec tunnel down: policy, identity, peer, NAT bypass, and
- * the firewall accepts.
+ * Remove what `setupIpsecTunnel` created: policy, identity, peer, NAT
+ * bypass and firewall accepts.
  *
- * @param {Client} c    an open client
- * @param {string} name the name given to `setupIpsecTunnel`
+ * @param c {Client} an open client
+ * @param name {string} name given to `setupIpsecTunnel`
  * @throws {Error} kind "routeros" when nothing of the tunnel exists
  */
 export func teardownIpsecTunnel(c as Client, name as string) {
@@ -237,13 +235,12 @@ export func teardownIpsecTunnel(c as Client, name as string) {
 /**
  * Insert the srcnat accept that keeps masquerade off tunnel traffic.
  *
- * Placed before the first srcnat rule so it wins against masquerade;
- * idempotent by comment.
+ * Placed before the first srcnat rule; idempotent by comment.
  *
- * @param {Client} c            an open client
- * @param {string} name         the tunnel name (for the comment)
- * @param {string} localSubnet  this site's LAN
- * @param {string} remoteSubnet the far site's LAN
+ * @param c {Client} an open client
+ * @param name {string} tunnel name, for the comment
+ * @param localSubnet {string} this site's LAN
+ * @param remoteSubnet {string} far site's LAN
  * @internal
  */
 func ipsecNatBypass(c as Client, name as string, localSubnet as string, remoteSubnet as string) {
@@ -268,13 +265,13 @@ func ipsecNatBypass(c as Client, name as string, localSubnet as string, remoteSu
 }
 
 /**
- * Open the firewall input chain for IKE, NAT-T, and ESP from the peer.
+ * Accept IKE, NAT-T and ESP from the peer in the input chain.
  *
- * Idempotent per rule via comments "ipsec: <name> (ike|nat-t|esp)".
+ * Idempotent per rule by the comments "ipsec: <name> (ike|nat-t|esp)".
  *
- * @param {Client} c      an open client
- * @param {string} name   the tunnel name
- * @param {string} remote the peer's address (used as src match when an IP)
+ * @param c {Client} an open client
+ * @param name {string} tunnel name
+ * @param remote {string} peer address, the src match when it is an IP
  * @internal
  */
 func ipsecFirewallAccepts(c as Client, name as string, remote as string) {
@@ -307,12 +304,11 @@ func ipsecFirewallAccepts(c as Client, name as string, remote as string) {
 }
 
 /**
- * The id of the first rule in a chain, "" when the chain is empty.
+ * Find the first rule in a chain: the place-before anchor for rules that
+ * must precede masquerade.
  *
- * The place-before anchor for rules that must precede masquerade.
- *
- * @param {list of map of string to string} rows NAT (or filter) rows, in order
- * @param {string} chain the chain to look in
+ * @param rows {list of map of string to string} NAT (or filter) rows, in order
+ * @param chain {string} the chain to look in
  * @return {string} the first rule's id, or ""
  * @internal
  */
@@ -328,7 +324,7 @@ func firstChainRowId(rows as list of map of string to string, chain as string) {
 /**
  * Fold a reply row into an IpsecPeer.
  *
- * @param {map of string to string} row an "/ip/ipsec/peer/print" row
+ * @param row {map of string to string} an "/ip/ipsec/peer/print" row
  * @return {IpsecPeer} the typed peer
  * @internal
  */
@@ -345,7 +341,7 @@ func ipsecPeerFromRow(row as map of string to string) {
 /**
  * Fold a reply row into an IpsecPolicy.
  *
- * @param {map of string to string} row an "/ip/ipsec/policy/print" row
+ * @param row {map of string to string} an "/ip/ipsec/policy/print" row
  * @return {IpsecPolicy} the typed policy
  * @internal
  */
@@ -362,28 +358,29 @@ func ipsecPolicyFromRow(row as map of string to string) {
 }
 
 /**
- * Stand up an IKEv2 road-warrior server (native-client remote access).
+ * Set up an IKEv2 remote-access (road-warrior) server for native clients.
  *
- * The IPsec counterpart to L2TP but with no L2TP layer: modern devices
- * (iOS/macOS "IKEv2", Windows, strongSwan) dial straight in. This sets
- * up EAP-MSCHAPv2 auth (users from RADIUS - see the radius topic - or a
- * user manager), hands clients an address from a pool, and installs the
- * dynamic-policy peer + identity. The router authenticates itself with
- * a TLS certificate (certificates topic), so clients get a trustable
- * server. Opens the firewall for IKE/NAT-T/ESP. Idempotent by name.
+ * iOS/macOS, Windows and strongSwan dial in without an L2TP layer.
+ * Creates an address pool and a mode-config named `name` (reused when
+ * they exist), a passive IKEv2 peer, and an identity with
+ * `auth-method=eap-radius`, so users are authenticated by RADIUS (see
+ * the radius topic). The router proves itself with `certificate`.
+ * Opens the input chain for IKE, NAT-T and ESP from any address.
  *
- * This is the most involved VPN to get right end-to-end (certificate
- * trust chain, EAP user source); treat the result as a starting point
- * and verify against a real client. Between two networks you control,
- * WireGuard or `setupIpsecTunnel` is far simpler.
+ * Treat the result as a starting point and test it with a real client:
+ * the certificate trust chain and the EAP user source are easy to get
+ * wrong. Between networks you control, WireGuard or `setupIpsecTunnel`
+ * is simpler.
  *
- * @param {Client} c           an open client
- * @param {string} name        name for the setup (peer, mode-config, comments)
- * @param {string} certificate the router's TLS certificate store name
- * @param {string} poolRange   client address range (e.g. "10.200.0.10-10.200.0.200")
- * @param {string} dns         DNS server handed to clients (e.g. "10.200.0.1")
+ * @param c {Client} an open client
+ * @param name {string} setup name, used for the pool, mode-config, peer and comments
+ * @param certificate {string} name of the router's certificate in the store
+ * @param poolRange {string} client address range (e.g. "10.200.0.10-10.200.0.200"),
+ *        passed through unvalidated
+ * @param dns {string} DNS server handed to clients (e.g. "10.200.0.1")
  * @return {string} the RouterOS id of the peer
- * @throws {Error} kind "routeros" on bad input or a taken name
+ * @throws {Error} kind "routeros" on a bad name or DNS address, a missing
+ *         certificate, or an existing peer of that name
  * @example
  *   mt.setupIkev2Server($c, "roadwarriors", "router-le-cert",
  *       "10.200.0.10-10.200.0.200", "1.1.1.1");
@@ -434,11 +431,9 @@ export func setupIkev2Server(
 }
 
 /**
- * Fold a reply row into an IpsecActivePeer.
+ * Fold a reply row into an IpsecActivePeer; `established` is computed.
  *
- * `established` is computed here: the state equals "established".
- *
- * @param {map of string to string} row an "/ip/ipsec/active-peers/print" row
+ * @param row {map of string to string} an "/ip/ipsec/active-peers/print" row
  * @return {IpsecActivePeer} the typed live peer
  * @internal
  */

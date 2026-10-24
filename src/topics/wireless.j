@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - WiFi: radios, security profiles, clients.
@@ -8,9 +8,8 @@
 /**
  * RouterOS API path of the wireless interface list.
  *
- * This is the classic wireless menu (the "wireless" package). Recent
- * wifiwave2 / ax hardware uses "/interface/wifi" instead - drive that
- * with the generic verbs if your router has no "/interface/wireless".
+ * The classic menu of the "wireless" package. wifiwave2 / ax hardware
+ * uses "/interface/wifi" instead (`WIFI_PATH`, the wifi topic).
  */
 export def const WIRELESS_PATH as string init "/interface/wireless";
 
@@ -23,18 +22,17 @@ export def const WIRELESS_REGISTRATION_PATH as string init "/interface/wireless/
 /**
  * One wireless interface: a radio, or a virtual AP on top of one.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} name            interface name (e.g. "wlan1")
- * @field {string} ssid            network name the radio broadcasts
- * @field {string} mode            "ap-bridge" (access point), "station" (client), ...
- * @field {string} band            radio band (e.g. "2ghz-b/g/n", "5ghz-a/n/ac")
- * @field {string} frequency       channel frequency in MHz, or "auto"
- * @field {string} securityProfile name of the security profile holding the password
- * @field {string} masterInterface "" for a physical radio; the radio's name
- *                                 for a virtual AP
- * @field {bool}   running         true when the radio is up and serving
- * @field {bool}   disabled        true when the interface is switched off
- * @field {string} comment         free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} interface name, e.g. "wlan1"
+ * @field ssid {string} broadcast network name
+ * @field mode {string} "ap-bridge" (access point), "station" (client), ...
+ * @field band {string} radio band, e.g. "2ghz-b/g/n", "5ghz-a/n/ac"
+ * @field frequency {string} channel frequency in MHz, or "auto"
+ * @field securityProfile {string} security profile holding the password
+ * @field masterInterface {string} parent radio of a virtual AP, "" for a physical radio
+ * @field running {bool} true when the radio is up and serving
+ * @field disabled {bool} true when the interface is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct WirelessInterface {
     id as string,
@@ -53,12 +51,12 @@ export def struct WirelessInterface {
 /**
  * One connected wireless client (a registration-table entry).
  *
- * @field {string} interfaceName wireless interface the client is on
- * @field {string} mac           the client's MAC address
- * @field {string} signalStrength signal as reported (e.g. "-52dBm")
- * @field {string} txRate        current transmit rate as reported
- * @field {string} rxRate        current receive rate as reported
- * @field {string} uptime        how long the client has been connected
+ * @field interfaceName {string} wireless interface the client is on
+ * @field mac {string} client MAC address
+ * @field signalStrength {string} signal as reported, e.g. "-52dBm"
+ * @field txRate {string} current transmit rate as reported
+ * @field rxRate {string} current receive rate as reported
+ * @field uptime {string} time connected, as reported
  */
 export def struct WifiClient {
     interfaceName as string,
@@ -72,10 +70,11 @@ export def struct WifiClient {
 /**
  * List every wireless interface: physical radios and virtual APs.
  *
- * Returns an empty list on routers without the classic wireless menu
- * (wired-only models, or wifiwave2 hardware using "/interface/wifi").
+ * Empty on routers without the classic wireless menu (wired-only models,
+ * wifiwave2 hardware) and on any read error, a dropped connection
+ * included.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of WirelessInterface} all wireless interfaces
  */
 export func wirelessInterfaces(c as Client) {
@@ -93,19 +92,17 @@ export func wirelessInterfaces(c as Client) {
 }
 
 /**
- * Turn a radio into a working, WPA2-protected access point in one call.
+ * Make a radio a WPA2-PSK access point.
  *
- * Sets the SSID, puts the interface into access-point mode, stores the
- * password in a dedicated security profile (never in the shared
- * "default" profile, so other radios are unaffected), wires the profile
- * to the interface, and enables it. Safe to call again to change the
- * SSID or password.
+ * Sets the SSID and mode "ap-bridge", stores the password in a dedicated
+ * security profile "routeros-<interface>" (never the shared "default"
+ * profile, so other radios are unaffected), attaches it and enables the
+ * interface. Idempotent: call again to change the SSID or password.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the radio (e.g. "wlan1")
- * @param {string} ssid          network name to broadcast, 1-32 characters
- *                               (spaces are fine)
- * @param {string} password      WPA2 passphrase, 8-63 characters
+ * @param c {Client} an open client
+ * @param interfaceName {string} radio, e.g. "wlan1"
+ * @param ssid {string} network name, 1-32 characters, spaces allowed
+ * @param password {string} WPA2 passphrase, 8-63 characters
  * @throws {Error} kind "routeros" on a bad SSID / password or an
  *                 unknown wireless interface
  * @example
@@ -130,9 +127,9 @@ export func setupWifiAccessPoint(
 /**
  * Change the network name (SSID) a radio broadcasts.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the wireless interface
- * @param {string} ssid          the new name, 1-32 characters
+ * @param c {Client} an open client
+ * @param interfaceName {string} wireless interface
+ * @param ssid {string} new name, 1-32 characters
  * @throws {Error} kind "routeros" on a bad SSID or unknown interface
  */
 export func setWifiSsid(c as Client, interfaceName as string, ssid as string) {
@@ -147,14 +144,14 @@ export func setWifiSsid(c as Client, interfaceName as string, ssid as string) {
 /**
  * Change the WiFi password of a radio.
  *
- * The password lives in the interface's security profile. If the
- * interface still sits on the shared "default" profile, it is moved to
- * a dedicated one first, so the change never affects other radios.
- * Connected clients are dropped and must reconnect with the new password.
+ * The password lives in the interface's security profile. An interface
+ * on the shared "default" profile (or none) is first moved to a
+ * dedicated profile, so other radios keep their password. Connected
+ * clients are dropped and must reconnect with the new password.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the wireless interface
- * @param {string} password      the new WPA2 passphrase, 8-63 characters
+ * @param c {Client} an open client
+ * @param interfaceName {string} wireless interface
+ * @param password {string} new WPA2 passphrase, 8-63 characters
  * @throws {Error} kind "routeros" on a bad password or unknown interface
  */
 export func setWifiPassword(c as Client, interfaceName as string, password as string) {
@@ -176,17 +173,16 @@ export func setWifiPassword(c as Client, interfaceName as string, password as st
 }
 
 /**
- * Add a second wireless network on an existing radio (a virtual AP) -
- * the usual way to run a guest WiFi next to the main one.
+ * Add a virtual AP: a second network on an existing radio, e.g. guest WiFi.
  *
- * The virtual AP gets its own SSID and its own password (own security
- * profile) but shares the radio and channel of its master.
+ * It gets its own SSID and its own security profile, and shares the
+ * radio and channel of its master.
  *
- * @param {Client} c               an open client
- * @param {string} masterInterface the physical radio to piggyback on (e.g. "wlan1")
- * @param {string} name            name for the new interface (e.g. "wlanguest")
- * @param {string} ssid            network name to broadcast, 1-32 characters
- * @param {string} password        WPA2 passphrase, 8-63 characters
+ * @param c {Client} an open client
+ * @param masterInterface {string} physical radio, e.g. "wlan1"
+ * @param name {string} new interface name, e.g. "wlanguest"
+ * @param ssid {string} network name, 1-32 characters
+ * @param password {string} WPA2 passphrase, 8-63 characters
  * @return {string} the RouterOS id of the new virtual AP
  * @throws {Error} kind "routeros" on bad input or an unknown master radio
  */
@@ -217,13 +213,12 @@ export func addVirtualAp(
 /**
  * Remove a virtual AP.
  *
- * Physical radios cannot be removed, only disabled - this refuses them
- * with a clear message instead of letting the router trap. The
- * dedicated security profile is kept (harmless, and reused if the AP
- * comes back).
+ * Refuses a physical radio (it can only be disabled) before the router
+ * would. The dedicated security profile is kept and reused if the AP is
+ * added again.
  *
- * @param {Client} c    an open client
- * @param {string} name the virtual AP's interface name
+ * @param c {Client} an open client
+ * @param name {string} virtual AP interface name
  * @throws {Error} kind "routeros" when the interface is unknown or is
  *                 a physical radio
  */
@@ -241,8 +236,8 @@ export func removeVirtualAp(c as Client, name as string) {
 /**
  * Switch a wireless interface on.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the wireless interface
+ * @param c {Client} an open client
+ * @param interfaceName {string} wireless interface
  * @throws {Error} kind "routeros" when no such wireless interface exists
  */
 export func enableWifi(c as Client, interfaceName as string) {
@@ -252,8 +247,8 @@ export func enableWifi(c as Client, interfaceName as string) {
 /**
  * Switch a wireless interface off; its network disappears from the air.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the wireless interface
+ * @param c {Client} an open client
+ * @param interfaceName {string} wireless interface
  * @throws {Error} kind "routeros" when no such wireless interface exists
  */
 export func disableWifi(c as Client, interfaceName as string) {
@@ -263,9 +258,10 @@ export func disableWifi(c as Client, interfaceName as string) {
 /**
  * List the wireless clients connected right now.
  *
- * Returns an empty list on routers without the classic wireless menu.
+ * Empty on routers without the classic wireless menu and on any read
+ * error, a dropped connection included.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of WifiClient} one entry per connected device
  */
 export func wifiClients(c as Client) {
@@ -283,9 +279,9 @@ export func wifiClients(c as Client) {
 }
 
 /**
- * Validate an SSID: non-empty, at most 32 characters, spaces allowed.
+ * Validate an SSID: 1-32 characters, spaces allowed.
  *
- * @param {string} ssid the candidate network name
+ * @param ssid {string} the candidate network name
  * @throws {Error} kind "routeros" when empty or too long
  * @internal
  */
@@ -301,7 +297,7 @@ func ensureSsid(ssid as string) {
 /**
  * Validate a WPA2 passphrase: 8 to 63 characters.
  *
- * @param {string} password the candidate passphrase
+ * @param password {string} the candidate passphrase
  * @throws {Error} kind "routeros" when outside 8-63 characters
  * @internal
  */
@@ -318,7 +314,7 @@ func ensureWifiPassword(password as string) {
  * The name of the dedicated security profile routeros manages for a
  * wireless interface.
  *
- * @param {string} interfaceName the wireless interface
+ * @param interfaceName {string} the wireless interface
  * @return {string} the deterministic profile name
  * @internal
  */
@@ -331,9 +327,9 @@ func wifiProfileName(interfaceName as string) {
  *
  * Idempotent: an existing profile of that name is updated in place.
  *
- * @param {Client} c           an open client
- * @param {string} profileName the profile to create or update
- * @param {string} password    the WPA2 passphrase (already validated)
+ * @param c {Client} an open client
+ * @param profileName {string} profile to create or update
+ * @param password {string} WPA2 passphrase, already validated
  * @return {string} the profile name, for wiring into an interface
  * @internal
  */
@@ -356,7 +352,7 @@ func ensureWifiProfile(c as Client, profileName as string, password as string) {
 /**
  * Fold a reply row into a WirelessInterface.
  *
- * @param {map of string to string} row an "/interface/wireless/print" row
+ * @param row {map of string to string} an "/interface/wireless/print" row
  * @return {WirelessInterface} the typed wireless interface
  * @internal
  */
@@ -379,7 +375,7 @@ func wirelessFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a WifiClient.
  *
- * @param {map of string to string} row a registration-table row
+ * @param row {map of string to string} a registration-table row
  * @return {WifiClient} the typed client entry
  * @internal
  */

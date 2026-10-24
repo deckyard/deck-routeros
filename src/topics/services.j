@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - management services: the ways into the router.
+# routeros - management services (/ip/service).
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the management service list. */
@@ -22,17 +22,17 @@ def const KNOWN_SERVICES as list of string init [
 /**
  * One management service: a way to log into the router.
  *
- * The list is fixed - services are enabled, disabled, and restricted,
- * never added or removed.
+ * The list is fixed: services are enabled, disabled, moved and
+ * restricted, never added or removed.
  *
- * @field {string} id          internal RouterOS id
- * @field {string} name        service name ("api", "ssh", "winbox", ...)
- * @field {int}    port        TCP port it listens on
- * @field {string} address     networks allowed to connect, "" for anywhere
- * @field {string} certificate TLS certificate name (ssl services), "" otherwise
- * @field {bool}   invalid     true when misconfigured (e.g. ssl without a
- *                             certificate) - the service does not actually run
- * @field {bool}   disabled    true when the service is switched off
+ * @field id {string}          internal RouterOS id
+ * @field name {string}        service name ("api", "ssh", "winbox", ...)
+ * @field port {int}        TCP port it listens on
+ * @field address {string}     networks allowed to connect, "" for anywhere
+ * @field certificate {string} TLS certificate name (ssl services), "" otherwise
+ * @field invalid {bool}     true when misconfigured (e.g. ssl without a
+ *                             certificate); the service is not listening
+ * @field disabled {bool}    true when the service is switched off
  */
 export def struct Service {
     id as string,
@@ -47,10 +47,10 @@ export def struct Service {
 /**
  * List the management services and their state.
  *
- * The security audit in one call: anything enabled, unrestricted, and
- * cleartext (telnet, ftp, www) deserves a hard look.
+ * Enabled, unrestricted cleartext services (telnet, ftp, www, api) are
+ * the ones to review.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Service} all services
  */
 export func services(c as Client) {
@@ -65,8 +65,8 @@ export func services(c as Client) {
 /**
  * Look one management service up by its name.
  *
- * @param {Client} c    an open client
- * @param {string} name "api", "api-ssl", "ftp", "ssh", "telnet",
+ * @param c {Client}    an open client
+ * @param name {string} "api", "api-ssl", "ftp", "ssh", "telnet",
  *                      "winbox", "www", or "www-ssl"
  * @return {Service} the service
  * @throws {Error} kind "routeros" on an unknown service name
@@ -83,8 +83,8 @@ export func serviceByName(c as Client, name as string) {
 /**
  * Switch a management service on.
  *
- * @param {Client} c    an open client
- * @param {string} name the service name
+ * @param c {Client}    an open client
+ * @param name {string} the service name
  * @throws {Error} kind "routeros" on an unknown service name
  */
 export func enableService(c as Client, name as string) {
@@ -95,14 +95,12 @@ export func enableService(c as Client, name as string) {
 /**
  * Switch a management service off.
  *
- * CAUTION: disabling the service this session came in through ("api"
- * or "api-ssl") disconnects you and closes that door behind you. To
- * turn plain "api" off, do it from an api-ssl session - and always
- * keep at least one working way in (winbox or ssh) before closing
- * doors.
+ * Disabling the service this session uses ("api" or "api-ssl")
+ * disconnects it and locks the deck out. Turn "api" off from an api-ssl
+ * session, and keep one other working way in (winbox or ssh).
  *
- * @param {Client} c    an open client
- * @param {string} name the service name
+ * @param c {Client}    an open client
+ * @param name {string} the service name
  * @throws {Error} kind "routeros" on an unknown service name
  */
 export func disableService(c as Client, name as string) {
@@ -113,14 +111,13 @@ export func disableService(c as Client, name as string) {
 /**
  * Move a management service to another TCP port.
  *
- * A non-default SSH or WinBox port cuts scanner noise dramatically -
- * it is obscurity, not security, so combine it with `restrictService`.
- * A port already used by another service is refused with that service
- * named.
+ * A non-default SSH or WinBox port cuts scanner noise but is not
+ * protection; combine it with `restrictService`. A port another service
+ * uses is refused, naming that service.
  *
- * @param {Client} c    an open client
- * @param {string} name the service name
- * @param {int}    port the new port, 1-65535
+ * @param c {Client}    an open client
+ * @param name {string} the service name
+ * @param port {int} the new port, 1-65535
  * @throws {Error} kind "routeros" on an unknown service, a bad port,
  *                 or a port another service already uses
  */
@@ -143,14 +140,13 @@ export func setServicePort(c as Client, name as string, port as int) {
 /**
  * Limit where a management service accepts connections from.
  *
- * The single most effective hardening step: management reachable only
- * from the management networks. Applies to NEW connections - but make
- * very sure your own network is in the list before restricting the
- * API service you are using. Pass "" to lift the restriction.
+ * Applies to new connections. Before restricting the API service this
+ * session uses, include your own network. Pass "" to lift the
+ * restriction.
  *
- * @param {Client} c         an open client
- * @param {string} name      the service name
- * @param {string} addresses allowed sources: IPs and/or CIDR networks,
+ * @param c {Client}         an open client
+ * @param name {string}      the service name
+ * @param addresses {string} allowed sources: IPs and/or CIDR networks,
  *                           comma-separated (e.g. "10.0.9.0/24"); "" = anywhere
  * @throws {Error} kind "routeros" on an unknown service or malformed address
  * @example
@@ -167,15 +163,14 @@ export func restrictService(c as Client, name as string, addresses as string) {
 }
 
 /**
- * Switch the cleartext relics off: telnet and ftp.
+ * Switch off telnet and ftp.
  *
- * Both send passwords unencrypted and have modern replacements (ssh,
- * sftp/scp over ssh). Neither can carry this API session, so this is
- * always safe to call. Plain "www" and "api" are also cleartext but
- * may be in legitimate LAN use - decide about those consciously
- * (`disableService`).
+ * Both send passwords in cleartext and are replaced by ssh and sftp/scp.
+ * Neither carries this API session, so the call cannot lock the deck
+ * out. Plain "www" and "api" are cleartext too but left alone; use
+ * `disableService` for them.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {int} how many services were switched off (already-disabled
  *               ones are skipped)
  */
@@ -195,7 +190,7 @@ export func disableInsecureServices(c as Client) {
 /**
  * Validate a management service name.
  *
- * @param {string} name the candidate
+ * @param name {string} the candidate
  * @throws {Error} kind "routeros" on an unknown service
  * @internal
  */
@@ -207,11 +202,11 @@ func ensureServiceName(name as string) {
 }
 
 /**
- * Which service (other than `ownName`) already listens on a port?
+ * Find the service, other than `ownName`, that listens on a port.
  *
- * @param {list of map of string to string} rows "/ip/service/print" rows
- * @param {int}    port    the port to check
- * @param {string} ownName service whose own port does not count
+ * @param rows {list of map of string to string} "/ip/service/print" rows
+ * @param port {int}    the port to check
+ * @param ownName {string} service whose own port does not count
  * @return {string} the owning service's name, or "" when the port is free
  * @internal
  */
@@ -227,7 +222,7 @@ func serviceUsingPort(rows as list of map of string to string, port as int, ownN
 /**
  * Fold a reply row into a Service.
  *
- * @param {map of string to string} row an "/ip/service/print" row
+ * @param row {map of string to string} an "/ip/service/print" row
  * @return {Service} the typed service
  * @internal
  */

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - traffic flow: export NetFlow / IPFIX to a collector.
@@ -16,8 +16,8 @@ def const FLOW_VERSIONS as list of string init ["1", "5", "9", "ipfix"];
 /**
  * The traffic-flow (NetFlow/IPFIX) settings.
  *
- * @field {bool}   enabled    true when flow accounting is running
- * @field {string} interfaces the interfaces accounted, "all" for every one
+ * @field enabled {bool} true when flow accounting is running
+ * @field interfaces {string} accounted interfaces, "all" for every one
  */
 export def struct TrafficFlowSettings {
     enabled as bool,
@@ -27,11 +27,11 @@ export def struct TrafficFlowSettings {
 /**
  * One traffic-flow export target (a collector).
  *
- * @field {string} id       internal RouterOS id
- * @field {string} address  the collector's address
- * @field {string} port     the collector's UDP port
- * @field {string} version  the export protocol version ("5", "9", "ipfix")
- * @field {bool}   disabled true when switched off
+ * @field id {string} internal RouterOS id
+ * @field address {string} collector address
+ * @field port {string} collector UDP port
+ * @field version {string} export protocol version ("1", "5", "9", "ipfix")
+ * @field disabled {bool} true when switched off
  */
 export def struct FlowTarget {
     id as string,
@@ -44,8 +44,8 @@ export def struct FlowTarget {
 /**
  * Read the traffic-flow settings.
  *
- * @param {Client} c an open client
- * @return {TrafficFlowSettings} the state
+ * @param c {Client} an open client
+ * @return {TrafficFlowSettings} the settings
  */
 export func trafficFlowStatus(c as Client) {
     return trafficFlowFromRow(singleRow($c, TRAFFIC_FLOW_PATH));
@@ -54,7 +54,7 @@ export func trafficFlowStatus(c as Client) {
 /**
  * List the traffic-flow export targets.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of FlowTarget} all collectors
  */
 export func flowTargets(c as Client) {
@@ -67,14 +67,12 @@ export func flowTargets(c as Client) {
 }
 
 /**
- * Turn flow accounting on (for all interfaces).
+ * Turn flow accounting on, for all interfaces.
  *
- * Traffic flow samples every connection and exports per-flow records to
- * a NetFlow/IPFIX collector (ntopng, Elastiflow, a commercial appliance)
- * for bandwidth and top-talker analysis. Enable it, then point it at a
- * collector with `addFlowTarget` - both are needed.
+ * Records are exported only once a collector is added with
+ * `addFlowTarget`.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @example
  *   mt.enableTrafficFlow($c);
  *   mt.addFlowTarget($c, "10.0.9.30", 2055, "ipfix");
@@ -86,7 +84,7 @@ export func enableTrafficFlow(c as Client) {
 /**
  * Turn flow accounting off.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableTrafficFlow(c as Client) {
     apiRun($c, TRAFFIC_FLOW_PATH + "/set", {"enabled": "no"});
@@ -95,15 +93,16 @@ export func disableTrafficFlow(c as Client) {
 /**
  * Export flow records to a collector.
  *
- * `ipfix` (or NetFlow v9) is the modern choice; v5 is the widest-
- * compatible legacy option. Idempotent by address + port.
+ * `ipfix` or NetFlow v9 for modern collectors; v5 is the widely
+ * supported legacy format. When a target with this address and port
+ * exists, its id is returned and nothing is changed.
  *
- * @param {Client} c       an open client
- * @param {string} address the collector's address
- * @param {int}    port    its UDP port (e.g. 2055 for NetFlow, 4739 for IPFIX)
- * @param {string} version "5", "9", or "ipfix"
- * @return {string} the RouterOS id of the (new or existing) target
- * @throws {Error} kind "routeros" on a bad address, port, or version
+ * @param c {Client} an open client
+ * @param address {string} collector IP address
+ * @param port {int} collector UDP port (e.g. 2055 for NetFlow, 4739 for IPFIX)
+ * @param version {string} "1", "5", "9" or "ipfix"
+ * @return {string} the RouterOS id of the new or existing target
+ * @throws {Error} kind "routeros" on a bad address, port or version
  */
 export func addFlowTarget(c as Client, address as string, port as int, version as string) {
     def collector as string init strings.trim($address);
@@ -127,10 +126,11 @@ export func addFlowTarget(c as Client, address as string, port as int, version a
 }
 
 /**
- * Remove a traffic-flow target by its address.
+ * Remove a traffic-flow target by address; with several targets on that
+ * address, the first one listed.
  *
- * @param {Client} c       an open client
- * @param {string} address the collector's address
+ * @param c {Client} an open client
+ * @param address {string} collector address
  * @throws {Error} kind "routeros" when no target has that address
  */
 export func removeFlowTarget(c as Client, address as string) {
@@ -148,7 +148,7 @@ export func removeFlowTarget(c as Client, address as string) {
 /**
  * Fold a reply row into the TrafficFlowSettings.
  *
- * @param {map of string to string} row the "/ip/traffic-flow/print" row
+ * @param row {map of string to string} the "/ip/traffic-flow/print" row
  * @return {TrafficFlowSettings} the typed settings
  * @internal
  */
@@ -162,7 +162,7 @@ func trafficFlowFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a FlowTarget.
  *
- * @param {map of string to string} row an "/ip/traffic-flow/target/print" row
+ * @param row {map of string to string} an "/ip/traffic-flow/target/print" row
  * @return {FlowTarget} the typed target
  * @internal
  */

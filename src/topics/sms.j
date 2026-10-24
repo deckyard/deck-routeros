@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - SMS over the cellular modem: settings, sending, the inbox.
@@ -19,13 +19,13 @@ def const PHONE_CHARS as string init "0123456789+-() ";
 /**
  * The router's SMS settings.
  *
- * @field {bool}   receiveEnabled true when the router stores incoming messages
- * @field {string} port           the modem port messages go through (e.g. "lte1")
- * @field {string} channel        the modem channel, "" for the default
- * @field {string} allowedNumber  the only sender accepted for remote
- *                                commands, "" when unrestricted
- * @field {int}    keepMaxSms     how many received messages are kept
- * @field {bool}   autoErase      true when the oldest message is dropped at the cap
+ * @field receiveEnabled {bool} whether incoming messages are stored
+ * @field port {string} modem port, e.g. "lte1"
+ * @field channel {string} modem channel, "" for the default
+ * @field allowedNumber {string} the only sender accepted for remote
+ *        commands, "" when unrestricted
+ * @field keepMaxSms {int} cap on stored received messages
+ * @field autoErase {bool} whether the oldest message is dropped at the cap
  */
 export def struct SmsSettings {
     receiveEnabled as bool,
@@ -39,11 +39,11 @@ export def struct SmsSettings {
 /**
  * One received text message.
  *
- * @field {string} id        internal RouterOS id
- * @field {string} phone     the sender's number
- * @field {string} message   the message text
- * @field {string} timestamp when the router received it, as reported
- * @field {string} kind      the message class as reported, "" when absent
+ * @field id {string} RouterOS item id
+ * @field phone {string} sender's number
+ * @field message {string} message text
+ * @field timestamp {string} receive time, as RouterOS prints it
+ * @field kind {string} RouterOS `type` value, "" when absent
  */
 export def struct SmsMessage {
     id as string,
@@ -56,7 +56,7 @@ export def struct SmsMessage {
 /**
  * Read the router's SMS settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {SmsSettings} the current settings
  * @example
  *   def s as mt.SmsSettings init mt.smsSettings($c);
@@ -67,14 +67,13 @@ export func smsSettings(c as Client) {
 }
 
 /**
- * Start storing incoming text messages, received on one modem port.
+ * Start storing incoming text messages received on one modem port.
  *
- * Off by default: a router with a SIM will not keep what arrives until
- * you turn this on. The port is the cellular interface the modem
- * presents (`lteInterfaces` lists them - usually "lte1").
+ * Reception is off by default. `lteInterfaces` lists the modem ports,
+ * usually "lte1".
  *
- * @param {Client} c    an open client
- * @param {string} port the modem port to receive on (e.g. "lte1")
+ * @param c {Client} an open client
+ * @param port {string} modem port, e.g. "lte1"
  * @throws {Error} kind "routeros" on an empty or spaced port name
  * @example
  *   mt.enableSmsReceive($c, "lte1");
@@ -85,11 +84,9 @@ export func enableSmsReceive(c as Client, port as string) {
 }
 
 /**
- * Stop storing incoming text messages.
+ * Stop storing incoming text messages; the inbox is kept.
  *
- * Messages already in the inbox are kept; only reception stops.
- *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @example
  *   mt.disableSmsReceive($c);
  */
@@ -98,17 +95,15 @@ export func disableSmsReceive(c as Client) {
 }
 
 /**
- * Restrict which sender the router will act on, and how many messages
- * it keeps.
+ * Set the sender the router accepts commands from, and the inbox cap.
  *
- * RouterOS can run commands sent by SMS; `allowedNumber` is the sender
- * whose messages are honoured, so setting it is the difference between
- * "anyone who knows the SIM number can drive this router" and "only
- * this one number can". Pass "" to clear the restriction.
+ * RouterOS can run commands sent by SMS. Without `allowedNumber`,
+ * anyone who knows the SIM number can drive the router. Pass "" to
+ * clear the restriction.
  *
- * @param {Client} c             an open client
- * @param {string} allowedNumber the sender to accept, "" for any
- * @param {int}    keepMaxSms    how many received messages to keep (1-100)
+ * @param c {Client} an open client
+ * @param allowedNumber {string} the sender to accept, "" for any
+ * @param keepMaxSms {int} received messages to keep, 1-100
  * @throws {Error} kind "routeros" on a malformed number or a cap outside 1-100
  * @example
  *   mt.restrictSms($c, "+441632960123", 50);
@@ -128,18 +123,17 @@ export func restrictSms(c as Client, allowedNumber as string, keepMaxSms as int)
 }
 
 /**
- * Send a text message from the router's modem.
+ * Send a text message through the router's modem.
  *
- * The everyday use is alerting from a site whose uplink is exactly what
- * broke - an SMS leaves over the cellular modem when e-mail cannot.
- * Pair it with `netwatch` or the scheduler.
+ * It goes out over the cellular network, so it works when the wired
+ * uplink is down and e-mail cannot.
  *
- * @param {Client} c           an open client
- * @param {string} port        the modem port to send through (e.g. "lte1")
- * @param {string} phoneNumber the recipient's number
- * @param {string} message     the message text
- * @throws {Error} kind "routeros" on a bad port, number, or empty message,
- *                 kind "mikrotik" when the modem refuses to send
+ * @param c {Client} an open client
+ * @param port {string} modem port, e.g. "lte1"
+ * @param phoneNumber {string} recipient's number
+ * @param message {string} message text
+ * @throws {Error} kind "routeros" on a bad port, a bad number or an empty
+ *         message, kind "mikrotik" when the modem refuses to send
  * @example
  *   mt.sendSms($c, "lte1", "+441632960123", "gw1: uplink down");
  */
@@ -157,11 +151,9 @@ export func sendSms(c as Client, port as string, phoneNumber as string, message 
 }
 
 /**
- * Read the received messages.
+ * Read the received messages; empty until `enableSmsReceive` is on.
  *
- * Empty until `enableSmsReceive` has been called.
- *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of SmsMessage} the stored messages
  * @example
  *   for (def m in mt.smsInbox($c)) { io.printf("%s: %s\n", $m.phone, $m.message); }
@@ -178,8 +170,8 @@ export func smsInbox(c as Client) {
 /**
  * Delete one received message.
  *
- * @param {Client} c  an open client
- * @param {string} id the message id
+ * @param c {Client} an open client
+ * @param id {string} message id from `SmsMessage.id`
  * @throws {Error} kind "routeros" on an empty id
  */
 export func removeSmsMessage(c as Client, id as string) {
@@ -187,10 +179,10 @@ export func removeSmsMessage(c as Client, id as string) {
 }
 
 /**
- * Empty the inbox.
+ * Delete every received message.
  *
- * @param {Client} c an open client
- * @return {int} how many messages were deleted
+ * @param c {Client} an open client
+ * @return {int} number of messages deleted
  * @example
  *   io.printf("cleared %d messages\n", mt.clearSmsInbox($c));
  */
@@ -205,9 +197,9 @@ export func clearSmsInbox(c as Client) {
 }
 
 /**
- * Fold a reply row into SmsSettings.
+ * Fold the "/tool/sms/print" row into SmsSettings.
  *
- * @param {map of string to string} row a "/tool/sms/print" row
+ * @param row {map of string to string} the reply row
  * @return {SmsSettings} the typed settings
  * @internal
  */
@@ -223,9 +215,9 @@ func smsSettingsFromRow(row as map of string to string) {
 }
 
 /**
- * Fold a reply row into an SmsMessage.
+ * Fold a "/tool/sms/inbox/print" row into an SmsMessage.
  *
- * @param {map of string to string} row a "/tool/sms/inbox/print" row
+ * @param row {map of string to string} the reply row
  * @return {SmsMessage} the typed message
  * @internal
  */
@@ -240,13 +232,14 @@ func smsMessageFromRow(row as map of string to string) {
 }
 
 /**
- * Validate a phone number: digits plus the usual punctuation.
+ * Validate a phone number: digits, `+ - ( )` and spaces, at least one digit.
  *
- * Deliberately lenient - national formats vary - but it catches the
- * common slip of passing a name or an address where a number belongs.
+ * Lenient because national formats vary; it catches a name or an
+ * address passed where a number belongs.
  *
- * @param {string} number the candidate (already trimmed)
- * @throws {Error} kind "routeros" when empty, foreign-charactered, or digitless
+ * @param number {string} the candidate, already trimmed
+ * @throws {Error} kind "routeros" when empty, with another character, or
+ *         without a digit
  * @internal
  */
 func ensurePhoneNumber(number as string) {

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - mangle: marking traffic for queues and policy routing.
@@ -8,39 +8,38 @@
 /** RouterOS API path of the firewall mangle-rule list. */
 export def const MANGLE_PATH as string init "/ip/firewall/mangle";
 
-/** Mangle chain for traffic as it enters, before routing decisions. */
+/** Chain for traffic as it enters, before the routing decision (mangle and raw). */
 export def const CHAIN_PREROUTING as string init "prerouting";
 
-/** Mangle chain for traffic as it leaves, after routing decisions. */
+/** Mangle chain for traffic as it leaves, after the routing decision. */
 export def const CHAIN_POSTROUTING as string init "postrouting";
 
 /**
- * One mangle rule, as read back from the router.
+ * One mangle rule as read back from the router.
  *
- * Create the everyday shapes with `setupPacketMark`, `markRoutingFor`,
- * and `clampTcpMss`; anything more exotic goes through the generic
- * `add` on MANGLE_PATH.
+ * `setupPacketMark`, `markRoutingFor` and `clampTcpMss` create the
+ * everyday shapes; other rules go through the generic `add` on
+ * MANGLE_PATH.
  *
- * @field {string} id                internal RouterOS id
- * @field {string} chain             "prerouting", "forward", "postrouting", ...
- * @field {string} action            "mark-connection", "mark-packet",
- *                                   "mark-routing", "change-mss", ...
- * @field {string} newConnectionMark mark stamped on connections, "" when none
- * @field {string} newPacketMark     mark stamped on packets, "" when none
- * @field {string} newRoutingMark    routing table sent to, "" when none
- * @field {string} newMss            MSS value set by change-mss, "" when none
- * @field {string} connectionMark    matched connection mark, "" for any
- * @field {string} packetMark        matched packet mark, "" for any
- * @field {string} protocol          matched protocol, "" for any
- * @field {string} srcAddress        matched source, "" for any
- * @field {string} dstAddress        matched destination, "" for any
- * @field {string} dstPort           matched destination port(s), "" for any
- * @field {string} inInterface       matched incoming interface, "" for any
- * @field {string} outInterface      matched outgoing interface, "" for any
- * @field {bool}   passthrough       true when later rules still see the packet
- * @field {bool}   disabled          true when the rule is switched off
- * @field {string} comment           free-text comment; the handle the setup
- *                                   helpers use
+ * @field id {string} internal RouterOS id
+ * @field chain {string} "prerouting", "forward", "postrouting", ...
+ * @field action {string} "mark-connection", "mark-packet", "mark-routing",
+ *        "change-mss", ...
+ * @field newConnectionMark {string} connection mark set, "" when none
+ * @field newPacketMark {string} packet mark set, "" when none
+ * @field newRoutingMark {string} routing mark (table name) set, "" when none
+ * @field newMss {string} MSS set by change-mss, "" when none
+ * @field connectionMark {string} matched connection mark, "" for any
+ * @field packetMark {string} matched packet mark, "" for any
+ * @field protocol {string} matched protocol, "" for any
+ * @field srcAddress {string} matched source, "" for any
+ * @field dstAddress {string} matched destination, "" for any
+ * @field dstPort {string} matched destination port(s), "" for any
+ * @field inInterface {string} matched incoming interface, "" for any
+ * @field outInterface {string} matched outgoing interface, "" for any
+ * @field passthrough {bool} true when later rules still see the packet
+ * @field disabled {bool} true when the rule is switched off
+ * @field comment {string} comment; the handle the setup verbs use
  */
 export def struct MangleRule {
     id as string,
@@ -64,9 +63,9 @@ export def struct MangleRule {
 };
 
 /**
- * List every mangle rule on the router.
+ * List the mangle rules in table order.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of MangleRule} all mangle rules
  */
 export func mangleRules(c as Client) {
@@ -79,22 +78,23 @@ export func mangleRules(c as Client) {
 }
 
 /**
- * Mark a kind of traffic so queues can treat it specially.
+ * Mark a class of traffic with a packet mark, for queues to match.
  *
- * Creates RouterOS's canonical two-step in one call: new connections
- * matching the matcher get a connection mark, and every packet of a
- * marked connection gets packet mark `markName`. Queues then match the
- * packet mark (a simple queue's `packet-marks` property, via the
- * generic `set`) instead of addresses. Build the matcher with the
- * firewall builder - its chain is used (CHAIN_PREROUTING is right for
- * queue marks), its action is replaced by the marking actions.
- * Idempotent by mark name.
+ * Adds RouterOS's two-rule pattern: new connections matching `matcher`
+ * get connection mark `<markName>-conn` (passthrough), and every packet of
+ * such a connection gets packet mark `markName`. A queue then matches the
+ * mark (a simple queue's `packet-marks`, set with the generic `set`). The
+ * matcher's chain is kept (CHAIN_PREROUTING suits queue marks); its
+ * action and comment are replaced. The rules are commented
+ * "mark: <markName> (connections)" and "mark: <markName> (packets)".
+ * Idempotent by mark name: when the packet rule exists, its id is
+ * returned and nothing is added.
  *
- * @param {Client}       c        an open client
- * @param {string}       markName the packet mark to create (e.g. "voip")
- * @param {FirewallRule} matcher  what to mark, built with `firewallRule`
- *                                and the `with*` refiners
- * @return {string} the RouterOS id of the packet-marking rule
+ * @param c {Client} an open client
+ * @param markName {string} packet mark to create, e.g. "voip"
+ * @param matcher {FirewallRule} what to mark, built with `firewallRule` and
+ *        the `with*` refiners
+ * @return {string} id of the packet-marking rule
  * @throws {Error} kind "routeros" on a bad mark name or matcher
  * @example
  *   def m as mt.FirewallRule init mt.firewallRule(mt.CHAIN_PREROUTING, mt.ACTION_ACCEPT);
@@ -118,13 +118,14 @@ export func setupPacketMark(c as Client, markName as string, matcher as Firewall
 }
 
 /**
- * Remove a packet mark's rule pair.
+ * Remove the two rules `setupPacketMark` created for a mark.
  *
- * Queues still matching the mark simply stop seeing marked packets.
+ * Queues that match the mark stop seeing marked packets; they are not
+ * changed.
  *
- * @param {Client} c        an open client
- * @param {string} markName the mark given to `setupPacketMark`
- * @throws {Error} kind "routeros" when no such mark pair exists
+ * @param c {Client} an open client
+ * @param markName {string} mark given to `setupPacketMark`
+ * @throws {Error} kind "routeros" when no rule of that mark exists
  */
 export func removePacketMark(c as Client, markName as string) {
     def rows as list of map of string to string init getAll($c, MANGLE_PATH);
@@ -144,20 +145,19 @@ export func removePacketMark(c as Client, markName as string) {
 }
 
 /**
- * Send a source's traffic to a different routing table (policy routing).
+ * Send a source's traffic to another routing table (policy routing).
  *
- * The "this subnet uses the backup uplink" tool: traffic from
- * `srcAddress` gets routing mark `markName` and is looked up in the
- * routing table of that name instead of `main`. On RouterOS v7 the
- * table must exist first (`/routing/table add name=<mark> fib` -
- * generic verbs) and needs its own default route (generic `add` on
- * ROUTE_PATH with `"routing-table": markName`). Idempotent by mark
- * and source.
+ * Traffic from `srcAddress` gets routing mark `markName` in prerouting and
+ * is looked up in the table of that name instead of `main`, e.g. to send
+ * one subnet over a backup uplink. On RouterOS v7 the table must exist
+ * (generic `add` on ROUTING_TABLE_PATH with `fib`) and needs its own
+ * default route (generic `add` on ROUTE_PATH with "routing-table"). The rule is commented
+ * "route mark: <markName> for <srcAddress>"; idempotent by mark and source.
  *
- * @param {Client} c          an open client
- * @param {string} markName   the routing mark / table name
- * @param {string} srcAddress whose traffic: an IP or CIDR network
- * @return {string} the RouterOS id of the marking rule
+ * @param c {Client} an open client
+ * @param markName {string} routing mark, which is the table name
+ * @param srcAddress {string} source IP or CIDR network
+ * @return {string} id of the new or existing marking rule
  * @throws {Error} kind "routeros" on a bad mark name or address
  */
 export func markRoutingFor(c as Client, markName as string, srcAddress as string) {
@@ -178,12 +178,12 @@ export func markRoutingFor(c as Client, markName as string, srcAddress as string
 }
 
 /**
- * Remove the routing mark for a source.
+ * Remove the routing-mark rule `markRoutingFor` created for a source.
  *
- * @param {Client} c          an open client
- * @param {string} markName   the routing mark
- * @param {string} srcAddress the source it was created for
- * @throws {Error} kind "routeros" when no such marking rule exists
+ * @param c {Client} an open client
+ * @param markName {string} routing mark
+ * @param srcAddress {string} source as given to `markRoutingFor`
+ * @throws {Error} kind "routeros" when no such rule exists
  */
 export func removeRoutingMark(c as Client, markName as string, srcAddress as string) {
     def rows as list of map of string to string init getAll($c, MANGLE_PATH);
@@ -196,16 +196,17 @@ export func removeRoutingMark(c as Client, markName as string, srcAddress as str
 }
 
 /**
- * Clamp TCP MSS on an interface, both directions.
+ * Clamp the TCP MSS of connections crossing an interface, both directions.
  *
- * The fix for "ping works, pages half-load" over PPPoE and tunnels:
- * TCP handshakes crossing the interface get their maximum segment size
- * clamped to what the path actually fits. Creates one rule per
- * direction; idempotent.
+ * Fixes "ping works, pages half-load" over PPPoE and tunnels: SYN packets
+ * in the forward chain get their MSS set to `clamp-to-pmtu`. Adds one rule
+ * per direction, commented "mss clamp: <interfaceName> (out)" and
+ * "(in)"; a direction that already has its rule is skipped, so the call
+ * is idempotent.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the small-MTU interface (e.g. "pppoewan",
- *                               a GRE or EoIP tunnel)
+ * @param c {Client} an open client
+ * @param interfaceName {string} small-MTU interface, e.g. "pppoewan" or a
+ *        GRE or EoIP tunnel
  * @throws {Error} kind "routeros" when the interface does not exist
  * @example
  *   mt.clampTcpMss($c, "pppoewan");
@@ -227,11 +228,11 @@ export func clampTcpMss(c as Client, interfaceName as string) {
 }
 
 /**
- * Remove the MSS clamp from an interface (both directions).
+ * Remove both MSS clamp rules from an interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface it was clamped on
- * @throws {Error} kind "routeros" when no clamp rules exist there
+ * @param c {Client} an open client
+ * @param interfaceName {string} interface the clamp was set on
+ * @throws {Error} kind "routeros" when no clamp rule exists there
  */
 export func removeTcpMssClamp(c as Client, interfaceName as string) {
     def rows as list of map of string to string init getAll($c, MANGLE_PATH);
@@ -257,8 +258,8 @@ export func removeTcpMssClamp(c as Client, interfaceName as string) {
  * rule marks only new connections (efficient) and passes through; the
  * packet rule matches the connection mark and stops.
  *
- * @param {FirewallRule} matcher  the match, built with the firewall builder
- * @param {string}       markName the packet mark
+ * @param matcher {FirewallRule}  the match, built with the firewall builder
+ * @param markName {string} the packet mark
  * @return {list of map of string to string} two attribute maps:
  *         the connection rule, then the packet rule
  * @internal
@@ -288,8 +289,8 @@ func packetMarkRuleAttrs(matcher as FirewallRule, markName as string) {
 /**
  * Build the mark-routing attributes for a source.
  *
- * @param {string} markName the routing mark / table
- * @param {string} src      the validated source (IP or CIDR)
+ * @param markName {string} the routing mark / table
+ * @param src {string}      the validated source (IP or CIDR)
  * @return {map of string to string} the rule attributes
  * @internal
  */
@@ -307,8 +308,8 @@ func routingMarkAttrs(markName as string, src as string) {
 /**
  * Build the change-mss attributes for one direction of an interface.
  *
- * @param {string} interfaceName the small-MTU interface
- * @param {string} direction     "out" or "in"
+ * @param interfaceName {string} the small-MTU interface
+ * @param direction {string}     "out" or "in"
  * @return {map of string to string} the rule attributes
  * @internal
  */
@@ -333,7 +334,7 @@ func mssClampAttrs(interfaceName as string, direction as string) {
 /**
  * Fold a reply row into a MangleRule.
  *
- * @param {map of string to string} row an "/ip/firewall/mangle/print" row
+ * @param row {map of string to string} an "/ip/firewall/mangle/print" row
  * @return {MangleRule} the typed rule
  * @internal
  */
@@ -361,15 +362,14 @@ func mangleFromRow(row as map of string to string) {
 }
 
 /**
- * Move a mangle rule so it is evaluated directly before another one.
+ * Move a mangle rule directly above another one.
  *
- * Mangle order decides which mark sticks: the first matching rule marks
- * the packet, and a later rule that would have marked it differently
- * never runs unless the earlier one passes traffic through.
+ * Order decides which mark sticks: once a rule without passthrough marks
+ * a packet, later rules never see it.
  *
- * @param {Client} c        an open client
- * @param {string} id       the rule to move
- * @param {string} beforeId the rule it must end up above, "" for the bottom
+ * @param c {Client} an open client
+ * @param id {string} rule to move
+ * @param beforeId {string} rule to land above, "" for the bottom
  * @throws {Error} kind "routeros" on an empty id or a self-move
  */
 export func moveMangleRule(c as Client, id as string, beforeId as string) {
@@ -377,11 +377,13 @@ export func moveMangleRule(c as Client, id as string, beforeId as string) {
 }
 
 /**
- * Move the mangle rule carrying one comment above the rule carrying another.
+ * Move the mangle rule carrying one comment above the rule carrying
+ * another.
  *
- * @param {Client} c             an open client
- * @param {string} comment       the rule to move
- * @param {string} beforeComment the rule it must end up above, "" for the bottom
+ * @param c {Client} an open client
+ * @param comment {string} comment of the rule to move
+ * @param beforeComment {string} comment of the rule to land above, "" for
+ *        the bottom
  * @throws {Error} kind "routeros" when either comment matches no rule
  */
 export func moveMangleRuleByComment(c as Client, comment as string, beforeComment as string) {
@@ -396,8 +398,8 @@ export func moveMangleRuleByComment(c as Client, comment as string, beforeCommen
 /**
  * Resolve a mangle rule comment to the rule's id.
  *
- * @param {Client} c       an open client
- * @param {string} comment the rule's comment
+ * @param c {Client}       an open client
+ * @param comment {string} the rule's comment
  * @return {string} the rule id
  * @throws {Error} kind "routeros" when no mangle rule carries that comment
  * @internal

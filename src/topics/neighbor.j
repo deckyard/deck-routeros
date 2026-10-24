@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - neighbor discovery: what is on this segment (LLDP/CDP/MNDP).
@@ -11,13 +11,13 @@ export def const NEIGHBOR_PATH as string init "/ip/neighbor";
 /**
  * One discovered neighbor on a directly-connected segment.
  *
- * @field {string} interfaceName the interface it was seen on
- * @field {string} address       its IP address, "" when only layer 2
- * @field {string} mac           its MAC address
- * @field {string} identity      its host name / identity
- * @field {string} platform      the vendor platform (e.g. "MikroTik", "Cisco")
- * @field {string} board         the hardware model as reported
- * @field {string} version       the software version as reported
+ * @field interfaceName {string} the interface it was seen on
+ * @field address {string}       its IP address, "" when only layer 2
+ * @field mac {string}           its MAC address
+ * @field identity {string}      its system identity (host name)
+ * @field platform {string}      the vendor platform (e.g. "MikroTik", "Cisco")
+ * @field board {string}         the hardware model as reported
+ * @field version {string}       the software version as reported
  */
 export def struct Neighbor {
     interfaceName as string,
@@ -32,12 +32,11 @@ export def struct Neighbor {
 /**
  * List the neighbors the router has discovered.
  *
- * "What is plugged into this segment" - the router hears LLDP (most
- * vendors), CDP (Cisco), and MNDP (MikroTik) announcements from directly
- * connected devices. A fast way to map a rack or find that one switch.
- * Only same-segment neighbors appear; nothing behind another router.
+ * The router collects LLDP, CDP (Cisco) and MNDP (MikroTik) announcements
+ * from directly connected segments. Devices behind another router, and
+ * devices that do not announce themselves, never appear.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Neighbor} the discovered neighbors
  */
 export func neighbors(c as Client) {
@@ -50,10 +49,10 @@ export func neighbors(c as Client) {
 }
 
 /**
- * The neighbors discovered on one interface.
+ * List the neighbors discovered on one interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to filter for
+ * @param c {Client}             an open client
+ * @param interfaceName {string} interface to filter on, exact name
  * @return {list of Neighbor} that interface's neighbors
  */
 export func neighborsOn(c as Client, interfaceName as string) {
@@ -70,7 +69,7 @@ export func neighborsOn(c as Client, interfaceName as string) {
 /**
  * Fold a reply row into a Neighbor.
  *
- * @param {map of string to string} row an "/ip/neighbor/print" row
+ * @param row {map of string to string} an "/ip/neighbor/print" row
  * @return {Neighbor} the typed neighbor
  * @internal
  */

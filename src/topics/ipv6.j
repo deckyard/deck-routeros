@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - IPv6: the stack switch, addresses, neighbor discovery.
@@ -11,18 +11,18 @@ export def const IPV6_SETTINGS_PATH as string init "/ipv6/settings";
 /** RouterOS API path of the IPv6 address table. */
 export def const IPV6_ADDRESS_PATH as string init "/ipv6/address";
 
-/** RouterOS API path of the neighbor-discovery (router advertisement) table. */
+/** RouterOS API path of the neighbor-discovery (router advertisement) list. */
 export def const IPV6_ND_PATH as string init "/ipv6/nd";
 
 /**
  * The router's global IPv6 settings.
  *
- * @field {bool} disabled       true when the whole IPv6 stack is switched off
- * @field {bool} forward        true when the router routes IPv6 between interfaces
- * @field {bool} acceptRouterAdvertisements true when the router configures
- *              itself from RAs it receives (the upstream-facing switch)
- * @field {bool} acceptRedirects true when ICMPv6 redirects are honoured
- * @field {int}  maxNeighborEntries the neighbor-cache cap
+ * @field disabled {bool}       true when the IPv6 stack is switched off
+ * @field forward {bool}        true when the router routes IPv6 between interfaces
+ * @field acceptRouterAdvertisements {bool} true when the router configures
+ *              itself from RAs it receives
+ * @field acceptRedirects {bool} true when ICMPv6 redirects are honored
+ * @field maxNeighborEntries {int} neighbor-cache size limit, 0 when absent
  */
 export def struct Ipv6Settings {
     disabled as bool,
@@ -35,15 +35,15 @@ export def struct Ipv6Settings {
 /**
  * One IPv6 address on an interface.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} address       the address in CIDR form
- * @field {string} interfaceName the interface it sits on
- * @field {bool}   advertise     true when the prefix is announced in RAs
- * @field {bool}   eui64         true when the host part is derived from the MAC
- * @field {bool}   linkLocal     true for a fe80::/10 address
- * @field {bool}   dynamic       true when RouterOS created it (SLAAC, DHCPv6-PD)
- * @field {bool}   disabled      true when switched off
- * @field {string} comment       free-text comment
+ * @field id {string}            internal RouterOS id
+ * @field address {string}       address in CIDR form
+ * @field interfaceName {string} interface it sits on
+ * @field advertise {bool}       true when the prefix is announced in RAs
+ * @field eui64 {bool}           true when the host part is derived from the MAC
+ * @field linkLocal {bool}       true for a fe80::/10 address
+ * @field dynamic {bool}         true when RouterOS created it (SLAAC, DHCPv6-PD)
+ * @field disabled {bool}        true when switched off
+ * @field comment {string}       free-text comment, "" when unset
  */
 export def struct Ipv6Address {
     id as string,
@@ -61,14 +61,14 @@ export def struct Ipv6Address {
  * One neighbor-discovery entry: how the router advertises itself on an
  * interface.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} interfaceName the interface, "all" for the default entry
- * @field {string} raInterval    the advertisement interval as reported
- * @field {string} raLifetime    how long clients treat this router as a default one
- * @field {bool}   managed       the M flag: clients should get addresses from DHCPv6
- * @field {bool}   otherConfig   the O flag: clients should get DNS etc. from DHCPv6
- * @field {bool}   advertiseDns  true when RAs carry the router's DNS servers
- * @field {bool}   disabled      true when switched off
+ * @field id {string}            internal RouterOS id
+ * @field interfaceName {string} interface, "all" for the default entry
+ * @field raInterval {string}    advertisement interval as RouterOS prints it
+ * @field raLifetime {string}    how long clients keep this router as default gateway
+ * @field managed {bool}         M flag: clients get addresses from DHCPv6
+ * @field otherConfig {bool}     O flag: clients get DNS and other options from DHCPv6
+ * @field advertiseDns {bool}    true when RAs carry the router's DNS servers
+ * @field disabled {bool}        true when switched off
  */
 export def struct Ipv6Nd {
     id as string,
@@ -84,7 +84,7 @@ export def struct Ipv6Nd {
 /**
  * Read the global IPv6 settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {Ipv6Settings} the current settings
  * @example
  *   def s as mt.Ipv6Settings init mt.ipv6Settings($c);
@@ -95,17 +95,16 @@ export func ipv6Settings(c as Client) {
 }
 
 /**
- * Switch the whole IPv6 stack off.
+ * Switch the IPv6 stack off.
  *
- * The honest choice on a v4-only network: leaving IPv6 half-configured
- * is worse than not running it, because hosts still autoconfigure from
- * any RA on the wire and reach the internet around firewall rules that
- * only ever matched v4. Turning it off at the router closes that door.
+ * The right choice on a v4-only network: with IPv6 half-configured, hosts
+ * still autoconfigure from any RA on the wire and bypass firewall rules
+ * that only match v4.
  *
- * RouterOS applies this fully at the next reboot; the setting sticks
- * immediately, the running stack may not clear until then.
+ * The setting is stored at once; RouterOS applies it fully at the next
+ * reboot.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @example
  *   mt.disableIpv6($c);
  */
@@ -116,12 +115,11 @@ export func disableIpv6(c as Client) {
 /**
  * Switch the IPv6 stack on.
  *
- * Takes effect after a reboot. Once IPv6 is up, remember that the v4
- * firewall does not filter it - the `/ipv6/firewall` chains are
- * separate, and an unfiltered v6 stack is a way into hosts you believe
- * are behind NAT.
+ * Takes full effect after a reboot. The v4 firewall does not filter IPv6:
+ * without `/ipv6/firewall` rules, LAN hosts with global addresses are
+ * reachable from the internet.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func enableIpv6(c as Client) {
     apiRun($c, IPV6_SETTINGS_PATH + "/set", {"disable-ipv6": "no"});
@@ -130,21 +128,21 @@ export func enableIpv6(c as Client) {
 /**
  * Turn IPv6 routing between interfaces on or off.
  *
- * @param {Client} c       an open client
- * @param {bool}   enabled true to route IPv6, false to keep it host-only
+ * @param c {Client}       an open client
+ * @param enabled {bool}   true to route IPv6, false to keep it host-only
  */
 export func setIpv6Forwarding(c as Client, enabled as bool) {
     apiRun($c, IPV6_SETTINGS_PATH + "/set", {"forward": boolWord($enabled)});
 }
 
 /**
- * Decide whether the router configures itself from router advertisements.
+ * Choose whether the router configures itself from router advertisements.
  *
- * Leave this on when the uplink hands out IPv6 by SLAAC; turn it off on
- * a router that should only use addresses you gave it.
+ * Leave on when the uplink hands out IPv6 by SLAAC; turn off on a router
+ * that should use only addresses you gave it.
  *
- * @param {Client} c       an open client
- * @param {bool}   enabled true to accept RAs
+ * @param c {Client}       an open client
+ * @param enabled {bool}   true to accept RAs
  */
 export func setIpv6AcceptRouterAdvertisements(c as Client, enabled as bool) {
     apiRun($c, IPV6_SETTINGS_PATH + "/set", {"accept-router-advertisements": boolWord($enabled)});
@@ -153,10 +151,10 @@ export func setIpv6AcceptRouterAdvertisements(c as Client, enabled as bool) {
 /**
  * List the IPv6 addresses on the router.
  *
- * Includes the dynamic ones (link-local, SLAAC, DHCPv6-PD) - check
- * `dynamic` to tell them from what you configured.
+ * Includes dynamic ones (link-local, SLAAC, DHCPv6-PD); `dynamic` tells
+ * them apart.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Ipv6Address} every IPv6 address
  */
 export func ipv6Addresses(c as Client) {
@@ -171,10 +169,10 @@ export func ipv6Addresses(c as Client) {
 /**
  * List the IPv6 addresses on one interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to filter on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} interface to filter on, exact name
  * @return {list of Ipv6Address} its addresses, empty when it has none
- * @throws {Error} kind "routeros" on an empty interface name
+ * @throws {Error} kind "routeros" on an empty or spaced interface name
  */
 export func ipv6AddressesOn(c as Client, interfaceName as string) {
     ensureName($interfaceName, "interface");
@@ -189,18 +187,18 @@ export func ipv6AddressesOn(c as Client, interfaceName as string) {
 }
 
 /**
- * Give an interface a static IPv6 address.
+ * Give an interface a static IPv6 address, advertised in RAs.
  *
- * Write the address in CIDR form with the prefix the LAN actually uses -
- * `2001:db8:1::1/64`. A /64 is the smallest prefix SLAAC works on, so a
- * LAN wants /64 even though a router-to-router link can be tighter.
+ * Same as `addIpv6AddressWith` with `advertise` true and `eui64` false.
+ * SLAAC works only on a /64, so a LAN wants /64; a router-to-router link
+ * can use a longer prefix.
  *
- * @param {Client} c             an open client
- * @param {string} cidr          the address in CIDR form (e.g. "2001:db8:1::1/64")
- * @param {string} interfaceName the interface to put it on
+ * @param c {Client}             an open client
+ * @param cidr {string}          address in CIDR form (e.g. "2001:db8:1::1/64")
+ * @param interfaceName {string} interface to put it on
  * @return {string} the RouterOS id of the new address
- * @throws {Error} kind "routeros" when the address is not valid IPv6 in
- *                 CIDR form, or the interface name is empty
+ * @throws {Error} kind "routeros" when the address is not IPv6 in CIDR
+ *                 form, or the interface name is empty or spaced
  * @example
  *   mt.addIpv6Address($c, "2001:db8:1::1/64", "brlan");
  */
@@ -211,18 +209,17 @@ export func addIpv6Address(c as Client, cidr as string, interfaceName as string)
 /**
  * Give an interface a static IPv6 address, choosing how it is announced.
  *
- * `advertise` controls whether the prefix goes out in router
- * advertisements, which is what lets clients on that LAN configure
- * themselves by SLAAC - leave it true for a client network, false for a
- * router-to-router link where nothing should autoconfigure. `eui64`
- * derives the host part from the interface MAC, so the same call gives
- * every router a stable, distinct address inside the prefix.
+ * `advertise` puts the prefix in router advertisements, so clients on
+ * that LAN configure themselves by SLAAC: true for a client network,
+ * false for a router-to-router link. `eui64` derives the host part from
+ * the interface MAC, so the same call gives every router a stable,
+ * distinct address inside the prefix.
  *
- * @param {Client} c             an open client
- * @param {string} cidr          the address in CIDR form
- * @param {string} interfaceName the interface to put it on
- * @param {bool}   advertise     announce the prefix in RAs
- * @param {bool}   eui64         derive the host part from the MAC
+ * @param c {Client}             an open client
+ * @param cidr {string}          address in CIDR form
+ * @param interfaceName {string} interface to put it on
+ * @param advertise {bool}       true to announce the prefix in RAs
+ * @param eui64 {bool}           true to derive the host part from the MAC
  * @return {string} the RouterOS id of the new address
  * @throws {Error} kind "routeros" on a bad address or interface name
  * @example
@@ -250,14 +247,14 @@ export func addIpv6AddressWith(
 /**
  * Remove a static IPv6 address.
  *
- * Addresses RouterOS created itself (link-local, SLAAC, DHCPv6-PD) are
- * dynamic and cannot be removed this way - drop the thing that creates
- * them instead.
+ * Dynamic addresses (link-local, SLAAC, DHCPv6-PD) are refused; remove
+ * what creates them instead. The address is matched as text, so pass it
+ * exactly as `ipv6Addresses` reports it.
  *
- * @param {Client} c    an open client
- * @param {string} cidr the address in CIDR form, as it was added
- * @throws {Error} kind "routeros" when no such address is configured, or
- *                 when it is dynamic
+ * @param c {Client}    an open client
+ * @param cidr {string} address in CIDR form, as RouterOS stores it
+ * @throws {Error} kind "routeros" when it is not IPv6 CIDR, not configured,
+ *                 or dynamic
  * @example
  *   mt.removeIpv6Address($c, "2001:db8:1::1/64");
  */
@@ -279,7 +276,7 @@ export func removeIpv6Address(c as Client, cidr as string) {
 /**
  * List the neighbor-discovery entries.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Ipv6Nd} one entry per configured interface
  */
 export func ipv6Nd(c as Client) {
@@ -292,16 +289,15 @@ export func ipv6Nd(c as Client) {
 }
 
 /**
- * Start advertising this router on an interface, so clients there can
- * configure themselves by SLAAC.
+ * Advertise this router on an interface, so clients there configure
+ * themselves by SLAAC.
  *
- * Idempotent: updates the interface's existing entry when there is one,
- * creates it otherwise.
+ * Idempotent: enables the interface's existing entry, or creates one.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to advertise on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} interface to advertise on
  * @return {string} the RouterOS id of the entry
- * @throws {Error} kind "routeros" on an empty interface name
+ * @throws {Error} kind "routeros" on an empty or spaced interface name
  * @example
  *   mt.advertiseIpv6On($c, "brlan");
  */
@@ -312,13 +308,14 @@ export func advertiseIpv6On(c as Client, interfaceName as string) {
 /**
  * Stop advertising this router on an interface.
  *
- * Clients keep the address they already built until the advertised
- * lifetime runs out; this stops new ones being handed a default route.
+ * Disables the interface's entry (creating it disabled when absent).
+ * Clients keep the addresses they built until the advertised lifetime
+ * runs out.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to stop advertising on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} interface to stop advertising on
  * @return {string} the RouterOS id of the entry
- * @throws {Error} kind "routeros" on an empty interface name
+ * @throws {Error} kind "routeros" on an empty or spaced interface name
  */
 export func stopAdvertisingIpv6On(c as Client, interfaceName as string) {
     return setIpv6NdEntry($c, $interfaceName, {"disabled": "yes"});
@@ -327,17 +324,17 @@ export func stopAdvertisingIpv6On(c as Client, interfaceName as string) {
 /**
  * Set the M and O flags an interface advertises.
  *
- * These tell clients where to get their configuration: `managed` (the M
- * flag) means "ask DHCPv6 for an address", `otherConfig` (the O flag)
- * means "build your own address, but ask DHCPv6 for DNS". Both false is
- * pure SLAAC, and is what a small network usually wants.
+ * `managed` (M) tells clients to get an address from DHCPv6;
+ * `otherConfig` (O) tells them to build their own address but get DNS
+ * from DHCPv6. Both false is pure SLAAC, the usual choice for a small
+ * network. Creates the interface's entry when absent.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to advertise on
- * @param {bool}   managed       the M flag
- * @param {bool}   otherConfig   the O flag
+ * @param c {Client}             an open client
+ * @param interfaceName {string} interface the entry is for
+ * @param managed {bool}         M flag
+ * @param otherConfig {bool}     O flag
  * @return {string} the RouterOS id of the entry
- * @throws {Error} kind "routeros" on an empty interface name
+ * @throws {Error} kind "routeros" on an empty or spaced interface name
  * @example
  *   mt.setIpv6NdFlags($c, "brlan", false, true);   # SLAAC + DHCPv6 for DNS
  */
@@ -358,11 +355,11 @@ export func setIpv6NdFlags(
 /**
  * Create or update the neighbor-discovery entry for an interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface the entry is for
- * @param {map of string to string} attrs the properties to write
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface the entry is for
+ * @param attrs {map of string to string} the properties to write
  * @return {string} the RouterOS id of the entry
- * @throws {Error} kind "routeros" on an empty interface name
+ * @throws {Error} kind "routeros" on an empty or spaced interface name
  * @internal
  */
 func setIpv6NdEntry(c as Client, interfaceName as string, attrs as map of string to string) {
@@ -383,7 +380,7 @@ func setIpv6NdEntry(c as Client, interfaceName as string, attrs as map of string
 /**
  * Fold a reply row into Ipv6Settings.
  *
- * @param {map of string to string} row an "/ipv6/settings/print" row
+ * @param row {map of string to string} an "/ipv6/settings/print" row
  * @return {Ipv6Settings} the typed settings
  * @internal
  */
@@ -400,7 +397,7 @@ func ipv6SettingsFromRow(row as map of string to string) {
 /**
  * Fold a reply row into an Ipv6Address.
  *
- * @param {map of string to string} row an "/ipv6/address/print" row
+ * @param row {map of string to string} an "/ipv6/address/print" row
  * @return {Ipv6Address} the typed address
  * @internal
  */
@@ -421,7 +418,7 @@ func ipv6AddressFromRow(row as map of string to string) {
 /**
  * Fold a reply row into an Ipv6Nd.
  *
- * @param {map of string to string} row an "/ipv6/nd/print" row
+ * @param row {map of string to string} an "/ipv6/nd/print" row
  * @return {Ipv6Nd} the typed entry
  * @internal
  */
@@ -441,10 +438,10 @@ func ipv6NdFromRow(row as map of string to string) {
 /**
  * Validate an IPv6 address in CIDR form.
  *
- * Rejects a valid IPv4 CIDR with a message that says so, since passing
- * the v4 address by mistake is the likely slip here.
+ * A valid IPv4 CIDR gets its own message, since passing the v4 address
+ * is the likely slip.
  *
- * @param {string} cidr the candidate (e.g. "2001:db8:1::1/64")
+ * @param cidr {string} the candidate (e.g. "2001:db8:1::1/64")
  * @throws {Error} kind "routeros" when it does not parse, or parses as IPv4
  * @internal
  */

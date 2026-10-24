@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - LTE / cellular: a mobile-broadband uplink.
@@ -14,11 +14,11 @@ export def const LTE_APN_PATH as string init "/interface/lte/apn";
 /**
  * One LTE (cellular) interface.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} name     the interface name (e.g. "lte1")
- * @field {bool}   running  true when the modem has a data connection
- * @field {bool}   disabled true when switched off
- * @field {string} comment  free-text comment, "" when unset
+ * @field id {string}       internal RouterOS id
+ * @field name {string}     the interface name (e.g. "lte1")
+ * @field running {bool}   the modem has a data connection
+ * @field disabled {bool}  administratively off
+ * @field comment {string}  free-text comment, "" when unset
  */
 export def struct LteInterface {
     id as string,
@@ -29,16 +29,16 @@ export def struct LteInterface {
 };
 
 /**
- * The live state of an LTE modem, measured now.
+ * The measured state of an LTE modem.
  *
- * @field {string} status             registration status ("registered", ...)
- * @field {bool}   registered         computed: the status contains "registered"
- * @field {string} operator           the mobile network operator
- * @field {string} accessTechnology   "lte" / "5g" / "hspa" / ... as reported
- * @field {string} signalStrength     RSSI as reported (dBm)
- * @field {string} rsrp               reference signal received power (LTE)
- * @field {string} rsrq               reference signal received quality (LTE)
- * @field {string} sinr               signal-to-noise ratio
+ * @field status {string}             registration status ("registered", ...)
+ * @field registered {bool}           the status contains "registered"
+ * @field operator {string}           the mobile network operator
+ * @field accessTechnology {string}   "lte" / "5g" / "hspa" / ... as reported
+ * @field signalStrength {string}     RSSI as reported (dBm)
+ * @field rsrp {string}               reference signal received power (LTE)
+ * @field rsrq {string}               reference signal received quality (LTE)
+ * @field sinr {string}               signal-to-noise ratio
  */
 export def struct LteStatus {
     status as string,
@@ -52,11 +52,12 @@ export def struct LteStatus {
 };
 
 /**
- * List the LTE interfaces on the router.
+ * List the LTE interfaces.
  *
- * Returns an empty list on routers without a cellular modem.
+ * Any read error gives an empty list, so a router without a modem reads
+ * as empty - and so does a dropped connection.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of LteInterface} all LTE interfaces
  */
 export func lteInterfaces(c as Client) {
@@ -74,15 +75,14 @@ export func lteInterfaces(c as Client) {
 }
 
 /**
- * Measure an LTE modem's live state: registered, operator, signal.
+ * Measure an LTE modem now: registration, operator, signal.
  *
- * The first thing to check on a cellular uplink - a bad `signalStrength`
- * (below about -100 dBm RSRP) or a not-registered status explains a
- * flaky connection. An external antenna and modem placement are the
- * usual fixes.
+ * Runs `monitor once`. An RSRP below about -100 dBm or a status other
+ * than registered explains a flaky uplink; an external antenna or a
+ * better modem position are the usual fixes.
  *
- * @param {Client} c    an open client
- * @param {string} name the LTE interface (e.g. "lte1")
+ * @param c {Client}    an open client
+ * @param name {string} the LTE interface (e.g. "lte1")
  * @return {LteStatus} the measured state
  * @throws {Error} kind "routeros" when no LTE interface has that name
  * @example
@@ -101,13 +101,13 @@ export func lteStatus(c as Client, name as string) {
 /**
  * Set the APN (carrier access point name) for an LTE interface.
  *
- * The APN is what the SIM's carrier requires to reach data - a wrong
- * one is the most common "modem registered but no internet" cause.
- * Creates (or updates) an APN profile and binds it to the interface.
+ * A wrong APN is the usual cause of "registered but no internet".
+ * Creates or updates the APN profile "routeros-<interface>" and binds it
+ * to the interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the LTE interface
- * @param {string} apn           the carrier APN (e.g. "internet", "web.provider")
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the LTE interface
+ * @param apn {string}           the carrier APN (e.g. "internet", "web.provider")
  * @throws {Error} kind "routeros" on an empty APN or unknown interface
  * @example
  *   mt.setLteApn($c, "lte1", "internet");
@@ -129,10 +129,10 @@ export func setLteApn(c as Client, interfaceName as string, apn as string) {
 }
 
 /**
- * Switch an LTE interface on.
+ * Enable an LTE interface.
  *
- * @param {Client} c    an open client
- * @param {string} name the LTE interface
+ * @param c {Client}    an open client
+ * @param name {string} the LTE interface
  * @throws {Error} kind "routeros" when no LTE interface has that name
  */
 export func enableLte(c as Client, name as string) {
@@ -140,10 +140,10 @@ export func enableLte(c as Client, name as string) {
 }
 
 /**
- * Switch an LTE interface off (the cellular uplink drops).
+ * Disable an LTE interface; the cellular uplink drops.
  *
- * @param {Client} c    an open client
- * @param {string} name the LTE interface
+ * @param c {Client}    an open client
+ * @param name {string} the LTE interface
  * @throws {Error} kind "routeros" when no LTE interface has that name
  */
 export func disableLte(c as Client, name as string) {
@@ -153,7 +153,7 @@ export func disableLte(c as Client, name as string) {
 /**
  * Fold a reply row into an LteInterface.
  *
- * @param {map of string to string} row an "/interface/lte/print" row
+ * @param row {map of string to string} an "/interface/lte/print" row
  * @return {LteInterface} the typed interface
  * @internal
  */
@@ -172,7 +172,7 @@ func lteFromRow(row as map of string to string) {
  *
  * `registered` is computed here: the status contains "registered".
  *
- * @param {map of string to string} row the merged monitor rows
+ * @param row {map of string to string} the merged monitor rows
  * @return {LteStatus} the typed live state
  * @internal
  */

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - MikroTik Cloud DDNS: a stable name for a dynamic address.
@@ -9,13 +9,13 @@
 export def const CLOUD_PATH as string init "/ip/cloud";
 
 /**
- * The MikroTik Cloud DDNS state.
+ * MikroTik Cloud DDNS state.
  *
- * @field {bool}   ddnsEnabled   true when the router keeps its cloud name updated
- * @field {string} dnsName       the router's name (<serial>.sn.mynetname.net),
- *                               "" until the first update completed
- * @field {string} publicAddress the public address the cloud last saw
- * @field {string} updateTime    when the name was last updated, as reported
+ * @field ddnsEnabled {bool} whether the router keeps its cloud name updated
+ * @field dnsName {string} `<serial>.sn.mynetname.net`, "" until the first
+ *        update completes
+ * @field publicAddress {string} the public address MikroTik's servers last saw
+ * @field updateTime {string} time of the last update, as RouterOS prints it
  */
 export def struct CloudStatus {
     ddnsEnabled as bool,
@@ -27,7 +27,7 @@ export def struct CloudStatus {
 /**
  * Read the cloud DDNS state.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {CloudStatus} the current state
  */
 export func cloudStatus(c as Client) {
@@ -35,18 +35,16 @@ export func cloudStatus(c as Client) {
 }
 
 /**
- * Give the router a stable public DNS name (MikroTik Cloud DDNS).
+ * Turn on MikroTik Cloud DDNS and force an update.
  *
- * The router registers `<serial>.sn.mynetname.net` with MikroTik and
- * keeps it pointing at the current public address - the free answer to
- * a dynamic-IP WAN. The name is what road warriors dial
- * (`connectWireguard` endpoint, `enableLetsEncrypt` dns-name). An
- * update is forced immediately; the name usually resolves within a
- * minute.
+ * The router registers `<serial>.sn.mynetname.net` and keeps it pointing
+ * at its current public address. Use the name as the `connectWireguard`
+ * endpoint or the `enableLetsEncrypt` dns-name. It usually resolves
+ * within a minute.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @throws {Error} kind "mikrotik" when the router cannot reach the
- *                 cloud servers
+ *         cloud servers
  */
 export func enableCloudDns(c as Client) {
     apiRun($c, CLOUD_PATH + "/set", {"ddns-enabled": "yes"});
@@ -55,19 +53,19 @@ export func enableCloudDns(c as Client) {
 }
 
 /**
- * Switch cloud DDNS off; the name stops updating.
+ * Turn cloud DDNS off; the name stops following the public address.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableCloudDns(c as Client) {
     apiRun($c, CLOUD_PATH + "/set", {"ddns-enabled": "no"});
 }
 
 /**
- * The router's cloud DNS name, ready to dial.
+ * Read the router's cloud DNS name.
  *
- * @param {Client} c an open client
- * @return {string} the name (e.g. "1234567890ab.sn.mynetname.net")
+ * @param c {Client} an open client
+ * @return {string} the name, e.g. "1234567890ab.sn.mynetname.net"
  * @throws {Error} kind "routeros" when no name is assigned yet
  */
 export func routerDnsName(c as Client) {
@@ -79,9 +77,9 @@ export func routerDnsName(c as Client) {
 }
 
 /**
- * Fold a reply row into the CloudStatus.
+ * Fold the "/ip/cloud/print" row into a CloudStatus.
  *
- * @param {map of string to string} row the "/ip/cloud/print" row
+ * @param row {map of string to string} the reply row
  * @return {CloudStatus} the typed state
  * @internal
  */

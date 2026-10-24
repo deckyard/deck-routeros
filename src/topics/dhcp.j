@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - DHCP server, leases, and the WAN-side DHCP client.
 # Spliced into routeros.j via include - not a standalone module.
 
-/** RouterOS API path of the address-pool list (DHCP hands these out). */
+/** RouterOS API path of the address-pool list. */
 export def const IP_POOL_PATH as string init "/ip/pool";
 
 /** RouterOS API path of the DHCP server list. */
 export def const DHCP_SERVER_PATH as string init "/ip/dhcp-server";
 
-/** RouterOS API path of the DHCP network list (gateway / DNS per subnet). */
+/** RouterOS API path of the DHCP network list (gateway and DNS per subnet). */
 export def const DHCP_NETWORK_PATH as string init "/ip/dhcp-server/network";
 
 /** RouterOS API path of the DHCP lease list. */
 export def const DHCP_LEASE_PATH as string init "/ip/dhcp-server/lease";
 
-/** RouterOS API path of the DHCP client list (the WAN side). */
+/** RouterOS API path of the DHCP client list. */
 export def const DHCP_CLIENT_PATH as string init "/ip/dhcp-client";
 
 /** RouterOS API path of the DHCP relay list. */
@@ -26,12 +26,12 @@ export def const DHCP_RELAY_PATH as string init "/ip/dhcp-relay";
 /**
  * One DHCP server instance.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          server name
- * @field {string} interfaceName interface the server listens on
- * @field {string} addressPool   pool it hands addresses out of
- * @field {string} leaseTime     how long a lease lasts (e.g. "30m")
- * @field {bool}   disabled      true when the server is switched off
+ * @field id {string}            internal RouterOS id
+ * @field name {string}          server name
+ * @field interfaceName {string} interface the server listens on
+ * @field addressPool {string}   pool it hands addresses out of
+ * @field leaseTime {string}     lease duration as RouterOS prints it (e.g. "30m")
+ * @field disabled {bool}        true when switched off
  */
 export def struct DhcpServer {
     id as string,
@@ -43,17 +43,17 @@ export def struct DhcpServer {
 };
 
 /**
- * One DHCP lease: an address handed out to (or reserved for) a device.
+ * One DHCP lease: an address handed out to, or reserved for, a device.
  *
- * @field {string} id           internal RouterOS id
- * @field {string} address      the leased IP address
- * @field {string} mac          the device's MAC address
- * @field {string} hostName     the name the device reported, "" when none
- * @field {string} server       the DHCP server that owns the lease
- * @field {string} status       lease state ("bound", "waiting", ...)
- * @field {bool}   dynamic      true for an automatic lease, false for a static reservation
- * @field {string} expiresAfter time until the lease runs out, "" for static
- * @field {string} comment      free-text comment, "" when unset
+ * @field id {string}           internal RouterOS id
+ * @field address {string}      leased address
+ * @field mac {string}          device MAC address
+ * @field hostName {string}     host name the device sent, "" when none
+ * @field server {string}       DHCP server that owns the lease
+ * @field status {string}       lease state ("bound", "waiting", ...)
+ * @field dynamic {bool}        true for an automatic lease, false for a reservation
+ * @field expiresAfter {string} time until the lease runs out, "" for static
+ * @field comment {string}      free-text comment, "" when unset
  */
 export def struct DhcpLease {
     id as string,
@@ -68,24 +68,24 @@ export def struct DhcpLease {
 };
 
 /**
- * One DHCP client: an interface that asks another network (usually the
- * ISP) for its address - the typical WAN configuration.
+ * One DHCP client: an interface that gets its address from another
+ * network, usually the ISP.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} interfaceName   interface the client runs on (the WAN port)
- * @field {string} status          "bound" when an address was obtained;
+ * @field id {string}              internal RouterOS id
+ * @field interfaceName {string}   interface the client runs on
+ * @field status {string}          "bound" when an address was obtained;
  *                                 "searching..." while still asking
- * @field {bool}   bound           true when the status is "bound"
- * @field {string} address         the address the ISP handed out (with prefix)
- * @field {string} gateway         the ISP's gateway
- * @field {string} primaryDns      DNS server the ISP announced, "" when none
- * @field {string} secondaryDns    second DNS server, "" when none
- * @field {string} expiresAfter    time until the lease must be renewed
- * @field {bool}   usePeerDns      true when the router adopts the ISP's DNS servers
- * @field {string} addDefaultRoute whether the client installs the default
- *                                 route ("yes" / "no" / "special-classless")
- * @field {bool}   disabled        true when the client is switched off
- * @field {string} comment         free-text comment, "" when unset
+ * @field bound {bool}             true when the status is "bound"
+ * @field address {string}         address obtained, with prefix
+ * @field gateway {string}         gateway obtained
+ * @field primaryDns {string}      first DNS server announced, "" when none
+ * @field secondaryDns {string}    second DNS server, "" when none
+ * @field expiresAfter {string}    time until the lease must be renewed
+ * @field usePeerDns {bool}        true when the router adopts the announced DNS servers
+ * @field addDefaultRoute {string} default-route mode: "yes", "no" or
+ *                                 "special-classless"
+ * @field disabled {bool}          true when switched off
+ * @field comment {string}         free-text comment, "" when unset
  */
 export def struct DhcpClient {
     id as string,
@@ -106,7 +106,7 @@ export def struct DhcpClient {
 /**
  * List every DHCP server instance on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DhcpServer} all DHCP servers
  */
 export func dhcpServers(c as Client) {
@@ -119,32 +119,30 @@ export func dhcpServers(c as Client) {
 }
 
 /**
- * Set up a complete, working DHCP server in one call.
+ * Set up a DHCP server: address pool, server and network entry.
  *
- * RouterOS needs three separate objects for DHCP to work - an address
- * pool, the server itself, and a network entry (gateway + DNS for the
- * clients). This creates all three, cross-checked: the gateway and the
- * pool range must lie inside the network, and the interface must exist.
- * The pool shares the server's name, so `teardownDhcp` can undo
- * everything.
+ * Every value is checked before anything is created: the gateway and the
+ * range ends must lie inside the network, the DNS entries must be IP
+ * addresses, the interface must exist. The pool takes the server's name,
+ * so `teardownDhcp` can undo the setup. Not idempotent.
  *
- * Note: the interface itself needs an address inside the network too
- * (see `addIpAddress`) - clients get a gateway they can only reach if
- * the router is actually on that network.
+ * The interface needs an address inside the network as well (see
+ * `addIpAddress`), or clients get a gateway they cannot reach.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the server and its pool (e.g. "dhcplan")
- * @param {string} interfaceName interface (or bridge) to serve on
- * @param {string} network       the client network as CIDR (e.g. "192.168.88.0/24")
- * @param {string} gateway       gateway address for the clients, inside `network`
+ * @param c {Client}             an open client
+ * @param name {string}          name of the server and its pool (e.g. "dhcplan")
+ * @param interfaceName {string} interface (or bridge) to serve on
+ * @param network {string}       client network in CIDR form (e.g. "192.168.88.0/24")
+ * @param gateway {string}       gateway told to clients, inside `network`
  *                               (usually the router's own address there)
- * @param {string} rangeFrom     first address to hand out, inside `network`
- * @param {string} rangeTo       last address to hand out, inside `network`
- * @param {string} dns           DNS server(s) for the clients, comma-separated
- *                               (the gateway itself, if the router resolves -
- *                               see `allowRemoteDnsRequests`)
+ * @param rangeFrom {string}     first address to hand out, inside `network`
+ * @param rangeTo {string}       last address to hand out, inside `network`
+ * @param dns {string}           DNS servers told to clients, comma-separated IP
+ *                               addresses (the gateway itself when the router
+ *                               resolves, see `allowRemoteDnsRequests`)
  * @return {string} the RouterOS id of the DHCP server
- * @throws {Error} kind "routeros" when a value is malformed or inconsistent
+ * @throws {Error} kind "routeros" when a value is malformed, outside the
+ *                 network, or the interface does not exist
  * @example
  *   mt.addIpAddress($c, "192.168.77.1/24", "brlan");
  *   mt.setupDhcp($c, "dhcplan", "brlan", "192.168.77.0/24",
@@ -179,15 +177,14 @@ export func setupDhcp(
 }
 
 /**
- * Undo a `setupDhcp`: remove the server, its pool, and the network entry.
+ * Undo a `setupDhcp`: remove the server, its pool and the network entry.
  *
- * Each of the three pieces is removed if present, so a half-finished
- * setup tears down cleanly too. For finer control use the generic verbs
- * (`removeByName` on DHCP_SERVER_PATH / IP_POOL_PATH).
+ * Each piece is removed when present, so a half-finished setup tears down
+ * too. The network entry is matched by its exact CIDR string.
  *
- * @param {Client} c       an open client
- * @param {string} name    the name given to `setupDhcp`
- * @param {string} network the client network as CIDR, as given to `setupDhcp`
+ * @param c {Client}       an open client
+ * @param name {string}    the name given to `setupDhcp`
+ * @param network {string} the CIDR string given to `setupDhcp`
  * @throws {Error} kind "routeros" when none of the three pieces exists
  */
 export func teardownDhcp(c as Client, name as string, network as string) {
@@ -217,7 +214,7 @@ export func teardownDhcp(c as Client, name as string, network as string) {
 /**
  * List every DHCP lease: addresses handed out and static reservations.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DhcpLease} all leases
  */
 export func dhcpLeases(c as Client) {
@@ -232,14 +229,14 @@ export func dhcpLeases(c as Client) {
 /**
  * Reserve a fixed IP address for one device (a static lease).
  *
- * The device keeps getting `address` every time it asks, identified by
- * its MAC address.
+ * The device, identified by its MAC, gets `address` every time it asks.
+ * Not idempotent.
  *
- * @param {Client} c       an open client
- * @param {string} address the address to reserve (e.g. "192.168.88.50")
- * @param {string} mac     the device's MAC address ("AA:BB:CC:DD:EE:FF",
- *                         case-insensitive)
- * @param {string} comment friendly note about the device (e.g. "printer")
+ * @param c {Client}       an open client
+ * @param address {string} address to reserve (e.g. "192.168.88.50")
+ * @param mac {string}     device MAC, six colon-separated hex pairs, any
+ *                         case; sent uppercased
+ * @param comment {string} free-text note (e.g. "printer"), "" for none
  * @return {string} the RouterOS id of the reservation
  * @throws {Error} kind "routeros" on a malformed address or MAC
  */
@@ -259,8 +256,8 @@ export func addStaticLease(c as Client, address as string, mac as string, commen
 /**
  * Remove the lease or reservation held by a MAC address.
  *
- * @param {Client} c   an open client
- * @param {string} mac the device's MAC address
+ * @param c {Client}   an open client
+ * @param mac {string} device MAC, any case
  * @throws {Error} kind "routeros" on a malformed MAC or when no lease exists
  */
 export func removeLeaseByMac(c as Client, mac as string) {
@@ -279,7 +276,7 @@ export func removeLeaseByMac(c as Client, mac as string) {
 /**
  * List every DHCP client on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DhcpClient} all DHCP clients with their lease state
  */
 export func dhcpClients(c as Client) {
@@ -292,16 +289,15 @@ export func dhcpClients(c as Client) {
 }
 
 /**
- * Configure an interface as the WAN port: ask the ISP for an address.
+ * Run a DHCP client on the WAN interface.
  *
- * Starts a DHCP client with the defaults a home/office uplink wants -
- * the ISP's default route is installed and its DNS servers adopted.
- * Idempotent: if a DHCP client already runs on that interface, its id
- * is returned untouched. Combined with `addMasquerade` on the same
- * interface this is the complete "give the router internet" recipe.
+ * The client installs the ISP's default route and adopts its DNS
+ * servers. Idempotent: when a DHCP client already runs on the interface,
+ * its id is returned and its settings are left alone. With
+ * `addMasquerade` on the same interface the LAN reaches the internet.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the internet-facing interface (e.g. "ether1")
+ * @param c {Client}             an open client
+ * @param interfaceName {string} internet-facing interface (e.g. "ether1")
  * @return {string} the RouterOS id of the (new or existing) DHCP client
  * @throws {Error} kind "routeros" when the interface does not exist
  * @example
@@ -315,14 +311,15 @@ export func setupWan(c as Client, interfaceName as string) {
 /**
  * Like `setupWan`, choosing what the router adopts from the ISP.
  *
- * Say no to `addDefaultRoute` when this uplink is a backup line whose
- * route you manage yourself (`addRouteWithDistance`); say no to
- * `usePeerDns` to keep the DNS servers you set with `setDnsServers`.
+ * Decline `addDefaultRoute` for a backup line whose route you manage
+ * (`addRouteWithDistance`); decline `usePeerDns` to keep the servers set
+ * with `setDnsServers`. Idempotent like `setupWan`: an existing client
+ * keeps its settings.
  *
- * @param {Client} c               an open client
- * @param {string} interfaceName   the internet-facing interface
- * @param {bool}   usePeerDns      adopt the ISP's DNS servers
- * @param {bool}   addDefaultRoute install the ISP's default route
+ * @param c {Client}               an open client
+ * @param interfaceName {string}   internet-facing interface
+ * @param usePeerDns {bool}        true to adopt the ISP's DNS servers
+ * @param addDefaultRoute {bool}   true to install the ISP's default route
  * @return {string} the RouterOS id of the (new or existing) DHCP client
  * @throws {Error} kind "routeros" when the interface does not exist
  */
@@ -348,10 +345,10 @@ export func setupWanWith(
 }
 
 /**
- * Read the WAN state of an interface: did we get an address, and which?
+ * Read the DHCP client state of a WAN interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface the DHCP client runs on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface the DHCP client runs on
  * @return {DhcpClient} the client state; check `bound` and `address`
  * @throws {Error} kind "routeros" when no DHCP client runs on that interface
  * @example
@@ -370,8 +367,8 @@ export func wanStatus(c as Client, interfaceName as string) {
 /**
  * Ask the ISP for a fresh lease now (DHCP renew).
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface the DHCP client runs on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface the DHCP client runs on
  * @throws {Error} kind "routeros" when no DHCP client runs on that interface
  */
 export func renewWan(c as Client, interfaceName as string) {
@@ -381,11 +378,11 @@ export func renewWan(c as Client, interfaceName as string) {
 /**
  * Remove the DHCP client from an interface.
  *
- * The interface loses its ISP-assigned address, default route, and DNS
- * servers - the uplink goes down until reconfigured.
+ * The interface loses its ISP-assigned address, default route and DNS
+ * servers: the uplink is down until reconfigured.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface the DHCP client runs on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface the DHCP client runs on
  * @throws {Error} kind "routeros" when no DHCP client runs on that interface
  */
 export func removeDhcpClient(c as Client, interfaceName as string) {
@@ -393,10 +390,10 @@ export func removeDhcpClient(c as Client, interfaceName as string) {
 }
 
 /**
- * Switch the DHCP client on an interface on.
+ * Enable the DHCP client on an interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface the DHCP client runs on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface the DHCP client runs on
  * @throws {Error} kind "routeros" when no DHCP client runs on that interface
  */
 export func enableDhcpClient(c as Client, interfaceName as string) {
@@ -404,10 +401,10 @@ export func enableDhcpClient(c as Client, interfaceName as string) {
 }
 
 /**
- * Switch the DHCP client on an interface off.
+ * Disable the DHCP client on an interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface the DHCP client runs on
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface the DHCP client runs on
  * @throws {Error} kind "routeros" when no DHCP client runs on that interface
  */
 export func disableDhcpClient(c as Client, interfaceName as string) {
@@ -417,7 +414,7 @@ export func disableDhcpClient(c as Client, interfaceName as string) {
 /**
  * Fold a reply row into a DhcpServer.
  *
- * @param {map of string to string} row an "/ip/dhcp-server/print" row
+ * @param row {map of string to string} an "/ip/dhcp-server/print" row
  * @return {DhcpServer} the typed server
  * @internal
  */
@@ -435,7 +432,7 @@ func dhcpServerFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a DhcpLease.
  *
- * @param {map of string to string} row an "/ip/dhcp-server/lease/print" row
+ * @param row {map of string to string} an "/ip/dhcp-server/lease/print" row
  * @return {DhcpLease} the typed lease
  * @internal
  */
@@ -457,8 +454,8 @@ func dhcpLeaseFromRow(row as map of string to string) {
  * Resolve an interface name to the id of its DHCP client, with a
  * friendly error when there is none.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to look for
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface to look for
  * @return {string} the DHCP client id
  * @throws {Error} kind "routeros" when no DHCP client runs there
  * @internal
@@ -477,7 +474,7 @@ func requiredDhcpClientId(c as Client, interfaceName as string) {
  *
  * `bound` is computed here: the status equals "bound".
  *
- * @param {map of string to string} row an "/ip/dhcp-client/print" row
+ * @param row {map of string to string} an "/ip/dhcp-client/print" row
  * @return {DhcpClient} the typed client state
  * @internal
  */
@@ -501,14 +498,14 @@ func dhcpClientFromRow(row as map of string to string) {
 }
 
 /**
- * One DHCP relay: forwards DHCP requests from a local network to a
- * remote DHCP server.
+ * One DHCP relay: forwards a local network's DHCP requests to a remote
+ * server.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          the relay name
- * @field {string} interfaceName the interface whose clients are relayed
- * @field {string} dhcpServer    the remote DHCP server's address
- * @field {bool}   disabled      true when switched off
+ * @field id {string}            internal RouterOS id
+ * @field name {string}          relay name
+ * @field interfaceName {string} interface whose clients are relayed
+ * @field dhcpServer {string}    remote DHCP server address
+ * @field disabled {bool}        true when switched off
  */
 export def struct DhcpRelay {
     id as string,
@@ -521,7 +518,7 @@ export def struct DhcpRelay {
 /**
  * List the DHCP relays.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DhcpRelay} all relays
  */
 export func dhcpRelays(c as Client) {
@@ -536,19 +533,18 @@ export func dhcpRelays(c as Client) {
 /**
  * Relay a network's DHCP requests to a central DHCP server.
  *
- * Instead of running a DHCP server on the router (`setupDhcp`), forward
- * the clients' requests to a DHCP server elsewhere (a central server for
- * many sites/VLANs). The interface's clients broadcast; the relay
- * unicasts to `serverAddress` and hands the reply back. The interface
- * needs an address in the client network so the server knows which
- * subnet to serve. Idempotent by name.
+ * The clients' broadcasts on the interface are unicast to
+ * `serverAddress` and the replies handed back. The interface needs an
+ * address in the client network, which tells the server which subnet to
+ * serve. Idempotent by name: an existing relay is returned unchanged.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the relay
- * @param {string} interfaceName the interface whose clients are relayed
- * @param {string} serverAddress the central DHCP server's address
+ * @param c {Client}             an open client
+ * @param name {string}          relay name
+ * @param interfaceName {string} interface whose clients are relayed
+ * @param serverAddress {string} central DHCP server IP address
  * @return {string} the RouterOS id of the (new or existing) relay
- * @throws {Error} kind "routeros" on a bad name, address, or unknown interface
+ * @throws {Error} kind "routeros" on a bad name, an address that is not an
+ *                 IP, or an unknown interface
  * @example
  *   mt.addDhcpRelay($c, "vlan20-relay", "vlanoffice", "10.0.0.5");
  */
@@ -574,8 +570,8 @@ export func addDhcpRelay(
 /**
  * Remove a DHCP relay.
  *
- * @param {Client} c    an open client
- * @param {string} name the relay name
+ * @param c {Client}    an open client
+ * @param name {string} relay name
  * @throws {Error} kind "routeros" when no relay has that name
  */
 export func removeDhcpRelay(c as Client, name as string) {
@@ -585,7 +581,7 @@ export func removeDhcpRelay(c as Client, name as string) {
 /**
  * Fold a reply row into a DhcpRelay.
  *
- * @param {map of string to string} row an "/ip/dhcp-relay/print" row
+ * @param row {map of string to string} an "/ip/dhcp-relay/print" row
  * @return {DhcpRelay} the typed relay
  * @internal
  */

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - switch chip: hardware-offload inventory and host table.
@@ -8,15 +8,15 @@
 /** RouterOS API path of the ethernet switch chip(s). */
 export def const ETHERNET_SWITCH_PATH as string init "/interface/ethernet/switch";
 
-/** RouterOS API path of the switch chip's hardware MAC host table. */
+/** RouterOS API path of the switch chip's hardware MAC table. */
 export def const ETHERNET_SWITCH_HOST_PATH as string init "/interface/ethernet/switch/host";
 
 /**
  * One switch chip on the router.
  *
- * @field {string} id   internal RouterOS id
- * @field {string} name the chip name (e.g. "switch1")
- * @field {string} kind the chip model as reported (e.g. "Atheros-8327")
+ * @field id {string} internal RouterOS id
+ * @field name {string} chip name, e.g. "switch1"
+ * @field kind {string} chip model as reported (the `type` property), e.g. "Atheros-8327"
  */
 export def struct SwitchChip {
     id as string,
@@ -27,13 +27,13 @@ export def struct SwitchChip {
 /**
  * One entry in the switch chip's hardware MAC table.
  *
- * A populated table is the honest sign that traffic is being forwarded
- * in hardware (the chip learned the MAC) rather than by the CPU.
+ * An entry means the chip learned the MAC, so traffic to it is forwarded
+ * in hardware, not by the CPU.
  *
- * @field {string} mac     the learned MAC address
- * @field {string} ports   the switch port(s) it was learned on
- * @field {int}    vlanId  the VLAN it belongs to (0 when untagged / not reported)
- * @field {bool}   dynamic true when learned, false for a static entry
+ * @field mac {string} learned MAC address
+ * @field ports {string} switch port(s) it was learned on
+ * @field vlanId {int} VLAN id, 0 when untagged or not reported
+ * @field dynamic {bool} true when learned, false for a static entry
  */
 export def struct SwitchHost {
     mac as string,
@@ -43,13 +43,13 @@ export def struct SwitchHost {
 };
 
 /**
- * List the switch chip(s) on the router.
+ * List the switch chips on the router.
  *
- * Returns an empty list on routers without a switch chip (a pure-CPU
- * board). Having a chip is what makes wire-speed switching and the
- * bridge hardware-offload possible.
+ * Empty on a board without a switch chip (pure CPU), which cannot
+ * offload bridging to hardware. Any read error, a dropped connection
+ * included, also yields an empty list.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of SwitchChip} the switch chips
  */
 export func switchChips(c as Client) {
@@ -67,18 +67,14 @@ export func switchChips(c as Client) {
 }
 
 /**
- * Read the switch chip's hardware MAC table.
+ * Read the switch chip's hardware MAC table, all of it (it can be large).
  *
- * If this is populated for your LAN's MACs, the switch chip is doing the
- * forwarding - the traffic never reaches the CPU. If your VLAN-aware
- * bridge is offloading (bridge ports with `hardwareOffload == true`),
- * the learned hosts show up here. An empty table on a busy LAN, with the
- * CPU high, means offload is NOT engaging - something in the config
- * forced software forwarding.
+ * LAN MACs in this table mean the chip forwards their traffic. An empty
+ * table on a busy LAN with high CPU load means offload is not engaging
+ * and the bridge forwards in software. Any read error, a dropped
+ * connection included, yields an empty list.
  *
- * The table can be large; this returns all of it.
- *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of SwitchHost} the hardware MAC entries
  */
 export func switchHosts(c as Client) {
@@ -98,7 +94,7 @@ export func switchHosts(c as Client) {
 /**
  * Fold a reply row into a SwitchChip.
  *
- * @param {map of string to string} row an "/interface/ethernet/switch/print" row
+ * @param row {map of string to string} an "/interface/ethernet/switch/print" row
  * @return {SwitchChip} the typed chip
  * @internal
  */
@@ -113,7 +109,7 @@ func switchChipFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a SwitchHost.
  *
- * @param {map of string to string} row a switch host-table row
+ * @param row {map of string to string} a switch host-table row
  * @return {SwitchHost} the typed entry
  * @internal
  */

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - containers: run OCI images on the router (RouterOS v7).
@@ -20,20 +20,20 @@ export def const CONTAINER_CONFIG_PATH as string init "/container/config";
 /**
  * One container on the router.
  *
- * `name` is the handle you gave it - its `comment` - because RouterOS's
- * own `name` property on a container row is read-only and reports the
- * image tag ("pihole:latest"), not anything you chose. It falls back to
- * that tag only when the container carries no comment.
+ * RouterOS's own `name` property is read-only and reports the image tag
+ * ("pihole:latest"), so `name` here is the container's comment, which
+ * `addContainer` sets; it falls back to the tag when there is no comment.
  *
- * @field {string} id        internal RouterOS id
- * @field {string} name      the handle you gave it (`comment`), else the image tag
- * @field {string} tag       the image tag it runs
- * @field {string} status    "running", "stopped", "extracting", "error", ...
- * @field {bool}   running   true while the container is up
- * @field {string} interfaceName the veth interface it attaches to
- * @field {string} rootDir   where its filesystem lives on the router
- * @field {string} envLists  comma-separated env lists it reads ("" for none)
- * @field {string} mountLists comma-separated mount lists it uses ("" for none)
+ * @field id {string} RouterOS item id
+ * @field name {string} the comment `addContainer` set, else the image tag
+ * @field tag {string} image tag it runs
+ * @field status {string} "running", "stopped", "extracting", "error", ...;
+ *        derived from `running` when the router sends no status
+ * @field running {bool} whether the container is up
+ * @field interfaceName {string} veth interface it attaches to
+ * @field rootDir {string} path of its filesystem on the router
+ * @field envLists {string} comma-separated env lists, "" for none
+ * @field mountLists {string} comma-separated mount lists, "" for none
  */
 export def struct Container {
     id as string,
@@ -50,10 +50,10 @@ export def struct Container {
 /**
  * One environment variable belonging to a named env list.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} listName the list this variable belongs to
- * @field {string} key      the variable name (e.g. "TZ")
- * @field {string} value    the variable value
+ * @field id {string} RouterOS item id
+ * @field listName {string} env list it belongs to
+ * @field key {string} variable name, e.g. "TZ"
+ * @field value {string} variable value
  */
 export def struct ContainerEnv {
     id as string,
@@ -65,10 +65,10 @@ export def struct ContainerEnv {
 /**
  * One mount belonging to a named mount list.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} listName the list this mount belongs to
- * @field {string} src      the path on the router's storage
- * @field {string} dst      the path inside the container
+ * @field id {string} RouterOS item id
+ * @field listName {string} mount list it belongs to
+ * @field src {string} path on the router's storage
+ * @field dst {string} path inside the container
  */
 export def struct ContainerMount {
     id as string,
@@ -80,8 +80,8 @@ export def struct ContainerMount {
 /**
  * List the containers on the router.
  *
- * @param {Client} c an open client
- * @return {list of Container} all containers
+ * @param c {Client} an open client
+ * @return {list of Container} every container
  */
 export func containers(c as Client) {
     def rows as list of map of string to string init getAll($c, CONTAINER_PATH);
@@ -95,30 +95,25 @@ export func containers(c as Client) {
 /**
  * Add a container from a registry image.
  *
- * RouterOS pulls the image (from `remote-image`, e.g.
- * "pihole/pihole:latest"), extracts it into `rootDir` on the router's
- * storage, and attaches it to an existing veth interface for
- * networking. Containers are OFF by default and must be enabled in the
- * device settings first (`/container/config` and the `container`
- * package + a `devel`-signed enable) - a deliberate safety gate this
- * call does not bypass. The image is only fetched on `startContainer`.
+ * The image (`remote-image`) is extracted into `rootDir` on the router's
+ * storage and the container attaches to an existing veth interface.
+ * Prerequisites, set up first: the `container` package, container
+ * support enabled in the device mode (a console-side step this call
+ * does not bypass), the veth, and the storage. The container's comment
+ * is set to `name`, the handle the other container calls use.
  *
- * Networking (the veth), storage (`rootDir`), and enablement are
- * prerequisites you set up first (generic verbs); this call creates the
- * container entry itself. Environment variables and mounts are attached
- * separately - build the lists with `addContainerEnv` /
- * `addContainerMount`, point the container at them with
- * `setContainerEnvLists` / `setContainerMountLists`, and do both BEFORE
- * the first `startContainer`, since most images read their config only
- * at startup.
+ * Attach env and mount lists (`setContainerEnvLists`,
+ * `setContainerMountLists`) before the first `startContainer`: most
+ * images read their config only at startup.
  *
- * @param {Client} c             an open client
- * @param {string} name          a name/comment for the container
- * @param {string} remoteImage   the registry image (e.g. "pihole/pihole:latest")
- * @param {string} interfaceName the veth interface to attach
- * @param {string} rootDir       the filesystem path on the router (e.g. "usb1/pihole")
+ * @param c {Client} an open client
+ * @param name {string} handle for the container, stored as its comment
+ * @param remoteImage {string} registry image, e.g. "pihole/pihole:latest"
+ * @param interfaceName {string} existing veth interface
+ * @param rootDir {string} filesystem path on the router, e.g. "usb1/pihole"
  * @return {string} the RouterOS id of the container
- * @throws {Error} kind "routeros" on bad input or an unknown interface
+ * @throws {Error} kind "routeros" on a bad name, an empty image or root
+ *         directory, or an unknown interface
  * @example
  *   # prerequisites (generic verbs): a veth, and container support enabled
  *   mt.add($c, "/interface/veth", {"name": "veth1", "address": "172.17.0.2/24",
@@ -156,10 +151,10 @@ export func addContainer(
 }
 
 /**
- * Start a container (pulls the image on first run).
+ * Start a container.
  *
- * @param {Client} c    an open client
- * @param {string} name the container name/comment
+ * @param c {Client} an open client
+ * @param name {string} container comment or image tag
  * @throws {Error} kind "routeros" when no such container exists
  */
 export func startContainer(c as Client, name as string) {
@@ -169,8 +164,8 @@ export func startContainer(c as Client, name as string) {
 /**
  * Stop a container.
  *
- * @param {Client} c    an open client
- * @param {string} name the container name/comment
+ * @param c {Client} an open client
+ * @param name {string} container comment or image tag
  * @throws {Error} kind "routeros" when no such container exists
  */
 export func stopContainer(c as Client, name as string) {
@@ -178,10 +173,10 @@ export func stopContainer(c as Client, name as string) {
 }
 
 /**
- * Remove a container (its extracted filesystem goes too).
+ * Remove a container and its extracted filesystem.
  *
- * @param {Client} c    an open client
- * @param {string} name the container name/comment
+ * @param c {Client} an open client
+ * @param name {string} container comment or image tag
  * @throws {Error} kind "routeros" when no such container exists
  */
 export func removeContainer(c as Client, name as string) {
@@ -189,9 +184,9 @@ export func removeContainer(c as Client, name as string) {
 }
 
 /**
- * List the environment variables defined on the router.
+ * List the container environment variables of every env list.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of ContainerEnv} every variable, across all lists
  */
 export func containerEnvs(c as Client) {
@@ -206,16 +201,16 @@ export func containerEnvs(c as Client) {
 /**
  * Add one environment variable to a named env list.
  *
- * The list is just a name shared by its entries - RouterOS creates it
- * implicitly with the first variable. Point a container at it with
- * `setContainerEnvLists`, before that container's first start.
+ * A list is a name shared by its entries; the first variable creates
+ * it. Attach it with `setContainerEnvLists` before the container's
+ * first start. Not idempotent: clear the list first when re-running.
  *
- * @param {Client} c        an open client
- * @param {string} listName the env list to add to (e.g. "pihole-env")
- * @param {string} key      the variable name (e.g. "TZ")
- * @param {string} value    the variable value
+ * @param c {Client} an open client
+ * @param listName {string} env list, e.g. "pihole-env"
+ * @param key {string} variable name, e.g. "TZ"
+ * @param value {string} variable value
  * @return {string} the RouterOS id of the new entry
- * @throws {Error} kind "routeros" on an empty list name or key
+ * @throws {Error} kind "routeros" on a bad list name or an empty key
  * @example
  *   mt.addContainerEnv($c, "pihole-env", "TZ", "Europe/Vienna");
  */
@@ -233,22 +228,22 @@ export func addContainerEnv(c as Client, listName as string, key as string, valu
 /**
  * Delete every environment variable in a named list.
  *
- * Handy before re-adding them, so re-running a provisioning script does
- * not pile up duplicates.
+ * Run it before re-adding the variables so a provisioning script can be
+ * re-run without duplicates.
  *
- * @param {Client} c        an open client
- * @param {string} listName the env list to clear
- * @return {int} how many variables were deleted
- * @throws {Error} kind "routeros" on an empty list name
+ * @param c {Client} an open client
+ * @param listName {string} env list to clear
+ * @return {int} number of variables deleted
+ * @throws {Error} kind "routeros" on an empty list name or one with spaces
  */
 export func removeContainerEnvList(c as Client, listName as string) {
     return removeListEntries($c, CONTAINER_ENVS_PATH, $listName, "env list");
 }
 
 /**
- * List the container mounts defined on the router.
+ * List the container mounts of every mount list.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of ContainerMount} every mount, across all lists
  */
 export func containerMounts(c as Client) {
@@ -263,17 +258,17 @@ export func containerMounts(c as Client) {
 /**
  * Add one mount to a named mount list.
  *
- * `src` is a path on the router's own storage (it is created if
- * missing), `dst` the path it appears at inside the container. Mounting
- * a container's config directory out onto a disk is how its state
- * survives a re-pull of the image.
+ * `src` is a path on the router's storage, created if missing; `dst`
+ * is where it appears inside the container. A config directory mounted
+ * out to disk survives a re-pull of the image.
  *
- * @param {Client} c        an open client
- * @param {string} listName the mount list to add to (e.g. "pihole-etc")
- * @param {string} src      the path on the router (e.g. "usb1/pihole/etc")
- * @param {string} dst      the path inside the container (e.g. "/etc/pihole")
+ * @param c {Client} an open client
+ * @param listName {string} mount list, e.g. "pihole-etc"
+ * @param src {string} path on the router, e.g. "usb1/pihole/etc"
+ * @param dst {string} path inside the container, e.g. "/etc/pihole"
  * @return {string} the RouterOS id of the new entry
- * @throws {Error} kind "routeros" on an empty list name, source, or destination
+ * @throws {Error} kind "routeros" on a bad list name or an empty source or
+ *         destination
  * @example
  *   mt.addContainerMount($c, "pihole-etc", "usb1/pihole/etc", "/etc/pihole");
  */
@@ -294,26 +289,26 @@ export func addContainerMount(c as Client, listName as string, src as string, ds
 /**
  * Delete every mount in a named list.
  *
- * @param {Client} c        an open client
- * @param {string} listName the mount list to clear
- * @return {int} how many mounts were deleted
- * @throws {Error} kind "routeros" on an empty list name
+ * @param c {Client} an open client
+ * @param listName {string} mount list to clear
+ * @return {int} number of mounts deleted
+ * @throws {Error} kind "routeros" on an empty list name or one with spaces
  */
 export func removeContainerMountList(c as Client, listName as string) {
     return removeListEntries($c, CONTAINER_MOUNTS_PATH, $listName, "mount list");
 }
 
 /**
- * Point a container at the env lists it should read.
+ * Set the env lists a container reads, replacing the previous ones.
  *
- * Replaces whatever it referenced before; an empty list detaches all of
- * them. A running container does not pick this up - set it before the
- * first start, or stop and start it.
+ * An empty list detaches all of them. A running container picks the
+ * change up only after a stop and start.
  *
- * @param {Client} c         an open client
- * @param {string} name      the container name/comment
- * @param {list of string} listNames the env lists to attach
- * @throws {Error} kind "routeros" when no such container exists
+ * @param c {Client} an open client
+ * @param name {string} container comment or image tag
+ * @param listNames {list of string} env lists to attach
+ * @throws {Error} kind "routeros" when no such container exists or a list
+ *         name is empty or contains spaces
  * @example
  *   mt.setContainerEnvLists($c, "pihole", ["pihole-env"]);
  */
@@ -323,15 +318,15 @@ export func setContainerEnvLists(c as Client, name as string, listNames as list 
 }
 
 /**
- * Point a container at the mount lists it should use.
+ * Set the mount lists a container uses, replacing the previous ones.
  *
- * Replaces whatever it referenced before; an empty list detaches all of
- * them. Set it before the container's first start.
+ * An empty list detaches all of them. Set it before the first start.
  *
- * @param {Client} c         an open client
- * @param {string} name      the container name/comment
- * @param {list of string} listNames the mount lists to attach
- * @throws {Error} kind "routeros" when no such container exists
+ * @param c {Client} an open client
+ * @param name {string} container comment or image tag
+ * @param listNames {list of string} mount lists to attach
+ * @throws {Error} kind "routeros" when no such container exists or a list
+ *         name is empty or contains spaces
  * @example
  *   mt.setContainerMountLists($c, "pihole", ["pihole-etc"]);
  */
@@ -343,11 +338,11 @@ export func setContainerMountLists(c as Client, name as string, listNames as lis
 /**
  * Delete every entry under a path that belongs to one named list.
  *
- * @param {Client} c        an open client
- * @param {string} path     the env or mount list path
- * @param {string} listName the list to clear
- * @param {string} what     noun for the error message
- * @return {int} how many entries were deleted
+ * @param c {Client} an open client
+ * @param path {string} env or mount list path
+ * @param listName {string} list to clear
+ * @param what {string} noun for the error message
+ * @return {int} number of entries deleted
  * @throws {Error} kind "routeros" on an empty list name
  * @internal
  */
@@ -368,9 +363,9 @@ func removeListEntries(c as Client, path as string, listName as string, what as 
  * Validate and join list names into the comma-separated form RouterOS
  * wants in `envlists` / `mountlists`.
  *
- * @param {list of string} listNames the names to join
- * @param {string} what noun for the error message
- * @return {string} the joined names ("" for none)
+ * @param listNames {list of string} the names to join
+ * @param what {string} noun for the error message
+ * @return {string} the joined names, "" for none
  * @throws {Error} kind "routeros" on an empty or space-containing name
  * @internal
  */
@@ -382,10 +377,10 @@ func joinListNames(listNames as list of string, what as string) {
 }
 
 /**
- * Resolve a container name/comment to its id.
+ * Resolve a container to its id by comment or, failing that, image tag.
  *
- * @param {Client} c    an open client
- * @param {string} name the container name/comment
+ * @param c {Client} an open client
+ * @param name {string} container comment or image tag
  * @return {string} the container id
  * @throws {Error} kind "routeros" when no such container exists
  * @internal
@@ -401,13 +396,12 @@ func requiredContainerId(c as Client, name as string) {
 }
 
 /**
- * Fold a reply row into a Container.
+ * Fold a "/container/print" row into a Container.
  *
- * RouterOS reports the live state as a plain `running` bool; older
- * builds send a richer `status` word instead, so each fills in for the
- * other.
+ * Newer builds send a `running` flag, older ones a `status` word; each
+ * fills in for the other.
  *
- * @param {map of string to string} row a "/container/print" row
+ * @param row {map of string to string} the reply row
  * @return {Container} the typed container
  * @internal
  */
@@ -445,9 +439,9 @@ func containerFromRow(row as map of string to string) {
 }
 
 /**
- * Fold a reply row into a ContainerEnv.
+ * Fold a "/container/envs/print" row into a ContainerEnv.
  *
- * @param {map of string to string} row a "/container/envs/print" row
+ * @param row {map of string to string} the reply row
  * @return {ContainerEnv} the typed variable
  * @internal
  */
@@ -461,9 +455,9 @@ func containerEnvFromRow(row as map of string to string) {
 }
 
 /**
- * Fold a reply row into a ContainerMount.
+ * Fold a "/container/mounts/print" row into a ContainerMount.
  *
- * @param {map of string to string} row a "/container/mounts/print" row
+ * @param row {map of string to string} the reply row
  * @return {ContainerMount} the typed mount
  * @internal
  */

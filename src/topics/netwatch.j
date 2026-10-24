@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - netwatch: the router keeps an eye on hosts for you.
@@ -9,20 +9,19 @@
 export def const NETWATCH_PATH as string init "/tool/netwatch";
 
 /**
- * One watched host: the router probes it continuously and tracks state.
+ * One watched host and its current state.
  *
- * @field {string} id         internal RouterOS id
- * @field {string} host       the address being watched
- * @field {string} status     "up", "down", or "unknown" (not yet probed)
- * @field {bool}   up         computed: the status equals "up"
- * @field {string} since      when the current state began - "down since
- *                            yesterday 03:12" is the useful half of an outage report
- * @field {string} interval   time between probes as reported
- * @field {string} timeout    probe timeout as reported
- * @field {string} upScript   RouterOS script run when the host comes up, "" for none
- * @field {string} downScript RouterOS script run when the host goes down, "" for none
- * @field {bool}   disabled   true when the watch is switched off
- * @field {string} comment    free-text comment, "" when unset
+ * @field id {string} RouterOS item id
+ * @field host {string} watched address
+ * @field status {string} "up", "down", or "unknown" (not probed yet)
+ * @field up {bool} computed: whether status is "up"
+ * @field since {string} when the current state began, as RouterOS prints it
+ * @field interval {string} time between probes, as RouterOS prints it
+ * @field timeout {string} probe timeout, as RouterOS prints it
+ * @field upScript {string} RouterOS script run when the host comes up, "" for none
+ * @field downScript {string} RouterOS script run when the host goes down, "" for none
+ * @field disabled {bool} whether the watch is switched off
+ * @field comment {string} free-text comment, "" when unset
  */
 export def struct NetwatchHost {
     id as string,
@@ -39,10 +38,10 @@ export def struct NetwatchHost {
 };
 
 /**
- * List every watched host with its current state.
+ * List the watched hosts with their current state.
  *
- * @param {Client} c an open client
- * @return {list of NetwatchHost} all netwatch entries
+ * @param c {Client} an open client
+ * @return {list of NetwatchHost} every netwatch entry
  */
 export func netwatchHosts(c as Client) {
     def rows as list of map of string to string init getAll($c, NETWATCH_PATH);
@@ -54,16 +53,16 @@ export func netwatchHosts(c as Client) {
 }
 
 /**
- * Start watching a host (probing at the router's default interval).
+ * Start watching a host at the router's default probe interval.
  *
- * Idempotent: if the host is already watched, the existing entry's id
- * is returned.
+ * Idempotent: when the host is already watched, the existing entry's id
+ * is returned and the entry is left unchanged.
  *
- * @param {Client} c       an open client
- * @param {string} host    the address to watch (e.g. "192.168.88.50")
- * @param {string} comment friendly note (e.g. "printer") - "" for none
- * @return {string} the RouterOS id of the (new or existing) entry
- * @throws {Error} kind "routeros" on an empty or malformed host
+ * @param c {Client} an open client
+ * @param host {string} address to watch, e.g. "192.168.88.50"
+ * @param comment {string} free-text note, "" for none
+ * @return {string} the RouterOS id of the new or existing entry
+ * @throws {Error} kind "routeros" on an empty host or one containing spaces
  * @example
  *   mt.watchHost($c, "192.168.88.50", "printer");
  */
@@ -74,11 +73,13 @@ export func watchHost(c as Client, host as string, comment as string) {
 /**
  * Start watching a host, probing every `interval`.
  *
- * @param {Client} c        an open client
- * @param {string} host     the address to watch
- * @param {string} interval time between probes: "10s", "1m", "5m", ...
- * @param {string} comment  friendly note - "" for none
- * @return {string} the RouterOS id of the (new or existing) entry
+ * Idempotent like `watchHost`: an existing entry keeps its interval.
+ *
+ * @param c {Client} an open client
+ * @param host {string} address to watch
+ * @param interval {string} "10s", "1m", "5m", combined "1m30s", or "HH:MM:SS"
+ * @param comment {string} free-text note, "" for none
+ * @return {string} the RouterOS id of the new or existing entry
  * @throws {Error} kind "routeros" on a bad host or interval
  */
 export func watchHostWith(c as Client, host as string, interval as string, comment as string) {
@@ -88,19 +89,19 @@ export func watchHostWith(c as Client, host as string, interval as string, comme
 }
 
 /**
- * Watch a host and react to state changes with RouterOS scripts.
+ * Watch a host and run RouterOS scripts when its state flips.
  *
- * The scripts are the alerting hook: log, send an email, flip a route,
- * power-cycle a PoE port - whatever the situation calls for. They run
- * ON THE ROUTER (RouterOS script, not Jennifer) whenever the state
- * flips; at least one of the two must be given.
+ * The scripts run on the router (RouterOS script, not Jennifer), once
+ * per transition: log, send mail, change a route, power-cycle a PoE
+ * port. At least one must be given. Idempotent like `watchHost`: an
+ * existing entry keeps its scripts.
  *
- * @param {Client} c          an open client
- * @param {string} host       the address to watch
- * @param {string} downScript RouterOS script run when the host goes down, "" for none
- * @param {string} upScript   RouterOS script run when it comes back, "" for none
- * @param {string} comment    friendly note - "" for none
- * @return {string} the RouterOS id of the (new or existing) entry
+ * @param c {Client} an open client
+ * @param host {string} address to watch
+ * @param downScript {string} RouterOS script run when the host goes down, "" for none
+ * @param upScript {string} RouterOS script run when it comes back, "" for none
+ * @param comment {string} free-text note, "" for none
+ * @return {string} the RouterOS id of the new or existing entry
  * @throws {Error} kind "routeros" on a bad host or when both scripts are empty
  * @example
  *   mt.watchHostScripted($c, "192.168.88.50",
@@ -123,8 +124,8 @@ export func watchHostScripted(
 /**
  * Read the state of one watched host.
  *
- * @param {Client} c    an open client
- * @param {string} host the watched address
+ * @param c {Client} an open client
+ * @param host {string} watched address
  * @return {NetwatchHost} the entry; check `up` and `since`
  * @throws {Error} kind "routeros" when the host is not being watched
  */
@@ -138,12 +139,11 @@ export func hostStatus(c as Client, host as string) {
 }
 
 /**
- * The watched hosts that are down right now.
+ * List the watched hosts that are down right now.
  *
- * The morning sweep: an empty list is good news. Hosts still in
- * "unknown" state (just added, not yet probed) are not included.
+ * Hosts in "unknown" state (added, not probed yet) are not included.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of NetwatchHost} the down hosts, with their `since`
  */
 export func downHosts(c as Client) {
@@ -160,8 +160,8 @@ export func downHosts(c as Client) {
 /**
  * Stop watching a host and forget its entry.
  *
- * @param {Client} c    an open client
- * @param {string} host the watched address
+ * @param c {Client} an open client
+ * @param host {string} watched address
  * @throws {Error} kind "routeros" when the host is not being watched
  */
 export func unwatchHost(c as Client, host as string) {
@@ -171,8 +171,8 @@ export func unwatchHost(c as Client, host as string) {
 /**
  * Pause the watch on a host (entry and scripts kept).
  *
- * @param {Client} c    an open client
- * @param {string} host the watched address
+ * @param c {Client} an open client
+ * @param host {string} watched address
  * @throws {Error} kind "routeros" when the host is not being watched
  */
 export func disableWatch(c as Client, host as string) {
@@ -182,8 +182,8 @@ export func disableWatch(c as Client, host as string) {
 /**
  * Resume the watch on a host.
  *
- * @param {Client} c    an open client
- * @param {string} host the watched address
+ * @param c {Client} an open client
+ * @param host {string} watched address
  * @throws {Error} kind "routeros" when the host is not being watched
  */
 export func enableWatch(c as Client, host as string) {
@@ -191,15 +191,15 @@ export func enableWatch(c as Client, host as string) {
 }
 
 /**
- * Validate and create (or reuse) a netwatch entry.
+ * Validate the host and create a netwatch entry, or reuse an existing one.
  *
- * @param {Client} c          an open client
- * @param {string} host       the address to watch
- * @param {string} interval   probe interval, "" for the router default
- * @param {string} downScript on-down script, "" for none
- * @param {string} upScript   on-up script, "" for none
- * @param {string} comment    note, "" for none
- * @return {string} the RouterOS id of the (new or existing) entry
+ * @param c {Client} an open client
+ * @param host {string} address to watch
+ * @param interval {string} probe interval, "" for the router default
+ * @param downScript {string} on-down script, "" for none
+ * @param upScript {string} on-up script, "" for none
+ * @param comment {string} free-text note, "" for none
+ * @return {string} the RouterOS id of the new or existing entry
  * @throws {Error} kind "routeros" on a bad host
  * @internal
  */
@@ -234,10 +234,10 @@ func netwatchAdd(
 }
 
 /**
- * Resolve a watched host to its entry id, with a friendly error.
+ * Resolve a watched host to its entry id.
  *
- * @param {Client} c    an open client
- * @param {string} host the watched address
+ * @param c {Client} an open client
+ * @param host {string} watched address
  * @return {string} the entry id
  * @throws {Error} kind "routeros" when the host is not being watched
  * @internal
@@ -252,11 +252,10 @@ func requiredNetwatchId(c as Client, host as string) {
 }
 
 /**
- * Fold a reply row into a NetwatchHost.
+ * Fold a "/tool/netwatch/print" row into a NetwatchHost; `up` is
+ * computed from the status.
  *
- * `up` is computed here: the status equals "up".
- *
- * @param {map of string to string} row a "/tool/netwatch/print" row
+ * @param row {map of string to string} the reply row
  * @return {NetwatchHost} the typed entry
  * @internal
  */

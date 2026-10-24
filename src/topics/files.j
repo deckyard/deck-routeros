@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - files and backups: the router's storage.
+# routeros - files and backups.
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the file list. */
@@ -11,10 +11,10 @@ export def const FILE_PATH as string init "/file";
 /**
  * One file on the router's storage.
  *
- * @field {string} name         file name (with extension, e.g. "nightly.backup")
- * @field {string} kind         file type as reported ("backup", ".txt file", "directory", ...)
- * @field {int}    size         size in bytes
- * @field {string} creationTime when it was created, as reported
+ * @field name {string}         file name (with extension, e.g. "nightly.backup")
+ * @field kind {string}         file type as reported ("backup", ".txt file", "directory", ...)
+ * @field size {int}         size in bytes
+ * @field creationTime {string} when it was created, as reported
  */
 export def struct RouterFile {
     name as string,
@@ -26,7 +26,7 @@ export def struct RouterFile {
 /**
  * List the files on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of RouterFile} all files and directories
  */
 export func files(c as Client) {
@@ -41,17 +41,16 @@ export func files(c as Client) {
 /**
  * Save a full configuration backup (unencrypted).
  *
- * The backup lands as `<name>.backup` on the router's storage and is
- * verified to exist before returning. It contains EVERYTHING including
- * password hashes and keys - prefer `saveBackupWith` for anything that
- * leaves the router. Restoring is a console/WinBox operation
- * (`/system backup load`), deliberately not wrapped: it reboots into a
- * different identity.
+ * Writes `<name>.backup` to the router's storage and checks that it
+ * exists before returning. The backup holds the whole configuration,
+ * password hashes and keys included: use `saveBackupWith` for anything
+ * that leaves the router. Restoring (`/system backup load`) is not
+ * wrapped; it reboots into a possibly different identity.
  *
- * @param {Client} c    an open client
- * @param {string} name backup name without extension (e.g. "nightly")
+ * @param c {Client}    an open client
+ * @param name {string} backup name without extension (e.g. "nightly")
  * @throws {Error} kind "routeros" on a bad name or when the file did
- *                 not appear
+ *                 not appear (e.g. storage full)
  */
 export func saveBackup(c as Client, name as string) {
     ensureName($name, "backup");
@@ -62,9 +61,9 @@ export func saveBackup(c as Client, name as string) {
 /**
  * Save a configuration backup encrypted with a password.
  *
- * @param {Client} c        an open client
- * @param {string} name     backup name without extension
- * @param {string} password encryption password (needed again to restore)
+ * @param c {Client}        an open client
+ * @param name {string}     backup name without extension
+ * @param password {string} encryption password (needed again to restore)
  * @throws {Error} kind "routeros" on a bad name, an empty password, or
  *                 when the file did not appear
  */
@@ -80,11 +79,11 @@ export func saveBackupWith(c as Client, name as string, password as string) {
 /**
  * Read a small text file's contents.
  *
- * RouterOS only exposes contents of small files (a few KB) through the
- * API - fine for scripts, notes, and PEMs; not a download mechanism.
+ * RouterOS exposes the contents of small files (a few KB) only, enough
+ * for scripts, notes and PEMs; it is not a download mechanism.
  *
- * @param {Client} c    an open client
- * @param {string} name the file name (with extension)
+ * @param c {Client}    an open client
+ * @param name {string} the file name (with extension)
  * @return {string} the contents ("" when the file is too large to expose)
  * @throws {Error} kind "routeros" when no such file exists
  */
@@ -98,14 +97,13 @@ export func readFileText(c as Client, name as string) {
 }
 
 /**
- * Create (or overwrite) a small text file on the router.
+ * Create or overwrite a small text file on the router (RouterOS v7).
  *
- * What `importCertificatePem` uses under the hood; also handy for
- * dropping scripts or notes. RouterOS v7.
+ * `importCertificatePem` uses it to transfer PEMs.
  *
- * @param {Client} c        an open client
- * @param {string} name     the file name (with extension)
- * @param {string} contents the text to write
+ * @param c {Client}        an open client
+ * @param name {string}     the file name (with extension)
+ * @param contents {string} the text to write
  * @throws {Error} kind "routeros" on a bad name
  */
 export func writeFileText(c as Client, name as string, contents as string) {
@@ -122,8 +120,8 @@ export func writeFileText(c as Client, name as string, contents as string) {
 /**
  * Delete a file from the router's storage.
  *
- * @param {Client} c    an open client
- * @param {string} name the file name (with extension)
+ * @param c {Client}    an open client
+ * @param name {string} the file name (with extension)
  * @throws {Error} kind "routeros" when no such file exists
  */
 export func removeFile(c as Client, name as string) {
@@ -138,8 +136,8 @@ export func removeFile(c as Client, name as string) {
 /**
  * Verify a named backup file exists, or raise.
  *
- * @param {Client} c    an open client
- * @param {string} name the backup name without extension
+ * @param c {Client}    an open client
+ * @param name {string} the backup name without extension
  * @throws {Error} kind "routeros" when `<name>.backup` is missing
  * @internal
  */
@@ -154,7 +152,7 @@ func ensureBackupExists(c as Client, name as string) {
 /**
  * Fold a reply row into a RouterFile.
  *
- * @param {map of string to string} row a "/file/print" row
+ * @param row {map of string to string} a "/file/print" row
  * @return {RouterFile} the typed file
  * @internal
  */

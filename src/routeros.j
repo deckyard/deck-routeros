@@ -1,40 +1,24 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 /**
- * routeros - a thick, friendly layer over the MikroTik RouterOS API.
+ * routeros - typed verbs and structs over the MikroTik RouterOS API.
  *
- * The `mikrotik` module speaks the raw RouterOS binary API: you send
- * command paths and `=key=value` attribute words and get reply rows back.
- * routeros wraps that wire-level surface in plain verbs (add / remove /
- * set / update / get) and in typed helpers for the everyday objects -
- * interfaces, ethernet ports (speed, duplex, MTU, PoE, link state),
- * bonding (link aggregation), bridges, bridge ports, VLANs, firewall
- * filter, mangle (packet marking), and NAT
- * rules (masquerade, port forwarding), IP addressing (addresses, the
- * ARP table, DHCP server and WAN client, PPPoE dial-in, DNS, hotspot
- * guest portal), static
- * routes, simple
- * queues (bandwidth limits), wireless (SSID, password, guest networks),
- * WireGuard VPN tunnels, EoIP and GRE tunnels (layer-2 and routed
- * links between sites), IPsec site-to-site tunnels, VRRP gateway
- * redundancy,
- * diagnostics (ping, bandwidth test), netwatch host monitoring,
- * scheduled scripts, router user
- * accounts, management services (hardening the ways in), certificates
- * (self-signed, Let's Encrypt, PEM import), clock and NTP, files and
- * backups, cloud DDNS, SNMP, the router
- * log (reading and routing it), and system
- * maintenance (package updates, routerboard firmware, reboot) - so a
- * user without RouterOS knowledge can configure a router safely.
- * Inputs are validated before they touch the wire, replies are folded
- * into value-semantic structs, and every failure throws an
- * `Error{kind: "routeros"}` with a message written for humans.
+ * The bundled `mikrotik` module speaks the binary API (command paths,
+ * `=key=value` words, reply rows). This module wraps it per topic:
+ * interfaces, ethernet, bonding, bridges, VLANs, wireless, the firewall
+ * (filter, NAT, raw, mangle, address lists), addressing, DHCP, DNS,
+ * IPv6, PPPoE, hotspot, routing, queues, tunnels and VPNs, VRRP,
+ * diagnostics, users, services, certificates, clock, files, logging and
+ * system maintenance. Inputs are validated before anything is sent and
+ * reply rows are folded into value-semantic structs. Local validation
+ * failures throw `Error{kind: "routeros"}`; router and transport errors
+ * throw `Error{kind: "mikrotik"}`.
  *
- * The implementation is split into topic files, spliced together here
- * with `include` - the module boundary (and every `export`) is this
- * file. The co-located white-box tests live in `routeros_test.j`.
+ * The topic files under `topics/` are spliced in with `include`, so this
+ * file is the module boundary and holds every `export`. The white-box
+ * tests are in `routeros_test.j`.
  *
  * @module routeros
  * @see https://jennifer-lang.dev/modules/mikrotik.html

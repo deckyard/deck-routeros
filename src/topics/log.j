@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - the router log: reading entries, routing what gets logged.
 # Spliced into routeros.j via include - not a standalone module.
 
 /**
- * RouterOS API path of the log entries.
- *
- * The entries themselves live under "/log"; "/system/logging" (see
- * LOGGING_PATH) holds the rules that decide what gets logged where.
+ * RouterOS API path of the log entries. The rules that decide what is
+ * logged where are under LOGGING_PATH.
  */
 export def const LOG_PATH as string init "/log";
 
@@ -22,11 +20,11 @@ export def const LOGGING_ACTION_PATH as string init "/system/logging/action";
 /**
  * One log entry.
  *
- * @field {string} id      internal RouterOS id
- * @field {string} time    when it happened, as reported (e.g. "15:33:02",
- *                         older entries carry a date prefix)
- * @field {string} topics  comma-separated topics (e.g. "system,info")
- * @field {string} message the log line itself
+ * @field id {string} RouterOS item id
+ * @field time {string} time as RouterOS prints it, e.g. "15:33:02"; older
+ *        entries carry a date prefix
+ * @field topics {string} comma-separated topics, e.g. "system,info"
+ * @field message {string} the log line
  */
 export def struct LogEntry {
     id as string,
@@ -38,12 +36,11 @@ export def struct LogEntry {
 /**
  * One logging rule: which topics go to which action.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} topics   matched topics, comma-separated ("info", "firewall", ...)
- * @field {string} action   where matching entries go ("memory", "disk",
- *                          "echo", "remote", or a custom action)
- * @field {string} prefix   text prepended to each entry, "" when unset
- * @field {bool}   disabled true when the rule is switched off
+ * @field id {string} RouterOS item id
+ * @field topics {string} comma-separated topics matched, e.g. "info,!dns"
+ * @field action {string} "memory", "disk", "echo", "remote", or a custom action
+ * @field prefix {string} text prepended to each entry, "" when unset
+ * @field disabled {bool} whether the rule is switched off
  */
 export def struct LoggingRule {
     id as string,
@@ -54,13 +51,12 @@ export def struct LoggingRule {
 };
 
 /**
- * Read the router's log (the in-memory buffer, oldest first).
+ * Read the in-memory log buffer, oldest first.
  *
- * The memory log holds a limited number of entries (1000 by default) -
- * older ones are gone. For history, set up disk or remote logging
- * (`setupRemoteLogging`).
+ * The buffer holds 1000 entries by default and is cleared on reboot.
+ * For history, log to disk or remote (`setupRemoteLogging`).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of LogEntry} the buffered entries
  */
 export func logEntries(c as Client) {
@@ -73,10 +69,10 @@ export func logEntries(c as Client) {
 }
 
 /**
- * The newest N log entries (oldest of them first).
+ * Read the newest `count` log entries, oldest of them first.
  *
- * @param {Client} c     an open client
- * @param {int}    count how many entries from the end of the log
+ * @param c {Client} an open client
+ * @param count {int} number of entries from the end of the log, at least 1
  * @return {list of LogEntry} at most `count` entries
  * @throws {Error} kind "routeros" on a count below 1
  */
@@ -88,10 +84,10 @@ export func recentLogEntries(c as Client, count as int) {
 }
 
 /**
- * The log entries carrying one topic (e.g. "firewall", "dhcp", "wireless").
+ * Read the log entries carrying one topic, matched as an exact word.
  *
- * @param {Client} c     an open client
- * @param {string} topic the topic to filter for (one word, lowercase)
+ * @param c {Client} an open client
+ * @param topic {string} topic such as "firewall", "dhcp", "wireless"
  * @return {list of LogEntry} matching entries, oldest first
  */
 export func logEntriesWithTopic(c as Client, topic as string) {
@@ -106,11 +102,9 @@ export func logEntriesWithTopic(c as Client, topic as string) {
 }
 
 /**
- * The log entries that report problems (topic "error" or "critical").
+ * Read the log entries with topic "error" or "critical".
  *
- * The quick health check: an empty result is good news.
- *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of LogEntry} the problem entries, oldest first
  */
 export func logErrors(c as Client) {
@@ -127,8 +121,8 @@ export func logErrors(c as Client) {
 /**
  * List the logging rules: which topics are logged where.
  *
- * @param {Client} c an open client
- * @return {list of LoggingRule} all rules
+ * @param c {Client} an open client
+ * @return {list of LoggingRule} every rule
  */
 export func loggingRules(c as Client) {
     def rows as list of map of string to string init getAll($c, LOGGING_PATH);
@@ -140,19 +134,20 @@ export func loggingRules(c as Client) {
 }
 
 /**
- * Log the given topics to an action.
+ * Send the given topics to a logging action.
  *
- * Topics are RouterOS log categories ("firewall", "dhcp", "wireless",
- * severity levels like "info" / "warning" / "error", combinable and
- * negatable: "info,!dns"). The action must exist on the router -
- * built-ins are "memory", "disk", "echo", "remote". Idempotent: an
- * identical rule is reused, not duplicated.
+ * Topics are RouterOS categories ("firewall", "dhcp") and severities
+ * ("info", "warning", "error"), comma-separated, "!" negates:
+ * "info,!dns". The action must exist on the router; the built-ins are
+ * "memory", "disk", "echo" and "remote". Idempotent: a rule with the
+ * same normalized topics and action is reused.
  *
- * @param {Client} c      an open client
- * @param {string} topics comma-separated topics to match
- * @param {string} action where matching entries go
- * @return {string} the RouterOS id of the (new or existing) rule
- * @throws {Error} kind "routeros" on empty topics or an unknown action
+ * @param c {Client} an open client
+ * @param topics {string} comma-separated topics to match
+ * @param action {string} name of the logging action
+ * @return {string} the RouterOS id of the new or existing rule
+ * @throws {Error} kind "routeros" on a malformed topics list or an
+ *         unknown action
  * @example
  *   mt.addLoggingRule($c, "firewall", "disk");
  */
@@ -168,12 +163,16 @@ export func addLoggingRule(c as Client, topics as string, action as string) {
 }
 
 /**
- * Remove the logging rule sending some topics to an action.
+ * Remove the logging rule that sends exactly these topics to an action.
  *
- * @param {Client} c      an open client
- * @param {string} topics the rule's topics, as given to `addLoggingRule`
- * @param {string} action the rule's action
- * @throws {Error} kind "routeros" when no such rule exists
+ * Topics are compared after normalization and in order: "info,error"
+ * does not match a rule for "error,info".
+ *
+ * @param c {Client} an open client
+ * @param topics {string} the rule's topics, as given to `addLoggingRule`
+ * @param action {string} the rule's action
+ * @throws {Error} kind "routeros" on a malformed topics list or when no
+ *         such rule exists
  */
 export func removeLoggingRule(c as Client, topics as string, action as string) {
     def wanted as string init normalizedLogTopics($topics);
@@ -186,18 +185,18 @@ export func removeLoggingRule(c as Client, topics as string, action as string) {
 }
 
 /**
- * Ship the router's log to a remote syslog server.
+ * Send the log to a remote syslog server over UDP.
  *
- * Points the built-in "remote" action at the server (UDP syslog) and
- * routes the given topics there. Idempotent. The memory log keeps
- * working alongside - remote logging is an addition, not a replacement.
+ * Points the built-in "remote" action at the server, replacing any
+ * earlier target, and routes the given topics to it. Idempotent. The
+ * memory log keeps working alongside.
  *
- * @param {Client} c       an open client
- * @param {string} address the syslog server's IP address
- * @param {int}    port    its UDP port (514 is the syslog standard)
- * @param {string} topics  what to ship (e.g. "info,warning,error,critical")
+ * @param c {Client} an open client
+ * @param address {string} syslog server IP address
+ * @param port {int} UDP port, 514 for standard syslog
+ * @param topics {string} topics to send, e.g. "info,warning,error,critical"
  * @return {string} the RouterOS id of the logging rule
- * @throws {Error} kind "routeros" on a malformed address, port, or topics
+ * @throws {Error} kind "routeros" on a malformed address, port or topics
  * @example
  *   mt.setupRemoteLogging($c, "192.168.88.40", 514, "info,warning,error,critical");
  */
@@ -214,10 +213,10 @@ export func setupRemoteLogging(c as Client, address as string, port as int, topi
 }
 
 /**
- * The last `count` elements of an entry list.
+ * Return the last `count` elements of an entry list.
  *
- * @param {list of LogEntry} entries the full list, oldest first
- * @param {int} count how many from the end (already validated >= 1)
+ * @param entries {list of LogEntry} the full list, oldest first
+ * @param count {int} number of entries from the end, already validated >= 1
  * @return {list of LogEntry} the tail, order preserved
  * @internal
  */
@@ -231,8 +230,8 @@ func lastEntries(entries as list of LogEntry, count as int) {
 /**
  * Test whether a comma-separated topic list contains one topic.
  *
- * @param {string} topicsCsv the entry's topics (e.g. "system,info")
- * @param {string} topic     the topic to look for (exact word)
+ * @param topicsCsv {string} the entry's topics, e.g. "system,info"
+ * @param topic {string} the topic to look for, as an exact word
  * @return {bool} true when present
  * @internal
  */
@@ -249,7 +248,7 @@ func logHasTopic(topicsCsv as string, topic as string) {
 /**
  * Test whether a topic list marks a problem entry.
  *
- * @param {string} topicsCsv the entry's topics
+ * @param topicsCsv {string} the entry's topics
  * @return {bool} true on "error" or "critical"
  * @internal
  */
@@ -260,12 +259,13 @@ func isProblemTopics(topicsCsv as string) {
 /**
  * Validate and normalize a logging-topics list.
  *
- * Entries are single lowercase words, optionally "!"-negated
- * ("info,!dns"); spaces around commas are tolerated and removed.
+ * Each entry must be non-empty and contain no space ("!"-negation such
+ * as "info,!dns" passes through); spaces around commas are removed.
+ * Case and topic names are not checked.
  *
- * @param {string} csv the candidate list
+ * @param csv {string} the candidate list
  * @return {string} the normalized list
- * @throws {Error} kind "routeros" on an empty list or a malformed entry
+ * @throws {Error} kind "routeros" on an empty entry or one containing a space
  * @internal
  */
 func normalizedLogTopics(csv as string) {
@@ -291,9 +291,9 @@ func normalizedLogTopics(csv as string) {
 /**
  * Find the rule matching a normalized topics list and an action.
  *
- * @param {list of map of string to string} rows "/system/logging/print" rows
- * @param {string} topics the normalized topics list
- * @param {string} action the action name
+ * @param rows {list of map of string to string} "/system/logging/print" rows
+ * @param topics {string} the normalized topics list
+ * @param action {string} the action name
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -308,9 +308,9 @@ func findLoggingRow(rows as list of map of string to string, topics as string, a
 }
 
 /**
- * Fold a reply row into a LogEntry.
+ * Fold a "/log/print" row into a LogEntry.
  *
- * @param {map of string to string} row a "/log/print" row
+ * @param row {map of string to string} the reply row
  * @return {LogEntry} the typed entry
  * @internal
  */
@@ -324,9 +324,9 @@ func logEntryFromRow(row as map of string to string) {
 }
 
 /**
- * Fold a reply row into a LoggingRule.
+ * Fold a "/system/logging/print" row into a LoggingRule.
  *
- * @param {map of string to string} row a "/system/logging/print" row
+ * @param row {map of string to string} the reply row
  * @return {LoggingRule} the typed rule
  * @internal
  */

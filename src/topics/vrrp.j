@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - VRRP: two routers, one gateway address, automatic failover.
@@ -11,24 +11,23 @@ export def const VRRP_PATH as string init "/interface/vrrp";
 /**
  * One VRRP instance: this router's share of a redundant gateway.
  *
- * Two (or more) routers with the same `vrid` on the same network guard
- * one virtual address together; the highest priority is master and
- * answers for it, the others stand by.
+ * Routers with the same `vrid` on one network share a virtual address;
+ * the highest priority is master and answers for it, the others stand by.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          VRRP interface name (e.g. "vrrplan")
- * @field {string} interfaceName underlying interface (the shared network)
- * @field {int}    vrid          virtual router id, 1-255 - same on all peers
- * @field {int}    priority      1-254, highest becomes master
- * @field {string} interval      advertisement interval as reported
- * @field {int}    version       VRRP protocol version (2 or 3)
- * @field {bool}   preemption    true when a returning higher priority takes over
- * @field {bool}   running       true when the instance is active
- * @field {bool}   backup        true while standing by
- * @field {bool}   master        computed: running and not backup - this
- *                               router currently answers for the address
- * @field {bool}   disabled      true when the instance is switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string}            internal RouterOS id
+ * @field name {string}          VRRP interface name (e.g. "vrrplan")
+ * @field interfaceName {string} underlying interface (the shared network)
+ * @field vrid {int}          virtual router id, 1-255, the same on all peers
+ * @field priority {int}      priority, 1-254; the highest becomes master
+ * @field interval {string}      advertisement interval as reported
+ * @field version {int}       VRRP protocol version (2 or 3)
+ * @field preemption {bool}    true when a returning higher-priority peer takes over
+ * @field running {bool}       true when the instance is active
+ * @field backup {bool}        true while standing by
+ * @field master {bool}        computed as running and not backup: this
+ *                               router answers for the address now
+ * @field disabled {bool}      true when the instance is switched off
+ * @field comment {string}       free-text comment, "" when unset
  */
 export def struct VrrpInterface {
     id as string,
@@ -49,7 +48,7 @@ export def struct VrrpInterface {
 /**
  * List every VRRP instance on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of VrrpInterface} all instances, with master/backup state
  */
 export func vrrpInterfaces(c as Client) {
@@ -62,13 +61,12 @@ export func vrrpInterfaces(c as Client) {
 }
 
 /**
- * Look one VRRP instance up by its name.
+ * Look up a VRRP instance by name.
  *
- * The quick health question is `.master`: is this router currently the
- * one answering for the shared address?
+ * `.master` tells whether this router answers for the shared address now.
  *
- * @param {Client} c    an open client
- * @param {string} name the VRRP interface name
+ * @param c {Client}    an open client
+ * @param name {string} the VRRP interface name
  * @return {VrrpInterface} the instance
  * @throws {Error} kind "routeros" when no VRRP interface has that name
  */
@@ -81,26 +79,25 @@ export func vrrpByName(c as Client, name as string) {
 }
 
 /**
- * Make this router one half of a redundant gateway, in one call.
+ * Make this router one half of a redundant gateway.
  *
- * Creates the VRRP instance on the LAN interface and puts the shared
- * virtual address on it. Run the same call on the OTHER router with
- * the same `vrid` and `virtualAddress` but a DIFFERENT priority -
- * higher wins, so give the preferred router e.g. 200 and the standby
- * 100. Clients then use the virtual address as their gateway; when the
- * master dies, the standby answers within seconds and nobody
- * reconfigures anything.
+ * Creates the VRRP instance (`addVrrp`) and puts the shared virtual
+ * address on it. Run the same call on the other router with the same
+ * `vrid` and `virtualAddress` and a different priority; the higher one
+ * is master (e.g. 200 preferred, 100 standby). Clients use the virtual
+ * address as their gateway; when the master fails, the standby answers
+ * within seconds. Not idempotent: a second call fails on the taken name.
  *
- * @param {Client} c              an open client
- * @param {string} name           name for the VRRP interface (e.g. "vrrplan")
- * @param {string} interfaceName  the shared network's interface (e.g. "brlan")
- * @param {int}    vrid           virtual router id, 1-255 - identical on all peers
- * @param {int}    priority       1-254; the highest priority becomes master
- * @param {string} virtualAddress the shared gateway address with prefix,
- *                                "/32" by convention (e.g. "192.168.88.254/32")
+ * @param c {Client}              an open client
+ * @param name {string}           VRRP interface name (e.g. "vrrplan")
+ * @param interfaceName {string}  interface on the shared network (e.g. "brlan")
+ * @param vrid {int}           virtual router id, 1-255, identical on all peers
+ * @param priority {int}       priority, 1-254; the highest becomes master
+ * @param virtualAddress {string} shared gateway address in CIDR, "/32" by
+ *                                convention (e.g. "192.168.88.254/32")
  * @return {string} the RouterOS id of the VRRP interface
- * @throws {Error} kind "routeros" on bad input, a taken name, or a
- *                 vrid already used on that interface
+ * @throws {Error} kind "routeros" on an address without prefix, the
+ *                 `addVrrp` errors
  * @example
  *   # router A (preferred):
  *   mt.setupVrrp($c, "vrrplan", "brlan", 10, 200, "192.168.88.254/32");
@@ -121,18 +118,20 @@ export func setupVrrp(
 }
 
 /**
- * Create a VRRP instance without an address (the primitive).
+ * Create a VRRP instance without an address; `setupVrrp` adds one too.
  *
- * Use `setupVrrp` unless you attach the address yourself.
+ * The same vrid may be reused on a different interface.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the VRRP interface
- * @param {string} interfaceName the underlying interface
- * @param {int}    vrid          virtual router id, 1-255
- * @param {int}    priority      1-254; highest becomes master
+ * @param c {Client}             an open client
+ * @param name {string}          VRRP interface name
+ * @param interfaceName {string} underlying interface
+ * @param vrid {int}          virtual router id, 1-255
+ * @param priority {int}      priority, 1-254; the highest becomes master
  * @return {string} the RouterOS id of the new instance
- * @throws {Error} kind "routeros" on bad input, a taken name, or a
- *                 vrid already used on that interface
+ * @throws {Error} kind "routeros" on an empty or spaced name, a vrid
+ *                 outside 1-255, a priority outside 1-254, an unknown
+ *                 interface, a taken name, or a vrid already used on that
+ *                 interface
  */
 export func addVrrp(
     c as Client,
@@ -167,13 +166,12 @@ export func addVrrp(
 /**
  * Change a VRRP instance's priority.
  *
- * The failover dial: raise it to make this router take over (with
- * preemption on), lower it to hand the role away gracefully - e.g.
- * before maintenance.
+ * Raise it to make this router take over (with preemption on); lower it
+ * to hand the master role away, e.g. before maintenance.
  *
- * @param {Client} c        an open client
- * @param {string} name     the VRRP interface name
- * @param {int}    priority the new priority, 1-254
+ * @param c {Client}        an open client
+ * @param name {string}     VRRP interface name
+ * @param priority {int} new priority, 1-254
  * @throws {Error} kind "routeros" on an unknown instance or a priority
  *                 outside 1-254
  */
@@ -187,13 +185,12 @@ export func setVrrpPriority(c as Client, name as string, priority as int) {
 }
 
 /**
- * Delete a VRRP instance and the virtual address(es) sitting on it.
+ * Delete a VRRP instance and the static addresses on it.
  *
- * The peer router (if any) takes over the shared address - removing
- * one half of a redundant pair is safe for the clients.
+ * The peer router, if any, takes over the shared address.
  *
- * @param {Client} c    an open client
- * @param {string} name the VRRP interface name
+ * @param c {Client}    an open client
+ * @param name {string} VRRP interface name
  * @throws {Error} kind "routeros" when no VRRP interface has that name
  */
 export func removeVrrp(c as Client, name as string) {
@@ -210,8 +207,8 @@ export func removeVrrp(c as Client, name as string) {
 /**
  * Switch a VRRP instance on.
  *
- * @param {Client} c    an open client
- * @param {string} name the VRRP interface name
+ * @param c {Client}    an open client
+ * @param name {string} VRRP interface name
  * @throws {Error} kind "routeros" when no VRRP interface has that name
  */
 export func enableVrrp(c as Client, name as string) {
@@ -221,8 +218,8 @@ export func enableVrrp(c as Client, name as string) {
 /**
  * Switch a VRRP instance off; the peer takes over the shared address.
  *
- * @param {Client} c    an open client
- * @param {string} name the VRRP interface name
+ * @param c {Client}    an open client
+ * @param name {string} VRRP interface name
  * @throws {Error} kind "routeros" when no VRRP interface has that name
  */
 export func disableVrrp(c as Client, name as string) {
@@ -232,7 +229,7 @@ export func disableVrrp(c as Client, name as string) {
 /**
  * Validate a virtual router id.
  *
- * @param {int} vrid the candidate id
+ * @param vrid {int} the candidate id
  * @throws {Error} kind "routeros" when outside 1-255
  * @internal
  */
@@ -245,9 +242,9 @@ func ensureVrid(vrid as int) {
 /**
  * Validate a VRRP priority.
  *
- * @param {int} priority the candidate priority
- * @throws {Error} kind "routeros" when outside 1-254 (255 is reserved
- *                 for the address owner per the RFC)
+ * @param priority {int} the candidate priority
+ * @throws {Error} kind "routeros" when outside 1-254 (RFC 5798 reserves
+ *                 255 for the address owner)
  * @internal
  */
 func ensureVrrpPriority(priority as int) {
@@ -259,12 +256,12 @@ func ensureVrrpPriority(priority as int) {
 /**
  * Find a VRRP instance using a vrid on an interface.
  *
- * The same vrid on DIFFERENT interfaces is fine - the id only has to
- * be unique per network segment.
+ * A vrid has to be unique per network segment only, so the same vrid on
+ * another interface does not match.
  *
- * @param {list of map of string to string} rows "/interface/vrrp/print" rows
- * @param {string} interfaceName the underlying interface
- * @param {int}    vrid          the virtual router id
+ * @param rows {list of map of string to string} "/interface/vrrp/print" rows
+ * @param interfaceName {string} the underlying interface
+ * @param vrid {int}          the virtual router id
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -283,7 +280,7 @@ func findVrrpRow(rows as list of map of string to string, interfaceName as strin
  *
  * `master` is computed here: running and not in backup state.
  *
- * @param {map of string to string} row an "/interface/vrrp/print" row
+ * @param row {map of string to string} an "/interface/vrrp/print" row
  * @return {VrrpInterface} the typed instance
  * @internal
  */

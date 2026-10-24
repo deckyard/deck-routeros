@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - firewall address lists: named sets of addresses.
@@ -11,15 +11,15 @@ export def const ADDRESS_LIST_PATH as string init "/ip/firewall/address-list";
 /**
  * One entry of a firewall address list.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} listName the list the entry belongs to (e.g. "blocklist")
- * @field {string} address  an IP, a CIDR network, or a DNS name (RouterOS
- *                          resolves names and keeps them updated)
- * @field {string} timeout  remaining lifetime, "" for a permanent entry
- * @field {bool}   dynamic  true when something else created it (e.g. a
- *                          firewall rule with add-src-to-address-list)
- * @field {bool}   disabled true when the entry is switched off
- * @field {string} comment  free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field listName {string} list the entry belongs to, e.g. "blocklist"
+ * @field address {string} IP, CIDR network or DNS name; RouterOS resolves
+ *        names and follows their changes
+ * @field timeout {string} remaining lifetime, "" for a permanent entry
+ * @field dynamic {bool} true when something else created it, e.g. a
+ *        firewall rule with add-src-to-address-list
+ * @field disabled {bool} true when the entry is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct AddressListEntry {
     id as string,
@@ -32,10 +32,10 @@ export def struct AddressListEntry {
 };
 
 /**
- * The names of all address lists on the router.
+ * List the names of all address lists on the router.
  *
- * @param {Client} c an open client
- * @return {list of string} distinct list names, in first-seen order
+ * @param c {Client} an open client
+ * @return {list of string} distinct list names in first-seen order
  */
 export func addressLists(c as Client) {
     def rows as list of map of string to string init getAll($c, ADDRESS_LIST_PATH);
@@ -43,11 +43,11 @@ export func addressLists(c as Client) {
 }
 
 /**
- * The entries of one address list.
+ * Read the entries of one address list.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list to read (e.g. "blocklist")
- * @return {list of AddressListEntry} the list's entries (empty when unknown)
+ * @param c {Client} an open client
+ * @param listName {string} list to read, e.g. "blocklist"
+ * @return {list of AddressListEntry} its entries, empty for an unknown list
  */
 export func addressListEntries(c as Client, listName as string) {
     def rows as list of map of string to string init getAll($c, ADDRESS_LIST_PATH);
@@ -61,19 +61,19 @@ export func addressListEntries(c as Client, listName as string) {
 }
 
 /**
- * Put an address on a list (permanently).
+ * Add an address to a list permanently.
  *
- * The list is created implicitly with its first entry. The address may
- * be a single IP ("203.0.113.7"), a network ("203.0.113.0/24"), or a
- * DNS name ("bad.example.org" - RouterOS resolves it and tracks
- * changes). Idempotent: if the list already holds that address, the
- * existing entry's id is returned.
+ * The list is created with its first entry. The address may be an IP
+ * ("203.0.113.7"), a network ("203.0.113.0/24") or a DNS name
+ * ("bad.example.org", resolved and tracked by RouterOS). Idempotent: when
+ * the list already holds the address, the existing entry's id is
+ * returned.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list (e.g. "blocklist", "vpnusers")
- * @param {string} address  IP, CIDR, or DNS name
- * @param {string} comment  friendly note ("" for none)
- * @return {string} the RouterOS id of the (new or existing) entry
+ * @param c {Client} an open client
+ * @param listName {string} list name, e.g. "blocklist"
+ * @param address {string} IP, CIDR or DNS name
+ * @param comment {string} comment, "" for none
+ * @return {string} id of the new or existing entry
  * @throws {Error} kind "routeros" on a bad list name or address
  * @example
  *   mt.addToAddressList($c, "blocklist", "203.0.113.7", "ssh scanner");
@@ -100,17 +100,19 @@ export func addToAddressList(
 }
 
 /**
- * Put an address on a list temporarily; it expires by itself.
+ * Add an address to a list with a lifetime; RouterOS removes it when the
+ * timeout runs out.
  *
- * Useful for penalties ("blocked for a day") that need no cleanup job.
+ * Not idempotent: each call adds an entry.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list
- * @param {string} address  IP, CIDR, or DNS name
- * @param {string} timeout  lifetime: "30m", "1d", "1w", or "HH:MM:SS"
- * @param {string} comment  friendly note ("" for none)
- * @return {string} the RouterOS id of the new entry
- * @throws {Error} kind "routeros" on a bad list name, address, or timeout
+ * @param c {Client} an open client
+ * @param listName {string} list name
+ * @param address {string} IP, CIDR or DNS name
+ * @param timeout {string} lifetime as s/m/h/d/w tokens ("30m", "1d",
+ *        "1d12h") or "HH:MM:SS"
+ * @param comment {string} comment, "" for none
+ * @return {string} id of the new entry
+ * @throws {Error} kind "routeros" on a bad list name, address or timeout
  */
 export func addToAddressListTimed(
     c as Client,
@@ -135,11 +137,11 @@ export func addToAddressListTimed(
 }
 
 /**
- * Take one address off a list.
+ * Remove one address from a list.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list
- * @param {string} address  the address exactly as listed
+ * @param c {Client} an open client
+ * @param listName {string} list name
+ * @param address {string} address exactly as listed
  * @throws {Error} kind "routeros" when the list has no such entry
  */
 export func removeFromAddressList(c as Client, listName as string, address as string) {
@@ -155,14 +157,13 @@ export func removeFromAddressList(c as Client, listName as string, address as st
 }
 
 /**
- * Empty an address list: remove every static entry.
+ * Remove every static entry from an address list.
  *
- * Dynamic entries (added by firewall rules or with a timeout by other
- * software) are left alone - they expire or are managed by whatever
- * created them.
+ * Dynamic entries (from firewall rules or timeouts) stay; whatever
+ * created them manages them.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list to empty
+ * @param c {Client} an open client
+ * @param listName {string} list to empty
  * @throws {Error} kind "routeros" when the list has no static entries
  */
 export func clearAddressList(c as Client, listName as string) {
@@ -180,21 +181,21 @@ export func clearAddressList(c as Client, listName as string) {
 }
 
 /**
- * Drop all traffic from the members of an address list (one firewall
- * rule referencing the whole list).
+ * Add one firewall filter rule that drops all traffic from the members of
+ * an address list.
  *
- * The point of address lists: the rule stays, the list changes. Add and
- * remove members with `addToAddressList` / `removeFromAddressList`
- * without ever touching the firewall again. The rule carries `comment`
- * as its handle for the *ByComment helpers.
+ * The rule stays while the list changes: maintain members with
+ * `addToAddressList` / `removeFromAddressList`. The rule is appended to
+ * the end of the chain and carries `comment` as its handle for the
+ * *ByComment verbs. Not idempotent: each call adds a rule.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list whose members are dropped
- * @param {string} chain    where: CHAIN_INPUT (protect the router) or
- *                          CHAIN_FORWARD (protect the networks behind it)
- * @param {string} comment  handle for the rule (e.g. "drop blocklisted")
- * @return {string} the RouterOS id of the new rule
- * @throws {Error} kind "routeros" on a bad list or chain
+ * @param c {Client} an open client
+ * @param listName {string} list whose members are dropped
+ * @param chain {string} CHAIN_INPUT to protect the router, CHAIN_FORWARD
+ *        to protect the networks behind it
+ * @param comment {string} rule handle, e.g. "drop blocklisted"
+ * @return {string} id of the new rule
+ * @throws {Error} kind "routeros" on a bad list name or chain
  */
 export func dropAddressList(c as Client, listName as string, chain as string, comment as string) {
     ensureName($listName, "address list");
@@ -207,9 +208,9 @@ export func dropAddressList(c as Client, listName as string, chain as string, co
 /**
  * Find the entry of a list holding an address.
  *
- * @param {list of map of string to string} rows address-list rows
- * @param {string} listName the list to search
- * @param {string} address  the address to look for
+ * @param rows {list of map of string to string} address-list rows
+ * @param listName {string} the list to search
+ * @param address {string}  the address to look for
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -229,7 +230,7 @@ func findAddressListRow(
 /**
  * Distinct list names, in first-seen order.
  *
- * @param {list of map of string to string} rows address-list rows
+ * @param rows {list of map of string to string} address-list rows
  * @return {list of string} the list names, deduplicated
  * @internal
  */
@@ -247,7 +248,7 @@ func distinctLists(rows as list of map of string to string) {
 /**
  * Validate an address-list address: IP, CIDR network, or DNS name.
  *
- * @param {string} address the candidate (already trimmed)
+ * @param address {string} the candidate (already trimmed)
  * @throws {Error} kind "routeros" on an empty or malformed value
  * @internal
  */
@@ -265,7 +266,7 @@ func ensureListAddress(address as string) {
 /**
  * Fold a reply row into an AddressListEntry.
  *
- * @param {map of string to string} row an "/ip/firewall/address-list/print" row
+ * @param row {map of string to string} an "/ip/firewall/address-list/print" row
  * @return {AddressListEntry} the typed entry
  * @internal
  */

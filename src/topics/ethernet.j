@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - ethernet ports: speed, duplex, MTU, PoE, link state.
@@ -22,19 +22,19 @@ def const POE_MODES as list of string init ["auto-on", "forced-on", "off"];
 /**
  * One physical ethernet port and its configuration.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} name            current name (renameable, e.g. "ether1")
- * @field {string} defaultName     the factory name, stable across renames
- * @field {string} mac             the port's MAC address
- * @field {string} mtu             configured MTU as reported
- * @field {bool}   autoNegotiation true when speed/duplex are negotiated (the default)
- * @field {string} poeOut          PoE mode ("auto-on", "forced-on", "off"),
+ * @field id {string}              internal RouterOS id
+ * @field name {string}            current name (e.g. "ether1")
+ * @field defaultName {string}     factory name, stable across renames
+ * @field mac {string}             MAC address
+ * @field mtu {string}             configured MTU as reported
+ * @field autoNegotiation {bool}   speed and duplex negotiated (the default)
+ * @field poeOut {string}          PoE mode ("auto-on", "forced-on", "off"),
  *                                 "" on ports without PoE
- * @field {bool}   running         true when the link is up
- * @field {bool}   slave           true when the port serves a bridge/bond
- *                                 (its own settings mostly don't apply)
- * @field {bool}   disabled        true when the port is switched off
- * @field {string} comment         free-text comment, "" when unset
+ * @field running {bool}           link up
+ * @field slave {bool}             member of a bridge or bond, whose settings
+ *                                 then mostly apply instead
+ * @field disabled {bool}          administratively off
+ * @field comment {string}         free-text comment, "" when unset
  */
 export def struct EthernetPort {
     id as string,
@@ -51,14 +51,14 @@ export def struct EthernetPort {
 };
 
 /**
- * The live state of one ethernet link, as measured right now.
+ * The measured state of one ethernet link.
  *
- * @field {string} name            the port
- * @field {bool}   up              true when the link is established
- * @field {string} status          the raw status ("link-ok", "no-link", ...)
- * @field {string} rate            negotiated speed (e.g. "1Gbps"), "" when down
- * @field {bool}   fullDuplex      true on a full-duplex link
- * @field {string} autoNegotiation negotiation state ("done", "incomplete",
+ * @field name {string}            the port
+ * @field up {bool}                status is "link-ok"
+ * @field status {string}          raw status ("link-ok", "no-link", ...)
+ * @field rate {string}            negotiated speed (e.g. "1Gbps"), "" when down
+ * @field fullDuplex {bool}        full-duplex link
+ * @field autoNegotiation {string} negotiation state ("done", "incomplete",
  *                                 "disabled")
  */
 export def struct LinkStatus {
@@ -71,9 +71,9 @@ export def struct LinkStatus {
 };
 
 /**
- * List every ethernet port with its settings.
+ * List the ethernet ports with their settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of EthernetPort} all physical ports
  */
 export func ethernetPorts(c as Client) {
@@ -86,10 +86,10 @@ export func ethernetPorts(c as Client) {
 }
 
 /**
- * Look one ethernet port up by its name.
+ * Look an ethernet port up by name.
  *
- * @param {Client} c    an open client
- * @param {string} name port name (e.g. "ether1")
+ * @param c {Client}    an open client
+ * @param name {string} port name (e.g. "ether1")
  * @return {EthernetPort} the port
  * @throws {Error} kind "routeros" when no ethernet port has that name
  */
@@ -102,13 +102,13 @@ export func ethernetPortByName(c as Client, name as string) {
 }
 
 /**
- * Measure the live state of a link: is it up, at what speed and duplex?
+ * Measure a link now: up or down, speed, duplex.
  *
- * The first thing to check when "the network is slow" - a gigabit port
- * that negotiated 100Mbps half-duplex explains a lot.
+ * Runs `monitor once`. A gigabit port that negotiated 100Mbps or half
+ * duplex is the usual cause of a slow link.
  *
- * @param {Client} c    an open client
- * @param {string} name the ethernet port
+ * @param c {Client}    an open client
+ * @param name {string} the ethernet port
  * @return {LinkStatus} the measured state
  * @throws {Error} kind "routeros" when no ethernet port has that name
  * @example
@@ -129,17 +129,16 @@ export func linkStatus(c as Client, name as string) {
 /**
  * Force a port to a fixed speed and duplex (auto-negotiation off).
  *
- * Only for stubborn link partners (old industrial gear, some media
- * converters). BOTH ends must be forced to the SAME values - forcing
- * one side against an auto-negotiating other side produces a duplex
- * mismatch: the link comes up and then performs terribly. When in
- * doubt, stay with `autoNegotiateEthernet`.
+ * For link partners that cannot negotiate (old industrial gear, some
+ * media converters). Both ends must be forced to the same values: forcing
+ * one side against an auto-negotiating peer gives a duplex mismatch, a
+ * link that comes up and then loses packets under load.
  *
- * @param {Client} c          an open client
- * @param {string} name       the ethernet port
- * @param {string} speed      "10Mbps", "100Mbps", "1Gbps", "2.5Gbps",
- *                            "5Gbps", or "10Gbps" (hardware permitting)
- * @param {bool}   fullDuplex true for full duplex (almost always what you want)
+ * @param c {Client}          an open client
+ * @param name {string}       the ethernet port
+ * @param speed {string}      "10Mbps", "100Mbps", "1Gbps", "2.5Gbps",
+ *                            "5Gbps" or "10Gbps"; the hardware may refuse
+ * @param fullDuplex {bool}   full duplex
  * @throws {Error} kind "routeros" on an unknown port or speed
  */
 export func forceEthernetLink(c as Client, name as string, speed as string, fullDuplex as bool) {
@@ -152,10 +151,10 @@ export func forceEthernetLink(c as Client, name as string, speed as string, full
 }
 
 /**
- * Put a port back on auto-negotiation (the healthy default).
+ * Put a port back on auto-negotiation, the default.
  *
- * @param {Client} c    an open client
- * @param {string} name the ethernet port
+ * @param c {Client}    an open client
+ * @param name {string} the ethernet port
  * @throws {Error} kind "routeros" when no ethernet port has that name
  */
 export func autoNegotiateEthernet(c as Client, name as string) {
@@ -169,13 +168,12 @@ export func autoNegotiateEthernet(c as Client, name as string) {
 /**
  * Change a port's MTU.
  *
- * Larger frames (jumbo, e.g. 9000) need every device on the path to
- * agree, and the port's hardware limit (l2mtu) caps what the router
- * accepts - a too-large value is refused by the router itself.
+ * Jumbo frames (e.g. 9000) need every device on the path to agree. The
+ * port's l2mtu caps the value; the router refuses anything above it.
  *
- * @param {Client} c    an open client
- * @param {string} name the ethernet port
- * @param {int}    mtu  the new MTU (68-65535; 1500 is the ethernet default)
+ * @param c {Client}    an open client
+ * @param name {string} the ethernet port
+ * @param mtu {int}     the MTU, 68-65535 (ethernet default 1500)
  * @throws {Error} kind "routeros" on an unknown port or an MTU outside
  *                 68-65535, kind "mikrotik" when the hardware refuses
  */
@@ -189,16 +187,15 @@ export func setEthernetMtu(c as Client, name as string, mtu as int) {
 }
 
 /**
- * Switch the PoE mode of a port that can power devices.
+ * Set the PoE output mode of a port.
  *
- * "auto-on" powers a device when one is detected (the sane default),
- * "forced-on" powers unconditionally, "off" cuts the power - and
- * off-then-auto-on is the remote way to power-cycle a hung PoE device
- * (an access point, a camera).
+ * "auto-on" powers a detected device (the default), "forced-on" powers
+ * unconditionally, "off" cuts power. "off" then "auto-on" power-cycles a
+ * hung PoE device.
  *
- * @param {Client} c    an open client
- * @param {string} name the ethernet port
- * @param {string} mode "auto-on", "forced-on", or "off"
+ * @param c {Client}    an open client
+ * @param name {string} the ethernet port
+ * @param mode {string} "auto-on", "forced-on", or "off"
  * @throws {Error} kind "routeros" on an unknown port, a port without
  *                 PoE, or an unknown mode
  * @example
@@ -220,7 +217,7 @@ export func setPoe(c as Client, name as string, mode as string) {
 /**
  * Validate a forced ethernet speed.
  *
- * @param {string} speed the candidate
+ * @param speed {string} the candidate
  * @throws {Error} kind "routeros" on an unknown speed
  * @internal
  */
@@ -234,7 +231,7 @@ func ensureEthernetSpeed(speed as string) {
 /**
  * Validate a PoE mode.
  *
- * @param {string} mode the candidate
+ * @param mode {string} the candidate
  * @throws {Error} kind "routeros" on an unknown mode
  * @internal
  */
@@ -248,7 +245,7 @@ func ensurePoeMode(mode as string) {
 /**
  * Validate an MTU value.
  *
- * @param {int} mtu the candidate
+ * @param mtu {int} the candidate
  * @throws {Error} kind "routeros" when outside 68-65535
  * @internal
  */
@@ -261,7 +258,7 @@ func ensureMtu(mtu as int) {
 /**
  * Fold a reply row into an EthernetPort.
  *
- * @param {map of string to string} row an "/interface/ethernet/print" row
+ * @param row {map of string to string} an "/interface/ethernet/print" row
  * @return {EthernetPort} the typed port
  * @internal
  */
@@ -286,7 +283,7 @@ func ethernetFromRow(row as map of string to string) {
  *
  * `up` is computed here: the status equals "link-ok".
  *
- * @param {map of string to string} row the merged monitor rows
+ * @param row {map of string to string} the merged monitor rows
  * @return {LinkStatus} the typed link state
  * @internal
  */

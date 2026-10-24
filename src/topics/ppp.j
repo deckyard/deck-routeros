@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - PPPoE client, and the PPP user database shared by the
 # L2TP / SSTP / OpenVPN / PPTP remote-access servers.
 # Spliced into routeros.j via include - not a standalone module.
 
-/** RouterOS API path of the PPP secrets (the VPN/dial-in user database). */
+/** RouterOS API path of the PPP secrets (the VPN and dial-in user database). */
 export def const PPP_SECRET_PATH as string init "/ppp/secret";
 
-/** RouterOS API path of the PPP profiles (address / DNS / limits per user). */
+/** RouterOS API path of the PPP profiles (addresses, DNS and limits per login). */
 export def const PPP_PROFILE_PATH as string init "/ppp/profile";
 
 /** RouterOS API path of the active PPP sessions across all servers. */
@@ -18,17 +18,17 @@ export def const PPP_ACTIVE_PATH as string init "/ppp/active";
 def const PPP_SERVICES as list of string init ["any", "l2tp", "sstp", "ovpn", "pptp", "pppoe"];
 
 /**
- * One PPP secret: a login the L2TP/SSTP/OpenVPN/PPTP servers share.
+ * One PPP secret: a login shared by the PPP-based servers.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          login name
- * @field {string} service       which server(s) may use it ("any", "l2tp",
- *                               "sstp", "ovpn", "pptp")
- * @field {string} profile       the PPP profile applied ("default" unless set)
- * @field {string} localAddress  the router's address on the tunnel, "" = from profile
- * @field {string} remoteAddress the client's assigned address, "" = from pool
- * @field {bool}   disabled      true when the login is switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string}            internal RouterOS id
+ * @field name {string}          login name
+ * @field service {string}       servers that accept it: "any", "l2tp", "sstp",
+ *                               "ovpn", "pptp" or "pppoe"
+ * @field profile {string}       PPP profile applied ("default" unless set)
+ * @field localAddress {string}  router's tunnel address, "" when the profile decides
+ * @field remoteAddress {string} client's tunnel address, "" when the profile decides
+ * @field disabled {bool}        true when switched off
+ * @field comment {string}       free-text comment, "" when unset
  */
 export def struct PppUser {
     id as string,
@@ -42,14 +42,14 @@ export def struct PppUser {
 };
 
 /**
- * One PPP profile: the address / DNS / limit template applied to a login.
+ * One PPP profile: the addresses, DNS and limits applied to a login.
  *
- * @field {string} id           internal RouterOS id
- * @field {string} name         profile name
- * @field {string} localAddress the router's tunnel address (or a pool name)
- * @field {string} remoteAddress the client address source (an address or pool)
- * @field {string} dnsServer    DNS handed to clients, "" when unset
- * @field {bool}   disabled     true when switched off
+ * @field id {string}           internal RouterOS id
+ * @field name {string}         profile name
+ * @field localAddress {string} router's tunnel address, or a pool name
+ * @field remoteAddress {string} client address, or a pool name
+ * @field dnsServer {string}    DNS handed to clients, "" when unset
+ * @field disabled {bool}       true when switched off
  */
 export def struct PppProfile {
     id as string,
@@ -61,13 +61,13 @@ export def struct PppProfile {
 };
 
 /**
- * One active PPP session (a connected VPN/dial-in client).
+ * One active PPP session: a connected VPN or dial-in client.
  *
- * @field {string} name    the login used
- * @field {string} service the server type ("l2tp", "sstp", "ovpn", "pppoe", ...)
- * @field {string} address the client's tunnel address
- * @field {string} uptime  session duration so far
- * @field {string} callerId where the client connected from
+ * @field name {string}    login used
+ * @field service {string} server type ("l2tp", "sstp", "ovpn", "pppoe", ...)
+ * @field address {string} client tunnel address
+ * @field uptime {string}  session duration so far
+ * @field callerId {string} where the client connected from (address or MAC)
  */
 export def struct PppSession {
     name as string,
@@ -78,9 +78,9 @@ export def struct PppSession {
 };
 
 /**
- * List the PPP logins (the shared VPN/dial-in user database).
+ * List the PPP logins.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of PppUser} all logins
  */
 export func vpnUsers(c as Client) {
@@ -95,20 +95,20 @@ export func vpnUsers(c as Client) {
 /**
  * Create a remote-access VPN login.
  *
- * One login works for every PPP-based server (L2TP, SSTP, OpenVPN) -
- * `service` "any" lets any of them use it, or pin it to one. The
- * profile decides the client's address and DNS ("default" is fine to
- * start). Enable a server with `enableL2tpServer` / `enableSstpServer`
- * / `enableOvpnServer`; this is who may log in.
+ * One login serves every PPP-based server (L2TP, SSTP, OpenVPN, PPTP,
+ * PPPoE); `service` "any" admits it everywhere, any other value pins it
+ * to one. It gets the "default" profile, which decides the client's
+ * address and DNS. The servers themselves are switched on with
+ * `enableL2tpServer`, `enableSstpServer` or `enableOvpnServer`.
  *
- * @param {Client} c        an open client
- * @param {string} name     login name
- * @param {string} password its password
- * @param {string} service  "any", "l2tp", "sstp", "ovpn", "pptp", or "pppoe"
- * @param {string} comment  friendly note ("" for none)
+ * @param c {Client}        an open client
+ * @param name {string}     login name
+ * @param password {string} login password, not empty
+ * @param service {string}  "any", "l2tp", "sstp", "ovpn", "pptp" or "pppoe"
+ * @param comment {string}  free-text note, "" for none
  * @return {string} the RouterOS id of the login
- * @throws {Error} kind "routeros" on a bad name, empty password, bad
- *                 service, or a login that already exists
+ * @throws {Error} kind "routeros" on an empty or spaced name, an empty
+ *                 password, an unknown service, or an existing login
  * @example
  *   mt.enableL2tpServer($c, "a long ipsec secret");
  *   mt.addVpnUser($c, "alice", "her password", "any", "field laptop");
@@ -141,8 +141,8 @@ export func addVpnUser(
 /**
  * Delete a VPN login.
  *
- * @param {Client} c    an open client
- * @param {string} name the login name
+ * @param c {Client}    an open client
+ * @param name {string} login name
  * @throws {Error} kind "routeros" when no such login exists
  */
 export func removeVpnUser(c as Client, name as string) {
@@ -150,10 +150,10 @@ export func removeVpnUser(c as Client, name as string) {
 }
 
 /**
- * Switch a VPN login on.
+ * Enable a VPN login.
  *
- * @param {Client} c    an open client
- * @param {string} name the login name
+ * @param c {Client}    an open client
+ * @param name {string} login name
  * @throws {Error} kind "routeros" when no such login exists
  */
 export func enableVpnUser(c as Client, name as string) {
@@ -161,10 +161,10 @@ export func enableVpnUser(c as Client, name as string) {
 }
 
 /**
- * Switch a VPN login off.
+ * Disable a VPN login; it is kept and can be enabled again.
  *
- * @param {Client} c    an open client
- * @param {string} name the login name
+ * @param c {Client}    an open client
+ * @param name {string} login name
  * @throws {Error} kind "routeros" when no such login exists
  */
 export func disableVpnUser(c as Client, name as string) {
@@ -174,7 +174,7 @@ export func disableVpnUser(c as Client, name as string) {
 /**
  * List the PPP profiles.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of PppProfile} all profiles
  */
 export func pppProfiles(c as Client) {
@@ -187,10 +187,10 @@ export func pppProfiles(c as Client) {
 }
 
 /**
- * Who is connected through any PPP server right now.
+ * List the active sessions on every PPP server.
  *
- * @param {Client} c an open client
- * @return {list of PppSession} the active sessions (all VPN types)
+ * @param c {Client} an open client
+ * @return {list of PppSession} the active sessions, all server types
  */
 export func pppActive(c as Client) {
     def rows as list of map of string to string init getAll($c, PPP_ACTIVE_PATH);
@@ -202,10 +202,10 @@ export func pppActive(c as Client) {
 }
 
 /**
- * Disconnect a connected VPN/dial-in client now.
+ * Disconnect a VPN or dial-in client now.
  *
- * @param {Client} c    an open client
- * @param {string} name the login whose session to end
+ * @param c {Client}    an open client
+ * @param name {string} login whose session to end
  * @throws {Error} kind "routeros" when that login has no active session
  */
 export func kickPppUser(c as Client, name as string) {
@@ -220,7 +220,7 @@ export func kickPppUser(c as Client, name as string) {
 /**
  * Validate a PPP secret service value.
  *
- * @param {string} service the candidate
+ * @param service {string} the candidate
  * @throws {Error} kind "routeros" on an unknown service
  * @internal
  */
@@ -232,19 +232,20 @@ func ensurePppService(service as string) {
 }
 
 /**
- * Add a VPN CLIENT (dial OUT to a remote server), shared by the L2TP /
- * SSTP / OpenVPN client helpers. Idempotent by name.
+ * Add a VPN client interface that dials out to a remote server; shared
+ * by the L2TP, SSTP and OpenVPN client helpers. Idempotent by name.
  *
- * @param {Client} c             an open client
- * @param {string} path          the client list path
- * @param {string} kind          the VPN kind, for error messages
- * @param {string} name          name for the client interface
- * @param {string} serverAddress the server's address or DNS name
- * @param {string} user          the login on the server
- * @param {string} password      its password
- * @param {map of string to string} extra additional attributes
+ * @param c {Client}             an open client
+ * @param path {string}          the client list path
+ * @param kind {string}          VPN kind, for error messages
+ * @param name {string}          client interface name
+ * @param serverAddress {string} server address or DNS name
+ * @param user {string}          login on the server
+ * @param password {string}      login password, not empty
+ * @param extra {map of string to string} additional attributes
  * @return {string} the RouterOS id of the (new or existing) client
- * @throws {Error} kind "routeros" on bad input
+ * @throws {Error} kind "routeros" on an empty or spaced name or user, an
+ *                 empty password, or an empty or spaced server
  * @internal
  */
 func vpnClientAdd(
@@ -283,7 +284,7 @@ func vpnClientAdd(
 /**
  * Fold a reply row into a PppUser.
  *
- * @param {map of string to string} row a "/ppp/secret/print" row
+ * @param row {map of string to string} a "/ppp/secret/print" row
  * @return {PppUser} the typed login
  * @internal
  */
@@ -303,7 +304,7 @@ func pppUserFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a PppProfile.
  *
- * @param {map of string to string} row a "/ppp/profile/print" row
+ * @param row {map of string to string} a "/ppp/profile/print" row
  * @return {PppProfile} the typed profile
  * @internal
  */
@@ -321,7 +322,7 @@ func pppProfileFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a PppSession.
  *
- * @param {map of string to string} row a "/ppp/active/print" row
+ * @param row {map of string to string} a "/ppp/active/print" row
  * @return {PppSession} the typed session
  * @internal
  */
@@ -337,10 +338,6 @@ func pppSessionFromRow(row as map of string to string) {
 
 /**
  * RouterOS API path of the PPPoE client list (dial-in WAN).
- *
- * The client lives under "/interface/pppoe-client"; RouterOS's "/ppp"
- * menu holds the server-side pieces (secrets, profiles) - drive those
- * with the generic verbs if you run the router as a PPPoE server.
  */
 export def const PPPOE_CLIENT_PATH as string init "/interface/pppoe-client";
 
@@ -350,18 +347,18 @@ export def const PPPOE_SERVER_PATH as string init "/interface/pppoe-server/serve
 /**
  * One PPPoE client: a dial-in uplink over user name and password.
  *
- * The password is deliberately not part of this struct - it is written
- * on setup and never read back.
+ * Has no password field: the password is written on setup and never read
+ * back.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} name            the PPPoE interface name (e.g. "pppoewan")
- * @field {string} interfaceName   physical interface the session dials over
- * @field {string} user            the ISP dial-in user name
- * @field {bool}   usePeerDns      true when the router adopts the ISP's DNS servers
- * @field {bool}   addDefaultRoute true when the session installs the default route
- * @field {bool}   running         true when the session is up (connected)
- * @field {bool}   disabled        true when the client is switched off
- * @field {string} comment         free-text comment, "" when unset
+ * @field id {string}              internal RouterOS id
+ * @field name {string}            PPPoE interface name (e.g. "pppoewan")
+ * @field interfaceName {string}   physical interface the session dials over
+ * @field user {string}            ISP dial-in user name
+ * @field usePeerDns {bool}        true when the router adopts the ISP's DNS servers
+ * @field addDefaultRoute {bool}   true when the session installs the default route
+ * @field running {bool}           true when the session is up
+ * @field disabled {bool}          true when switched off
+ * @field comment {string}         free-text comment, "" when unset
  */
 export def struct PppoeClient {
     id as string,
@@ -378,7 +375,7 @@ export def struct PppoeClient {
 /**
  * List every PPPoE client on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of PppoeClient} all PPPoE clients with their session state
  */
 export func pppoeClients(c as Client) {
@@ -391,30 +388,25 @@ export func pppoeClients(c as Client) {
 }
 
 /**
- * Configure a PPPoE dial-in uplink: the DSL/fiber way to the internet.
+ * Set up a PPPoE dial-in uplink (DSL, fiber).
  *
- * Creates a PPPoE client on the physical WAN port with the defaults a
- * dial-in uplink wants - the ISP's default route is installed and its
- * DNS servers adopted (use the generic `set` on PPPOE_CLIENT_PATH to
- * change that). The user name and password come from your ISP.
- * Idempotent by name: if a PPPoE client of that name already exists,
- * its id is returned untouched.
+ * Creates an enabled PPPoE client on the physical WAN port that installs
+ * the ISP's default route and adopts its DNS servers (change either with
+ * `set` on `PPPOE_CLIENT_PATH`). Idempotent by name: an existing client
+ * of that name is returned untouched.
  *
- * Once the session is up, `name` is a routable interface: masquerade it
- * for the LAN (`addMasquerade(c, name, ...)`), exactly as with a DHCP
- * WAN.
+ * Once up, `name` is a routable interface: masquerade it for the LAN
+ * (`addMasquerade`), not the physical port.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the PPPoE interface (e.g. "pppoewan");
- *                               also the handle for the other calls
- * @param {string} interfaceName physical interface the ISP line is plugged
- *                               into (e.g. "ether1")
- * @param {string} user          dial-in user name from the ISP
- *                               (e.g. "user@provider.example")
- * @param {string} password      dial-in password from the ISP
+ * @param c {Client}             an open client
+ * @param name {string}          PPPoE interface name (e.g. "pppoewan"), the
+ *                               handle for the other calls
+ * @param interfaceName {string} physical interface of the ISP line (e.g. "ether1")
+ * @param user {string}          ISP user name (e.g. "user@provider.example")
+ * @param password {string}      ISP password, not empty
  * @return {string} the RouterOS id of the (new or existing) PPPoE client
- * @throws {Error} kind "routeros" on a bad name, unknown interface, or
- *                 empty credentials
+ * @throws {Error} kind "routeros" on an empty or spaced name or user, an
+ *                 empty password, or an unknown interface
  * @example
  *   mt.setupPppoe($c, "pppoewan", "ether1", "user@provider.example", "secret");
  *   mt.addMasquerade($c, "pppoewan", "lan to internet");
@@ -450,11 +442,11 @@ export func setupPppoe(
 }
 
 /**
- * Read the state of a PPPoE uplink: is the session up?
+ * Read the state of a PPPoE uplink.
  *
- * @param {Client} c    an open client
- * @param {string} name the PPPoE interface name
- * @return {PppoeClient} the client state; check `running`
+ * @param c {Client}    an open client
+ * @param name {string} PPPoE interface name
+ * @return {PppoeClient} the client state; `running` is true when connected
  * @throws {Error} kind "routeros" when no PPPoE client has that name
  * @example
  *   def dsl as mt.PppoeClient init mt.pppoeStatus($c, "pppoewan");
@@ -473,11 +465,12 @@ export func pppoeStatus(c as Client, name as string) {
  *
  * The session reconnects with the new user name and password.
  *
- * @param {Client} c        an open client
- * @param {string} name     the PPPoE interface name
- * @param {string} user     the new dial-in user name
- * @param {string} password the new dial-in password
- * @throws {Error} kind "routeros" on empty credentials or an unknown client
+ * @param c {Client}        an open client
+ * @param name {string}     PPPoE interface name
+ * @param user {string}     new ISP user name
+ * @param password {string} new ISP password, not empty
+ * @throws {Error} kind "routeros" on an empty or spaced user, an empty
+ *                 password, or an unknown client
  */
 export func setPppoeCredentials(c as Client, name as string, user as string, password as string) {
     ensureName($user, "PPPoE user");
@@ -494,8 +487,8 @@ export func setPppoeCredentials(c as Client, name as string, user as string, pas
 /**
  * Remove a PPPoE client; the dial-in uplink goes away.
  *
- * @param {Client} c    an open client
- * @param {string} name the PPPoE interface name
+ * @param c {Client}    an open client
+ * @param name {string} PPPoE interface name
  * @throws {Error} kind "routeros" when no PPPoE client has that name
  */
 export func removePppoeClient(c as Client, name as string) {
@@ -503,10 +496,10 @@ export func removePppoeClient(c as Client, name as string) {
 }
 
 /**
- * Switch a PPPoE client on; it starts dialing immediately.
+ * Enable a PPPoE client; it starts dialing at once.
  *
- * @param {Client} c    an open client
- * @param {string} name the PPPoE interface name
+ * @param c {Client}    an open client
+ * @param name {string} PPPoE interface name
  * @throws {Error} kind "routeros" when no PPPoE client has that name
  */
 export func enablePppoeClient(c as Client, name as string) {
@@ -514,10 +507,10 @@ export func enablePppoeClient(c as Client, name as string) {
 }
 
 /**
- * Switch a PPPoE client off; the session disconnects.
+ * Disable a PPPoE client; the session disconnects.
  *
- * @param {Client} c    an open client
- * @param {string} name the PPPoE interface name
+ * @param c {Client}    an open client
+ * @param name {string} PPPoE interface name
  * @throws {Error} kind "routeros" when no PPPoE client has that name
  */
 export func disablePppoeClient(c as Client, name as string) {
@@ -527,7 +520,7 @@ export func disablePppoeClient(c as Client, name as string) {
 /**
  * Fold a reply row into a PppoeClient.
  *
- * @param {map of string to string} row an "/interface/pppoe-client/print" row
+ * @param row {map of string to string} an "/interface/pppoe-client/print" row
  * @return {PppoeClient} the typed client state
  * @internal
  */
@@ -549,11 +542,11 @@ func pppoeFromRow(row as map of string to string) {
  * One PPPoE server service: the router accepting PPPoE dial-ins on an
  * interface.
  *
- * @field {string} id             internal RouterOS id
- * @field {string} serviceName    the PPPoE service name clients may target
- * @field {string} interfaceName  the interface it serves on (the LAN side)
- * @field {string} defaultProfile the PPP profile applied to sessions
- * @field {bool}   disabled       true when switched off
+ * @field id {string}             internal RouterOS id
+ * @field serviceName {string}    PPPoE service name clients may ask for
+ * @field interfaceName {string}  interface it serves on
+ * @field defaultProfile {string} PPP profile applied to sessions
+ * @field disabled {bool}         true when switched off
  */
 export def struct PppoeServer {
     id as string,
@@ -566,7 +559,7 @@ export def struct PppoeServer {
 /**
  * List the PPPoE server services.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of PppoeServer} all PPPoE server services
  */
 export func pppoeServers(c as Client) {
@@ -579,19 +572,19 @@ export func pppoeServers(c as Client) {
 }
 
 /**
- * Run a PPPoE server on an interface (accept dial-in clients).
+ * Run a PPPoE server on an interface, accepting dial-in clients.
  *
- * The other side of `setupPppoe`: instead of dialing an ISP, the router
- * IS the concentrator - clients (an office switch, downstream routers)
- * dial it. Authenticates against the shared PPP user database, so add
- * logins with `addVpnUser` (service "pppoe" or "any"). Bind it to the
- * LAN-facing interface. Idempotent by service name on that interface.
+ * The router is the concentrator that downstream routers dial. Sessions
+ * authenticate against the PPP user database: add logins with
+ * `addVpnUser` and service "pppoe" or "any". Sets
+ * `one-session-per-host`. Idempotent by service name and interface.
  *
- * @param {Client} c             an open client
- * @param {string} serviceName   the PPPoE service name (clients see it)
- * @param {string} interfaceName the interface to serve on
+ * @param c {Client}             an open client
+ * @param serviceName {string}   PPPoE service name, visible to clients
+ * @param interfaceName {string} interface to serve on
  * @return {string} the RouterOS id of the (new or existing) service
- * @throws {Error} kind "routeros" on a bad name or unknown interface
+ * @throws {Error} kind "routeros" on an empty or spaced service name or an
+ *                 unknown interface
  * @example
  *   mt.addPppoeServer($c, "office", "ether2");
  *   mt.addVpnUser($c, "branch", "a password", "pppoe", "downstream router");
@@ -615,8 +608,8 @@ export func addPppoeServer(c as Client, serviceName as string, interfaceName as 
 /**
  * Remove a PPPoE server service by its service name.
  *
- * @param {Client} c           an open client
- * @param {string} serviceName the service name
+ * @param c {Client}           an open client
+ * @param serviceName {string} service name
  * @throws {Error} kind "routeros" when no such service exists
  */
 export func removePppoeServer(c as Client, serviceName as string) {
@@ -631,7 +624,7 @@ export func removePppoeServer(c as Client, serviceName as string) {
 /**
  * Fold a reply row into a PppoeServer.
  *
- * @param {map of string to string} row an "/interface/pppoe-server/server/print" row
+ * @param row {map of string to string} an "/interface/pppoe-server/server/print" row
  * @return {PppoeServer} the typed service
  * @internal
  */

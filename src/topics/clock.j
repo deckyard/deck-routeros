@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - clock and NTP: a router that knows what time it is.
+# routeros - clock and NTP.
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the system clock menu. */
@@ -14,11 +14,11 @@ export def const NTP_CLIENT_PATH as string init "/system/ntp/client";
 /**
  * The router's clock state.
  *
- * @field {string} time       current time as reported
- * @field {string} date       current date as reported
- * @field {string} timezone   timezone name (e.g. "Europe/Berlin")
- * @field {bool}   autodetect true when the router guesses the timezone
- * @field {string} gmtOffset  the resulting UTC offset as reported
+ * @field time {string}       current time as reported
+ * @field date {string}       current date as reported
+ * @field timezone {string}   timezone name (e.g. "Europe/Berlin")
+ * @field autodetect {bool} true when the router guesses the timezone
+ * @field gmtOffset {string}  the resulting UTC offset as reported
  */
 export def struct Clock {
     time as string,
@@ -31,10 +31,10 @@ export def struct Clock {
 /**
  * The NTP client state.
  *
- * @field {bool}   enabled true when the router syncs its clock
- * @field {string} servers the configured NTP servers, comma-separated
- * @field {string} status  the sync state as reported
- * @field {bool}   synced  computed: the status equals "synchronized"
+ * @field enabled {bool} true when the router syncs its clock
+ * @field servers {string} the configured NTP servers, comma-separated
+ * @field status {string}  the sync state as reported
+ * @field synced {bool}  computed: the status equals "synchronized"
  */
 export def struct NtpStatus {
     enabled as bool,
@@ -46,10 +46,10 @@ export def struct NtpStatus {
 /**
  * Read the router's clock.
  *
- * Certificate validation, scheduler times, and log timestamps all
- * depend on it - check this first when any of those act strangely.
+ * Certificate validation, scheduler times and log timestamps depend on
+ * it; check it first when one of them misbehaves.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {Clock} the clock state
  */
 export func clock(c as Client) {
@@ -59,8 +59,8 @@ export func clock(c as Client) {
 /**
  * Set the router's timezone.
  *
- * @param {Client} c        an open client
- * @param {string} timezone an IANA name like "Europe/Berlin", or "UTC"
+ * @param c {Client}        an open client
+ * @param timezone {string} an IANA name like "Europe/Berlin", or "UTC"
  * @throws {Error} kind "routeros" on an empty or spaced name,
  *                 kind "mikrotik" when the router does not know the zone
  */
@@ -71,15 +71,16 @@ export func setTimezone(c as Client, timezone as string) {
 }
 
 /**
- * Keep the clock right automatically: enable the NTP client.
+ * Enable the NTP client with the given servers.
  *
- * MikroTiks have no battery clock - without NTP the time restarts at
- * boot and certificates, schedules, and logs drift into fiction.
+ * MikroTik routers have no battery-backed clock: without NTP the time
+ * restarts at boot, and certificates, schedules and logs go wrong.
  *
- * @param {Client} c       an open client
- * @param {string} servers NTP servers, comma-separated - DNS names or
+ * @param c {Client}       an open client
+ * @param servers {string} NTP servers, comma-separated - DNS names or
  *                         IPs (e.g. "pool.ntp.org" or "192.168.88.1")
- * @throws {Error} kind "routeros" on an empty or malformed server list
+ * @throws {Error} kind "routeros" on an empty list, an empty entry or an
+ *                 entry containing a space
  * @example
  *   mt.useNtp($c, "pool.ntp.org");
  *   mt.setTimezone($c, "Europe/Berlin");
@@ -90,18 +91,18 @@ export func useNtp(c as Client, servers as string) {
 }
 
 /**
- * Switch the NTP client off; the clock free-runs (and resets at boot).
+ * Switch the NTP client off; the clock free-runs and resets at boot.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableNtp(c as Client) {
     apiRun($c, NTP_CLIENT_PATH + "/set", {"enabled": "no"});
 }
 
 /**
- * Read the NTP client state; `synced` is the health flag.
+ * Read the NTP client state; `synced` says whether the clock is synchronized.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {NtpStatus} the NTP state
  */
 export func ntpStatus(c as Client) {
@@ -112,7 +113,7 @@ export func ntpStatus(c as Client) {
  * Validate and normalize a comma-separated NTP server list (DNS names
  * or IPs, spaces tolerated).
  *
- * @param {string} csv the candidate list
+ * @param csv {string} the candidate list
  * @return {string} the normalized list
  * @throws {Error} kind "routeros" on an empty list or a spaced entry
  * @internal
@@ -137,7 +138,7 @@ func normalizedNtpServers(csv as string) {
 /**
  * Fold a reply row into the Clock.
  *
- * @param {map of string to string} row the "/system/clock/print" row
+ * @param row {map of string to string} the "/system/clock/print" row
  * @return {Clock} the typed clock state
  * @internal
  */
@@ -156,7 +157,7 @@ func clockFromRow(row as map of string to string) {
  *
  * `synced` is computed here: the status equals "synchronized".
  *
- * @param {map of string to string} row the "/system/ntp/client/print" row
+ * @param row {map of string to string} the "/system/ntp/client/print" row
  * @return {NtpStatus} the typed NTP state
  * @internal
  */

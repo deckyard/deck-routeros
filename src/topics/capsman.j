@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - CAPsMAN: central management of many access points.
@@ -23,9 +23,9 @@ export def const WIFI_CAP_PATH as string init "/interface/wifi/cap";
 /**
  * The state of a CAPsMAN controller (either generation).
  *
- * @field {bool}   enabled     true when the controller is running
- * @field {int}    version     1 (legacy /caps-man) or 2 (wifiwave2 /interface/wifi)
- * @field {int}    managedAps  how many access points it currently manages
+ * @field enabled {bool} true when the controller is running
+ * @field version {int} 1 (legacy /caps-man), 2 (/interface/wifi), 0 when neither exists
+ * @field managedAps {int} number of access points it manages now
  */
 export def struct CapsmanStatus {
     enabled as bool,
@@ -36,10 +36,10 @@ export def struct CapsmanStatus {
 /**
  * One access point registered with the controller.
  *
- * @field {string} identity   the AP's identity/name
- * @field {string} address    where the AP connected from
- * @field {string} interfaceName the managed radio interface
- * @field {string} state      the AP's provisioning state
+ * @field identity {string} AP identity (name)
+ * @field address {string} address the AP connected from
+ * @field interfaceName {string} managed radio interface
+ * @field state {string} provisioning state
  */
 export def struct ManagedAp {
     identity as string,
@@ -49,17 +49,15 @@ export def struct ManagedAp {
 };
 
 /**
- * Read the CAPsMAN controller state, trying both generations.
+ * Read the CAPsMAN controller state, trying CAPsMANv2 first, then legacy.
  *
- * CAPsMAN turns one router into the brain for many access points -
- * push one SSID/password/config and every AP inherits it, and clients
- * roam between them. RouterOS has two incompatible generations: legacy
- * `/caps-man` (classic wireless hardware) and CAPsMANv2 under
- * `/interface/wifi` (wifiwave2/ax hardware). This reports whichever the
- * router has; `version` says which.
+ * RouterOS has two incompatible generations: legacy `/caps-man`
+ * (classic wireless hardware) and CAPsMANv2 under `/interface/wifi`
+ * (wifiwave2/ax). `version` says which one answered. Read errors count
+ * as "menu absent", so a dropped connection also reports version 0.
  *
- * @param {Client} c an open client
- * @return {CapsmanStatus} the controller state (version 0 when neither exists)
+ * @param c {Client} an open client
+ * @return {CapsmanStatus} the controller state, version 0 when neither exists
  */
 export func capsmanStatus(c as Client) {
     def v2 as map of string to string init tryFirstRow($c, WIFI_CAPSMAN_PATH);
@@ -82,16 +80,15 @@ export func capsmanStatus(c as Client) {
 }
 
 /**
- * Turn the CAPsMAN controller on (whichever generation the router has).
+ * Turn the CAPsMAN controller on, whichever generation the router has.
  *
- * Enabling the manager is only step one - the SSID/security
- * "configuration" and the "provisioning" rules that bind it to joining
- * APs are the substance, and those stay with the generic verbs
- * (`/caps-man/configuration` + `/caps-man/provisioning`, or
- * `/interface/wifi/configuration` + `/interface/wifi/provisioning`)
- * because their shape differs sharply between the two generations.
+ * Only the manager switch. The configuration (SSID, security) and the
+ * provisioning rules that bind it to joining APs differ between the
+ * generations and are left to the generic verbs:
+ * `/caps-man/configuration` + `/caps-man/provisioning`, or
+ * `/interface/wifi/configuration` + `/interface/wifi/provisioning`.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @throws {Error} kind "routeros" when the router has no CAPsMAN menu
  */
 export func enableCapsman(c as Client) {
@@ -109,7 +106,7 @@ export func enableCapsman(c as Client) {
 /**
  * Turn the CAPsMAN controller off.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @throws {Error} kind "routeros" when the router has no CAPsMAN menu
  */
 export func disableCapsman(c as Client) {
@@ -127,8 +124,8 @@ export func disableCapsman(c as Client) {
 /**
  * List the access points the controller manages.
  *
- * @param {Client} c an open client
- * @return {list of ManagedAp} the registered APs (empty when none / no CAPsMAN)
+ * @param c {Client} an open client
+ * @return {list of ManagedAp} the registered APs, empty when none or no CAPsMAN
  */
 export func managedAps(c as Client) {
     def out as list of ManagedAp init [];
@@ -145,8 +142,8 @@ export func managedAps(c as Client) {
 /**
  * Read a single-row menu, returning an empty map when the path is absent.
  *
- * @param {Client} c    an open client
- * @param {string} path the menu path
+ * @param c {Client} an open client
+ * @param path {string} menu path
  * @return {map of string to string} the first row, or an empty map
  * @internal
  */
@@ -162,8 +159,8 @@ func tryFirstRow(c as Client, path as string) {
 /**
  * getAll that returns an empty list instead of throwing on an absent path.
  *
- * @param {Client} c    an open client
- * @param {string} path the list path
+ * @param c {Client} an open client
+ * @param path {string} list path
  * @return {list of map of string to string} the rows, or an empty list
  * @internal
  */
@@ -181,8 +178,8 @@ func tryGetAll(c as Client, path as string) {
 /**
  * Count the rows under a path (0 when absent).
  *
- * @param {Client} c    an open client
- * @param {string} path the list path
+ * @param c {Client} an open client
+ * @param path {string} list path
  * @return {int} the row count
  * @internal
  */
@@ -193,7 +190,7 @@ func countRows(c as Client, path as string) {
 /**
  * Fold a reply row into a ManagedAp (both CAPsMAN generations).
  *
- * @param {map of string to string} row a remote-cap / cap row
+ * @param row {map of string to string} a remote-cap / cap row
  * @return {ManagedAp} the typed AP
  * @internal
  */

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - system health: temperature, voltage, fans.
@@ -11,10 +11,10 @@ export def const SYSTEM_HEALTH_PATH as string init "/system/health";
 /**
  * One hardware health sensor reading.
  *
- * @field {string} name  what is measured ("cpu-temperature", "voltage",
+ * @field name {string}  what is measured ("cpu-temperature", "voltage",
  *                      "fan1-speed", "temperature", ...)
- * @field {string} value the reading as reported (units vary by sensor)
- * @field {string} kind  the reading type ("C", "V", "RPM", ...) when reported
+ * @field value {string} the reading as reported (units vary by sensor)
+ * @field kind {string}  the reading type ("C", "V", "RPM", ...) when reported
  */
 export def struct HealthSensor {
     name as string,
@@ -25,12 +25,13 @@ export def struct HealthSensor {
 /**
  * Read every hardware health sensor the router exposes.
  *
- * Which sensors exist depends entirely on the model - a small home
- * router may report nothing, a rack unit reports temperatures,
- * voltages, fan speeds, and PSU state. An empty result is normal, not
- * an error.
+ * The sensors depend on the model: a small home router may report none,
+ * a rack unit reports temperatures, voltages, fan speeds and PSU state.
+ * An empty result is not an error. RouterOS 7 reports one sensor per row;
+ * older models pack several properties into one row, which become one
+ * sensor each with `kind` "".
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of HealthSensor} the available sensors
  */
 export func healthSensors(c as Client) {
@@ -54,10 +55,10 @@ export func healthSensors(c as Client) {
 }
 
 /**
- * The value of one named sensor, "" when the router does not report it.
+ * Read one named sensor.
  *
- * @param {Client} c    an open client
- * @param {string} name the sensor name (e.g. "cpu-temperature")
+ * @param c {Client}    an open client
+ * @param name {string} the sensor name (e.g. "cpu-temperature")
  * @return {string} the reading, or "" when absent
  */
 export func healthValue(c as Client, name as string) {
@@ -73,7 +74,7 @@ export func healthValue(c as Client, name as string) {
 /**
  * Fold a reply row into a HealthSensor.
  *
- * @param {map of string to string} row a "/system/health/print" row
+ * @param row {map of string to string} a "/system/health/print" row
  * @return {HealthSensor} the typed sensor
  * @internal
  */

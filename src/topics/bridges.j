@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - bridges and bridge ports.
@@ -17,12 +17,12 @@ export def const BRIDGE_VLAN_PATH as string init "/interface/bridge/vlan";
 /**
  * One bridge VLAN-table entry: which ports carry a VLAN, tagged or not.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} bridge   the bridge this applies to
- * @field {string} vlanIds  the VLAN id(s), comma/range as reported
- * @field {string} tagged   ports that carry the VLAN with its tag (trunks)
- * @field {string} untagged ports that carry it untagged (access ports)
- * @field {bool}   dynamic  true when learned rather than configured
+ * @field id {string}       internal RouterOS id
+ * @field bridge {string}   the bridge this applies to
+ * @field vlanIds {string}  VLAN ids as reported (list or range)
+ * @field tagged {string}   trunk ports, carrying the VLAN tagged
+ * @field untagged {string} access ports, carrying it untagged
+ * @field dynamic {bool}    added by RouterOS, not configured
  */
 export def struct BridgeVlan {
     id as string,
@@ -34,14 +34,14 @@ export def struct BridgeVlan {
 };
 
 /**
- * One bridge (a virtual switch that joins interfaces into one LAN).
+ * One bridge: a software switch joining its ports into one LAN.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} name     bridge name (e.g. "bridge1")
- * @field {string} mac      MAC address the bridge answers with
- * @field {bool}   running  true when the bridge is up
- * @field {bool}   disabled true when the bridge is administratively off
- * @field {string} comment  free-text comment, "" when unset
+ * @field id {string}       internal RouterOS id
+ * @field name {string}     bridge name (e.g. "bridge1")
+ * @field mac {string}      MAC address
+ * @field running {bool}    bridge is up
+ * @field disabled {bool}   administratively off
+ * @field comment {string}  free-text comment, "" when unset
  */
 export def struct Bridge {
     id as string,
@@ -55,14 +55,13 @@ export def struct Bridge {
 /**
  * One bridge membership: an interface attached to a bridge.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} bridge          name of the bridge
- * @field {string} interfaceName   name of the member interface
- * @field {bool}   hardwareOffload the `hw` flag - true means the port is
- *                                allowed to forward in the switch chip
- *                                (the intent; actual offload also depends
- *                                on the bridge config, see the switch topic)
- * @field {bool}   disabled        true when the membership is off
+ * @field id {string}              internal RouterOS id
+ * @field bridge {string}          name of the bridge
+ * @field interfaceName {string}   name of the member interface
+ * @field hardwareOffload {bool} the `hw` flag: the port may forward in
+ *                                the switch chip; whether it does depends
+ *                                on the bridge config (see `switchHosts`)
+ * @field disabled {bool}        membership is off
  */
 export def struct BridgePort {
     id as string,
@@ -73,9 +72,9 @@ export def struct BridgePort {
 };
 
 /**
- * List every bridge on the router.
+ * List the bridges.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Bridge} all bridges
  */
 export func bridges(c as Client) {
@@ -88,13 +87,10 @@ export func bridges(c as Client) {
 }
 
 /**
- * Create a bridge.
+ * Create a bridge. Ports added with `addBridgePort` share one LAN.
  *
- * A bridge behaves like a network switch inside the router: interfaces
- * added to it with `addBridgePort` share one LAN.
- *
- * @param {Client} c    an open client
- * @param {string} name name for the new bridge (e.g. "brlan")
+ * @param c {Client}    an open client
+ * @param name {string} name for the new bridge (e.g. "brlan")
  * @return {string} the RouterOS id of the new bridge
  * @throws {Error} kind "routeros" on an invalid name, kind "mikrotik" when the router refuses
  */
@@ -106,8 +102,8 @@ export func addBridge(c as Client, name as string) {
 /**
  * Delete a bridge by name.
  *
- * @param {Client} c    an open client
- * @param {string} name name of the bridge to delete
+ * @param c {Client}    an open client
+ * @param name {string} name of the bridge to delete
  * @throws {Error} kind "routeros" when no bridge has that name
  */
 export func removeBridge(c as Client, name as string) {
@@ -115,10 +111,10 @@ export func removeBridge(c as Client, name as string) {
 }
 
 /**
- * List the interfaces attached to a bridge.
+ * List the ports of a bridge; an unknown bridge gives an empty list.
  *
- * @param {Client} c          an open client
- * @param {string} bridgeName name of the bridge
+ * @param c {Client}          an open client
+ * @param bridgeName {string} name of the bridge
  * @return {list of BridgePort} the bridge's member ports
  */
 export func bridgePorts(c as Client, bridgeName as string) {
@@ -135,9 +131,9 @@ export func bridgePorts(c as Client, bridgeName as string) {
 /**
  * Attach an interface to a bridge.
  *
- * @param {Client} c             an open client
- * @param {string} bridgeName    name of the bridge (must exist)
- * @param {string} interfaceName name of the interface to attach
+ * @param c {Client}             an open client
+ * @param bridgeName {string}    name of the bridge (must exist)
+ * @param interfaceName {string} name of the interface to attach
  * @return {string} the RouterOS id of the new bridge port
  * @throws {Error} kind "routeros" when the bridge does not exist or a name is invalid
  */
@@ -150,8 +146,8 @@ export func addBridgePort(c as Client, bridgeName as string, interfaceName as st
 /**
  * Detach an interface from whatever bridge it is a member of.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName name of the member interface
+ * @param c {Client}             an open client
+ * @param interfaceName {string} name of the member interface
  * @throws {Error} kind "routeros" when the interface is on no bridge
  */
 export func removeBridgePort(c as Client, interfaceName as string) {
@@ -166,17 +162,15 @@ export func removeBridgePort(c as Client, interfaceName as string) {
 /**
  * Turn hardware switch-chip offload on or off for a bridge port (`hw`).
  *
- * Offload lets the switch chip forward this port's frames at wire speed
- * without the CPU - the whole point of a VLAN-aware bridge on a
- * switch-capable board. It is on by default where the hardware allows;
- * turn it off to force software forwarding (rarely wanted, e.g. to use
- * a software-only feature on that port). Turning it *on* is only intent
- * - whether the chip actually accelerates also depends on the bridge
- * config; confirm with the switch topic's `switchHosts`.
+ * With offload the switch chip forwards the port's frames at wire speed
+ * without the CPU. RouterOS turns it on where the hardware allows; turn
+ * it off to force software forwarding, e.g. for a software-only feature.
+ * On only permits offload: whether the chip forwards also depends on the
+ * bridge config; check with `switchHosts`.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the bridge port
- * @param {bool}   on            true to allow offload, false to force software
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the bridge port
+ * @param on {bool}              allow offload; false forces software forwarding
  * @throws {Error} kind "routeros" when the interface is on no bridge
  * @example
  *   def ports as list of mt.BridgePort init mt.bridgePorts($c, "brlan");
@@ -194,7 +188,7 @@ export func setBridgePortHardwareOffload(c as Client, interfaceName as string, o
 /**
  * Fold a reply row into a Bridge.
  *
- * @param {map of string to string} row a "/interface/bridge/print" row
+ * @param row {map of string to string} a "/interface/bridge/print" row
  * @return {Bridge} the typed bridge
  * @internal
  */
@@ -212,7 +206,7 @@ func bridgeFromRow(row as map of string to string) {
 /**
  * List the bridge VLAN table.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of BridgeVlan} all VLAN-table entries
  */
 export func bridgeVlans(c as Client) {
@@ -225,20 +219,17 @@ export func bridgeVlans(c as Client) {
 }
 
 /**
- * Switch a bridge to VLAN-aware mode (hardware VLAN filtering).
+ * Turn on VLAN filtering: the bridge tags, untags and filters per port,
+ * in hardware where the switch chip supports it, instead of separate
+ * `/interface/vlan` interfaces.
  *
- * This is the modern, managed-switch way to do VLANs: instead of
- * separate `/interface/vlan` sub-interfaces, the bridge itself tags,
- * untags, and filters per port. Turn it on, then declare the VLANs with
- * `addBridgeVlan` and set each access port's `pvid` with `setPortPvid`.
+ * DANGER: with an incomplete VLAN table, filtering drops untagged
+ * traffic, including your management session if it uses this bridge.
+ * Declare the VLANs (`addBridgeVlan`) and PVIDs (`setPortPvid`) first,
+ * enable filtering last, and keep a second way in.
  *
- * DANGER: enabling filtering on a bridge before its VLAN table is set
- * up drops untagged traffic - including your own management session if
- * it rides that bridge. Build the VLAN table and PVIDs FIRST, enable
- * filtering LAST, and keep a second way in (see the docs).
- *
- * @param {Client} c      an open client
- * @param {string} bridge the bridge name
+ * @param c {Client}      an open client
+ * @param bridge {string} the bridge name
  * @throws {Error} kind "routeros" when the bridge does not exist
  * @example
  *   mt.addBridgeVlan($c, "brlan", 10, "ether1", "ether2,ether3");
@@ -250,10 +241,10 @@ export func enableVlanFiltering(c as Client, bridge as string) {
 }
 
 /**
- * Switch a bridge back to plain (non-VLAN-aware) mode.
+ * Turn VLAN filtering off on a bridge.
  *
- * @param {Client} c      an open client
- * @param {string} bridge the bridge name
+ * @param c {Client}      an open client
+ * @param bridge {string} the bridge name
  * @throws {Error} kind "routeros" when the bridge does not exist
  */
 export func disableVlanFiltering(c as Client, bridge as string) {
@@ -263,18 +254,19 @@ export func disableVlanFiltering(c as Client, bridge as string) {
 /**
  * Declare a VLAN on a bridge: which ports carry it, tagged or untagged.
  *
- * Tagged ports are trunks (they keep the VLAN tag - use for links to
- * switches or the router itself); untagged ports are access ports (the
- * tag is stripped - use for end devices, and give each such port a
- * matching `pvid`). Idempotent by bridge + vlan id.
+ * Tagged ports are trunks (links to switches, or the bridge itself for
+ * the router's own VLAN interface); untagged ports are access ports for
+ * end devices and need a matching `pvid`. Idempotent by bridge and VLAN
+ * id: an existing entry's id is returned and its ports are not changed.
  *
- * @param {Client} c        an open client
- * @param {string} bridge   the VLAN-aware bridge
- * @param {int}    vlanId   the VLAN id (1-4094)
- * @param {string} tagged   trunk ports, comma-separated ("" for none)
- * @param {string} untagged access ports, comma-separated ("" for none)
- * @return {string} the RouterOS id of the (new or existing) entry
- * @throws {Error} kind "routeros" on a bad id or unknown bridge
+ * @param c {Client}        an open client
+ * @param bridge {string}   the VLAN-aware bridge
+ * @param vlanId {int}      VLAN id, 1-4094
+ * @param tagged {string}   trunk ports, comma-separated, "" for none
+ * @param untagged {string} access ports, comma-separated, "" for none
+ * @return {string} the id of the new or existing entry
+ * @throws {Error} kind "routeros" on a bad VLAN id, an unknown bridge or
+ *                 an empty or spaced port name
  */
 export func addBridgeVlan(
     c as Client,
@@ -303,13 +295,13 @@ export func addBridgeVlan(
 /**
  * Set an access port's default VLAN (its PVID).
  *
- * Untagged frames entering the port are assigned this VLAN. An access
- * port's pvid must match the VLAN it is `untagged` in.
+ * Untagged frames entering the port join this VLAN. It must match the
+ * VLAN the port is untagged in.
  *
- * @param {Client} c      an open client
- * @param {string} bridge the VLAN-aware bridge
- * @param {string} port   the bridge port (member interface)
- * @param {int}    pvid   the VLAN id, 1-4094
+ * @param c {Client}      an open client
+ * @param bridge {string} the VLAN-aware bridge
+ * @param port {string}   the member interface
+ * @param pvid {int}      VLAN id, 1-4094
  * @throws {Error} kind "routeros" on a bad id, or a port not on the bridge
  */
 export func setPortPvid(c as Client, bridge as string, port as string, pvid as int) {
@@ -325,9 +317,9 @@ export func setPortPvid(c as Client, bridge as string, port as string, pvid as i
 /**
  * Remove a VLAN from a bridge's VLAN table.
  *
- * @param {Client} c      an open client
- * @param {string} bridge the bridge
- * @param {int}    vlanId the VLAN id
+ * @param c {Client}      an open client
+ * @param bridge {string} the bridge
+ * @param vlanId {int}   the VLAN id
  * @throws {Error} kind "routeros" when no such entry exists
  */
 export func removeBridgeVlan(c as Client, bridge as string, vlanId as int) {
@@ -345,7 +337,7 @@ export func removeBridgeVlan(c as Client, bridge as string, vlanId as int) {
 /**
  * Validate and normalize a comma-separated bridge-port list.
  *
- * @param {string} csv the candidate list
+ * @param csv {string} the candidate list
  * @return {string} the normalized list
  * @throws {Error} kind "routeros" on an empty or spaced entry
  * @internal
@@ -364,9 +356,9 @@ func normalizedPortList(csv as string) {
 /**
  * Find a bridge VLAN entry by bridge and vlan id.
  *
- * @param {list of map of string to string} rows "/interface/bridge/vlan/print" rows
- * @param {string} bridge the bridge
- * @param {string} vid    the vlan id as a string
+ * @param rows {list of map of string to string} "/interface/bridge/vlan/print" rows
+ * @param bridge {string} the bridge
+ * @param vid {string}    the vlan id as a string
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -383,9 +375,9 @@ func findBridgeVlanRow(rows as list of map of string to string, bridge as string
 /**
  * Find a bridge-port entry by bridge and interface.
  *
- * @param {list of map of string to string} rows "/interface/bridge/port/print" rows
- * @param {string} bridge the bridge
- * @param {string} port   the member interface
+ * @param rows {list of map of string to string} "/interface/bridge/port/print" rows
+ * @param bridge {string} the bridge
+ * @param port {string}   the member interface
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -402,7 +394,7 @@ func bridgePortRow(rows as list of map of string to string, bridge as string, po
 /**
  * Fold a reply row into a BridgeVlan.
  *
- * @param {map of string to string} row an "/interface/bridge/vlan/print" row
+ * @param row {map of string to string} an "/interface/bridge/vlan/print" row
  * @return {BridgeVlan} the typed entry
  * @internal
  */
@@ -420,7 +412,7 @@ func bridgeVlanFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a BridgePort.
  *
- * @param {map of string to string} row a "/interface/bridge/port/print" row
+ * @param row {map of string to string} a "/interface/bridge/port/print" row
  * @return {BridgePort} the typed bridge port
  * @internal
  */

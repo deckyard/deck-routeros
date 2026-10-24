@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - the ARP table: which IP belongs to which MAC.
@@ -11,17 +11,17 @@ export def const ARP_PATH as string init "/ip/arp";
 /**
  * One ARP entry: an IP-to-MAC binding on an interface.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} address       the IP address
- * @field {string} mac           the MAC address it resolves to, "" while unresolved
- * @field {string} interfaceName interface the binding lives on
- * @field {bool}   dynamic       true when the router learned it by itself;
- *                               false for a static (pinned) entry
- * @field {bool}   complete      true when the MAC is actually known
- * @field {bool}   published     true when the router answers ARP for this
- *                               address itself (proxy ARP)
- * @field {bool}   disabled      true when the entry is switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field address {string} IP address
+ * @field mac {string} MAC address it resolves to, "" while unresolved
+ * @field interfaceName {string} interface the binding lives on
+ * @field dynamic {bool} true when learned, false for a static (pinned) entry
+ * @field complete {bool} true when the MAC is known; false means the router
+ *        asked and got no answer, typically an offline device
+ * @field published {bool} true when the router answers ARP for this address
+ *        itself (proxy ARP)
+ * @field disabled {bool} true when the entry is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct ArpEntry {
     id as string,
@@ -38,11 +38,12 @@ export def struct ArpEntry {
 /**
  * Read the whole ARP table.
  *
- * Every device the router recently talked to on its connected networks
- * shows up here - it doubles as a "who is on my LAN" list.
+ * Every device the router recently exchanged packets with on a connected
+ * network appears here, so it doubles as a "who is on my LAN" list.
+ * Dynamic entries age out after a few minutes of silence.
  *
- * @param {Client} c an open client
- * @return {list of ArpEntry} all entries, dynamic and static
+ * @param c {Client} an open client
+ * @return {list of ArpEntry} dynamic and static entries
  */
 export func arpTable(c as Client) {
     def rows as list of map of string to string init getAll($c, ARP_PATH);
@@ -54,10 +55,10 @@ export func arpTable(c as Client) {
 }
 
 /**
- * The ARP entries on one interface.
+ * Read the ARP entries on one interface.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface (or bridge) to filter for
+ * @param c {Client} an open client
+ * @param interfaceName {string} interface or bridge to filter for
  * @return {list of ArpEntry} that interface's entries
  */
 export func arpTableOn(c as Client, interfaceName as string) {
@@ -72,13 +73,13 @@ export func arpTableOn(c as Client, interfaceName as string) {
 }
 
 /**
- * Which MAC address does an IP resolve to right now?
+ * Look up the MAC address an IP currently resolves to.
  *
- * A miss is normal (the device may simply be offline or never have
- * talked to the router), so this returns "" instead of throwing.
+ * A miss is normal (the device is offline or has not talked to the
+ * router), so it returns "" instead of throwing.
  *
- * @param {Client} c       an open client
- * @param {string} address the IP address to look up
+ * @param c {Client} an open client
+ * @param address {string} IP address to look up
  * @return {string} the MAC address, or "" when the table has no entry
  * @throws {Error} kind "routeros" on a malformed address
  */
@@ -91,14 +92,14 @@ export func macForAddress(c as Client, address as string) {
 }
 
 /**
- * Which IP addresses does a device (a MAC) currently hold?
+ * Look up the IP addresses a MAC currently holds.
  *
- * The reverse lookup - useful for "where did my printer go". A device
- * can legitimately hold several addresses.
+ * A device can hold several addresses. The MAC is matched
+ * case-insensitively.
  *
- * @param {Client} c   an open client
- * @param {string} mac the device's MAC address (case-insensitive)
- * @return {list of string} its IP addresses, possibly empty
+ * @param c {Client} an open client
+ * @param mac {string} device MAC address, six colon-separated hex pairs
+ * @return {list of string} its IP addresses in table order, possibly empty
  * @throws {Error} kind "routeros" on a malformed MAC
  */
 export func addressesForMac(c as Client, mac as string) {
@@ -108,20 +109,21 @@ export func addressesForMac(c as Client, mac as string) {
 }
 
 /**
- * Pin an IP-to-MAC binding (a static ARP entry).
+ * Pin an IP-to-MAC binding as a static ARP entry.
  *
- * The router then never re-learns that address from the network -
- * combined with an interface in `arp=reply-only` mode (generic `set`
- * on INTERFACE_PATH), only pinned devices can talk at all. Refuses to
- * overwrite an existing static entry for the same address.
+ * The router then never re-learns that address from the network. With the
+ * interface's `arp` property set to `reply-only` (generic `set` on
+ * INTERFACE_PATH), only pinned devices can talk at all. The MAC is stored
+ * upper-case. Refuses when a static entry for the same address already
+ * exists on the same interface.
  *
- * @param {Client} c             an open client
- * @param {string} address       the IP address to pin
- * @param {string} mac           the MAC it must resolve to
- * @param {string} interfaceName interface (or bridge) the binding lives on
- * @return {string} the RouterOS id of the new entry
+ * @param c {Client} an open client
+ * @param address {string} IP address to pin
+ * @param mac {string} MAC it must resolve to
+ * @param interfaceName {string} interface or bridge the binding lives on
+ * @return {string} id of the new entry
  * @throws {Error} kind "routeros" on a malformed address or MAC, an
- *                 unknown interface, or an existing static entry
+ *                unknown interface, or an existing static entry
  * @example
  *   mt.addStaticArp($c, "192.168.88.50", "AA:BB:CC:DD:EE:FF", "brlan");
  */
@@ -145,12 +147,13 @@ export func addStaticArp(c as Client, address as string, mac as string, interfac
 /**
  * Remove the ARP entry for an address.
  *
- * Works on static entries (unpin) and on dynamic ones - removing a
- * dynamic entry forces the router to re-resolve, which clears a stale
- * binding after a device swapped hardware.
+ * Works on static entries (unpin) and dynamic ones: removing a dynamic
+ * entry makes the router re-resolve, which clears a stale binding after a
+ * device changed hardware. Only the first entry for the address is
+ * removed.
  *
- * @param {Client} c       an open client
- * @param {string} address the IP address whose entry goes
+ * @param c {Client} an open client
+ * @param address {string} IP address whose entry goes
  * @throws {Error} kind "routeros" when the table has no entry for it
  */
 export func removeArpEntry(c as Client, address as string) {
@@ -164,15 +167,14 @@ export func removeArpEntry(c as Client, address as string) {
 }
 
 /**
- * Drop every dynamic ARP entry on an interface.
+ * Remove every dynamic ARP entry on an interface.
  *
- * A diagnostic broom: the router re-learns the neighbourhood from
- * scratch. Static entries stay. Doing nothing (no dynamic entries) is
- * fine and not an error.
+ * The router re-learns its neighbours from scratch. Static entries stay.
+ * An interface with no dynamic entries is not an error.
  *
- * @param {Client} c             an open client
- * @param {string} interfaceName the interface to flush
- * @return {int} how many entries were removed
+ * @param c {Client} an open client
+ * @param interfaceName {string} interface to flush
+ * @return {int} number of entries removed
  */
 export func flushArp(c as Client, interfaceName as string) {
     def rows as list of map of string to string init getAll($c, ARP_PATH);
@@ -189,8 +191,8 @@ export func flushArp(c as Client, interfaceName as string) {
 /**
  * Collect the addresses rows bound to a MAC, case-insensitively.
  *
- * @param {list of map of string to string} rows "/ip/arp/print" rows
- * @param {string} mac the MAC to match
+ * @param rows {list of map of string to string} "/ip/arp/print" rows
+ * @param mac {string} the MAC to match
  * @return {list of string} the bound addresses, in table order
  * @internal
  */
@@ -208,9 +210,9 @@ func addressesForMacRows(rows as list of map of string to string, mac as string)
 /**
  * Find a static (non-dynamic) ARP row for an address on an interface.
  *
- * @param {list of map of string to string} rows "/ip/arp/print" rows
- * @param {string} address       the IP address
- * @param {string} interfaceName the interface
+ * @param rows {list of map of string to string} "/ip/arp/print" rows
+ * @param address {string}       the IP address
+ * @param interfaceName {string} the interface
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -231,7 +233,7 @@ func findStaticArpRow(
 /**
  * Fold a reply row into an ArpEntry.
  *
- * @param {map of string to string} row an "/ip/arp/print" row
+ * @param row {map of string to string} an "/ip/arp/print" row
  * @return {ArpEntry} the typed entry
  * @internal
  */

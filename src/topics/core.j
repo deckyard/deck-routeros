@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - connection, generic verbs, shared validation and row helpers.
@@ -14,17 +14,14 @@ def const DIGIT_CHARS as string init "0123456789";
 /**
  * An open, authenticated connection to one router.
  *
- * Obtain one with `connect` / `connectTLS` / `connectWith` and pass it as
- * the first argument to every other call; release it with `disconnect`.
+ * Made by `connect`, `connectTLS` or `connectWith`; passed first to every
+ * other call; closed with `disconnect`.
  *
- * @field {mikrotik.Session} session the underlying API session
- * @field {string} user the account this session is logged in as - used
- *        by the user-management helpers to refuse self-destructive
- *        operations (removing or disabling your own account)
- * @field {bool} verbose when true, every command this client sends is
- *        printed to stdout before it goes out - see `setVerbose`. A
- *        module holds no mutable state in Jennifer, so the flag rides
- *        on the client rather than sitting in a global.
+ * @field session {mikrotik.Session} the underlying API session
+ * @field user {string} the logged-in account; the user helpers refuse to
+ *        remove, disable or regroup it
+ * @field verbose {bool} print every command to stdout before sending it
+ *        (see `setVerbose`)
  */
 export def struct Client {
     session as mikrotik.Session,
@@ -33,11 +30,13 @@ export def struct Client {
 };
 
 /**
- * Connect to a router over the plaintext API port (8728).
+ * Connect over the plaintext API port 8728.
  *
- * @param {string} host     router address (IP or DNS name)
- * @param {string} user     RouterOS user name
- * @param {string} password RouterOS password
+ * `MT_VERBOSE` in the environment seeds the verbose flag.
+ *
+ * @param host {string}     router IP address or DNS name
+ * @param user {string}     RouterOS user name
+ * @param password {string} RouterOS password
  * @return {Client} an authenticated client
  * @throws {Error} kind "mikrotik" when the connection or login fails
  */
@@ -50,11 +49,13 @@ export func connect(host as string, user as string, password as string) {
 }
 
 /**
- * Connect to a router over the TLS API port (8729, api-ssl).
+ * Connect over the TLS API port 8729 (api-ssl).
  *
- * @param {string} host     router address (IP or DNS name)
- * @param {string} user     RouterOS user name
- * @param {string} password RouterOS password
+ * The transport verifies the router's certificate.
+ *
+ * @param host {string}     router IP address or DNS name
+ * @param user {string}     RouterOS user name
+ * @param password {string} RouterOS password
  * @return {Client} an authenticated client
  * @throws {Error} kind "mikrotik" when the connection or login fails
  */
@@ -67,13 +68,13 @@ export func connectTLS(host as string, user as string, password as string) {
 }
 
 /**
- * Connect with an explicit port and TLS choice, for non-default setups.
+ * Connect on an explicit port, with or without TLS.
  *
- * @param {string} host     router address (IP or DNS name)
- * @param {int}    port     API TCP port (e.g. 8728, 8729, or a custom one)
- * @param {string} user     RouterOS user name
- * @param {string} password RouterOS password
- * @param {bool}   tls      true to wrap the connection in TLS
+ * @param host {string}     router IP address or DNS name
+ * @param port {int}        API TCP port, 1-65535
+ * @param user {string}     RouterOS user name
+ * @param password {string} RouterOS password
+ * @param tls {bool}        wrap the connection in TLS
  * @return {Client} an authenticated client
  * @throws {Error} kind "routeros" on an invalid port,
  *                 kind "mikrotik" when the connection or login fails
@@ -99,9 +100,9 @@ export func connectWith(
 /**
  * Close the connection behind a client.
  *
- * The client must not be used afterwards.
+ * The client is unusable afterwards.
  *
- * @param {Client} c the client to shut down
+ * @param c {Client} the client to close
  */
 export func disconnect(c as Client) {
     mikrotik.close($c.session);
@@ -110,11 +111,11 @@ export func disconnect(c as Client) {
 /**
  * Read every item under a path.
  *
- * The generic escape hatch for lists routeros has no typed helper for
- * (e.g. "/ip/address", "/ip/dhcp-server/lease").
+ * Works for any list, including ones without a typed helper
+ * (e.g. "/ip/dhcp-server/option").
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path, with or without leading slash
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path; leading and trailing slashes optional
  * @return {list of map of string to string} one property map per item
  * @throws {Error} kind "routeros" on an empty path, kind "mikrotik" on a router error
  */
@@ -125,10 +126,10 @@ export func getAll(c as Client, path as string) {
 /**
  * Create an item under a path.
  *
- * @param {Client} c     an open client
- * @param {string} path  RouterOS list path (e.g. "/interface/bridge")
- * @param {map of string to string} attrs properties of the new item
- * @return {string} the RouterOS id of the created item
+ * @param c {Client}     an open client
+ * @param path {string}  RouterOS list path (e.g. "/interface/bridge")
+ * @param attrs {map of string to string} properties of the new item, RouterOS names
+ * @return {string} the new item's RouterOS id
  * @throws {Error} kind "routeros" on an empty path, kind "mikrotik" when the router refuses
  */
 export func add(c as Client, path as string, attrs as map of string to string) {
@@ -138,11 +139,11 @@ export func add(c as Client, path as string, attrs as map of string to string) {
 /**
  * Delete an item by its RouterOS id.
  *
- * `remove` is what RouterOS calls delete; there is no separate delete verb.
+ * RouterOS has no separate delete verb.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path the item lives under
- * @param {string} id   the item id (e.g. "*3"), as returned by `add` or found in a row
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path the item lives under
+ * @param id {string}   the item id (e.g. "*3"), from `add` or a row's ".id"
  * @throws {Error} kind "routeros" on an empty path or id, kind "mikrotik" when the router refuses
  */
 export func remove(c as Client, path as string, id as string) {
@@ -151,12 +152,12 @@ export func remove(c as Client, path as string, id as string) {
 }
 
 /**
- * Change properties of an existing item.
+ * Change properties of an item.
  *
- * @param {Client} c     an open client
- * @param {string} path  RouterOS list path the item lives under
- * @param {string} id    the item id (e.g. "*3")
- * @param {map of string to string} attrs the properties to change
+ * @param c {Client}     an open client
+ * @param path {string}  RouterOS list path the item lives under
+ * @param id {string}    the item id (e.g. "*3")
+ * @param attrs {map of string to string} the properties to change
  * @throws {Error} kind "routeros" on an empty path or id, kind "mikrotik" when the router refuses
  */
 export func set(c as Client, path as string, id as string, attrs as map of string to string) {
@@ -167,12 +168,12 @@ export func set(c as Client, path as string, id as string, attrs as map of strin
 }
 
 /**
- * Change properties of an existing item; synonym of `set`.
+ * Synonym of `set`.
  *
- * @param {Client} c     an open client
- * @param {string} path  RouterOS list path the item lives under
- * @param {string} id    the item id
- * @param {map of string to string} attrs the properties to change
+ * @param c {Client}     an open client
+ * @param path {string}  RouterOS list path the item lives under
+ * @param id {string}    the item id
+ * @param attrs {map of string to string} the properties to change
  * @throws {Error} kind "routeros" on an empty path or id, kind "mikrotik" when the router refuses
  */
 export func update(c as Client, path as string, id as string, attrs as map of string to string) {
@@ -182,13 +183,13 @@ export func update(c as Client, path as string, id as string, attrs as map of st
 /**
  * Find the first item under a path whose "name" property matches.
  *
- * Filters server-side with a RouterOS `?name=` query word, so the router
- * returns only the matching row(s) instead of the whole table.
+ * Filters on the router with a `?name=` query word, so only matching rows
+ * travel.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path
- * @param {string} name the value of the "name" property to look for
- * @return {map of string to string} the item's properties, or an empty map when absent
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path
+ * @param name {string} the value of the "name" property to look for
+ * @return {map of string to string} the item's properties, empty when absent
  */
 export func findByName(c as Client, path as string, name as string) {
     def rows as list of map of string to string init apiPrintWhere(
@@ -205,10 +206,10 @@ export func findByName(c as Client, path as string, name as string) {
 /**
  * Resolve a name to a RouterOS id under a path.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path
- * @param {string} name the value of the "name" property to look for
- * @return {string} the item id, or "" when no item has that name
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path
+ * @param name {string} the value of the "name" property to look for
+ * @return {string} the item id, "" when no item has that name
  */
 export func idByName(c as Client, path as string, name as string) {
     def row as map of string to string init findByName($c, $path, $name);
@@ -218,9 +219,9 @@ export func idByName(c as Client, path as string, name as string) {
 /**
  * Delete the item under a path whose "name" property matches.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path
- * @param {string} name the name of the item to delete
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path
+ * @param name {string} the name of the item to delete
  * @throws {Error} kind "routeros" when no item has that name
  */
 export func removeByName(c as Client, path as string, name as string) {
@@ -228,46 +229,38 @@ export func removeByName(c as Client, path as string, name as string) {
 }
 
 /**
- * Switch an item on (clear its disabled flag).
+ * Clear an item's disabled flag.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path
- * @param {string} id   the item id
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path
+ * @param id {string}   the item id
  */
 export func enable(c as Client, path as string, id as string) {
     set($c, $path, $id, {"disabled": "no"});
 }
 
 /**
- * Switch an item off (set its disabled flag).
+ * Set an item's disabled flag; the item stays but has no effect.
  *
- * The item is kept but stops having any effect until enabled again.
- *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path
- * @param {string} id   the item id
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path
+ * @param id {string}   the item id
  */
 export func disable(c as Client, path as string, id as string) {
     set($c, $path, $id, {"disabled": "yes"});
 }
 
 /**
- * Move an item of an ordered list so it sits directly above another item.
+ * Move an item of an ordered list directly above another item.
  *
- * RouterOS walks its ordered lists - the firewall tables, mangle, raw,
- * simple queues - strictly top to bottom and stops at the first match,
- * so position is semantics, not cosmetics: an accept rule above a drop
- * rule wins, and the same two rules in the other order do the opposite.
- * This is the verb that repairs an order after the fact, instead of
- * removing and re-adding the rule at the end.
+ * RouterOS evaluates its ordered lists (firewall filter, NAT, mangle,
+ * raw, simple queues) top to bottom and stops at the first match, so
+ * position decides behavior. `beforeId` "" moves the item to the bottom.
  *
- * `beforeId` names the item the moved item should end up *above*; pass
- * "" to send it to the bottom of the list.
- *
- * @param {Client} c        an open client
- * @param {string} path     the ordered list path (e.g. "/ip/firewall/filter")
- * @param {string} id       the item to move
- * @param {string} beforeId the item to land in front of, "" for the bottom
+ * @param c {Client}        an open client
+ * @param path {string}     ordered list path (e.g. "/ip/firewall/filter")
+ * @param id {string}       the item to move
+ * @param beforeId {string} the item to land above, "" for the bottom
  * @throws {Error} kind "routeros" on an empty id or a self-move,
  *                 kind "mikrotik" when the router rejects the move
  * @example
@@ -291,11 +284,12 @@ export func moveRule(c as Client, path as string, id as string, beforeId as stri
 /**
  * Move an item to the top of its ordered list.
  *
- * A no-op when the item is already first.
+ * A no-op when the item is already first. Reads the list to find the
+ * current first item.
  *
- * @param {Client} c    an open client
- * @param {string} path the ordered list path
- * @param {string} id   the item to move
+ * @param c {Client}    an open client
+ * @param path {string} ordered list path
+ * @param id {string}   the item to move
  * @throws {Error} kind "routeros" on an empty id or an empty list
  * @example
  *   mt.moveRuleToTop($c, mt.RAW_PATH, $dropBogonsId);
@@ -316,9 +310,9 @@ export func moveRuleToTop(c as Client, path as string, id as string) {
 /**
  * Move an item to the bottom of its ordered list.
  *
- * @param {Client} c    an open client
- * @param {string} path the ordered list path
- * @param {string} id   the item to move
+ * @param c {Client}    an open client
+ * @param path {string} ordered list path
+ * @param id {string}   the item to move
  * @throws {Error} kind "routeros" on an empty id
  */
 export func moveRuleToBottom(c as Client, path as string, id as string) {
@@ -328,7 +322,7 @@ export func moveRuleToBottom(c as Client, path as string, id as string) {
 /**
  * Throw the module's error.
  *
- * @param {string} message human-readable failure description
+ * @param message {string} human-readable failure description
  * @throws {Error} always, kind "routeros"
  * @internal
  */
@@ -340,7 +334,7 @@ func raiseError(message as string) {
  * Normalize a RouterOS API path: trim, force a leading slash, strip
  * trailing slashes.
  *
- * @param {string} path raw path (e.g. "interface/bridge/")
+ * @param path {string} raw path (e.g. "interface/bridge/")
  * @return {string} the normalized path (e.g. "/interface/bridge")
  * @throws {Error} kind "routeros" on an empty or root-only path
  * @internal
@@ -365,7 +359,7 @@ func apiPath(path as string) {
 /**
  * Render a bool the way RouterOS expects it in attributes.
  *
- * @param {bool} value the flag
+ * @param value {bool} the flag
  * @return {string} "yes" or "no"
  * @internal
  */
@@ -379,8 +373,8 @@ func boolWord(value as bool) {
 /**
  * Read a property from a reply row, "" when absent.
  *
- * @param {map of string to string} row a reply row
- * @param {string} key property name
+ * @param row {map of string to string} a reply row
+ * @param key {string} property name
  * @return {string} the value or ""
  * @internal
  */
@@ -397,8 +391,8 @@ func rowValue(row as map of string to string, key as string) {
  * RouterOS renders flags as "true"/"false" (v7) or "yes"/"no" (older);
  * both are accepted.
  *
- * @param {map of string to string} row a reply row
- * @param {string} key property name
+ * @param row {map of string to string} a reply row
+ * @param key {string} property name
  * @return {bool} the flag
  * @internal
  */
@@ -410,9 +404,9 @@ func rowBool(row as map of string to string, key as string) {
 /**
  * Find the first row whose property `key` equals `value`.
  *
- * @param {list of map of string to string} rows reply rows
- * @param {string} key   property name to compare
- * @param {string} value value to look for
+ * @param rows {list of map of string to string} reply rows
+ * @param key {string}   property name to compare
+ * @param value {string} value to look for
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -429,10 +423,10 @@ func findRowByField(rows as list of map of string to string, key as string, valu
 /**
  * Resolve a name to an id under a path, throwing a friendly error when absent.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS list path
- * @param {string} name the "name" property value to look for
- * @param {string} what noun for the error message (e.g. "bridge")
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path
+ * @param name {string} the "name" property value to look for
+ * @param what {string} noun for the error message (e.g. "bridge")
  * @return {string} the item id
  * @throws {Error} kind "routeros" when no item has that name
  * @internal
@@ -448,8 +442,8 @@ func requiredId(c as Client, path as string, name as string, what as string) {
 /**
  * Validate a non-empty, space-free name.
  *
- * @param {string} name the candidate name
- * @param {string} what noun for the error message
+ * @param name {string} the candidate name
+ * @param what {string} noun for the error message
  * @throws {Error} kind "routeros" on an empty or space-containing name
  * @internal
  */
@@ -465,7 +459,7 @@ func ensureName(name as string, what as string) {
 /**
  * Validate a RouterOS item id.
  *
- * @param {string} id the candidate id
+ * @param id {string} the candidate id
  * @throws {Error} kind "routeros" on an empty id
  * @internal
  */
@@ -478,7 +472,7 @@ func ensureId(id as string) {
 /**
  * Validate a single TCP/UDP port number.
  *
- * @param {int} port the candidate port
+ * @param port {int} the candidate port
  * @throws {Error} kind "routeros" when outside 1-65535
  * @internal
  */
@@ -491,7 +485,7 @@ func ensurePort(port as int) {
 /**
  * Validate a port spec: digits plus "," (list) and "-" (range).
  *
- * @param {string} spec the candidate spec
+ * @param spec {string} the candidate spec
  * @throws {Error} kind "routeros" on an empty spec or a foreign character
  * @internal
  */
@@ -510,8 +504,8 @@ func ensurePortSpec(spec as string) {
 /**
  * Read a single-entry menu (e.g. "/system/resource") as one row.
  *
- * @param {Client} c    an open client
- * @param {string} path RouterOS menu path
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS menu path
  * @return {map of string to string} the first row, or an empty map when
  *         the router sent nothing
  * @internal
@@ -531,7 +525,7 @@ func singleRow(c as Client, path as string) {
  * Streaming commands like "check-for-updates" report progress as a
  * sequence of partial rows; the final state is their overlay.
  *
- * @param {list of map of string to string} rows the reply rows, in order
+ * @param rows {list of map of string to string} the reply rows, in order
  * @return {map of string to string} the merged row
  * @internal
  */
@@ -549,7 +543,7 @@ func mergeRows(rows as list of map of string to string) {
 /**
  * Validate one plain IP address (v4 or v6), no prefix.
  *
- * @param {string} address the candidate address
+ * @param address {string} the candidate address
  * @throws {Error} kind "routeros" when it does not parse
  * @internal
  */
@@ -564,7 +558,7 @@ func ensureIpAddress(address as string) {
 /**
  * Validate an address in CIDR form ("address/prefix").
  *
- * @param {string} cidr the candidate (e.g. "192.168.88.0/24")
+ * @param cidr {string} the candidate (e.g. "192.168.88.0/24")
  * @throws {Error} kind "routeros" on a missing prefix or a parse failure
  * @internal
  */
@@ -586,9 +580,9 @@ func ensureCidr(cidr as string) {
  * Call after `ensureCidr` / `ensureIpAddress`, so parse errors have
  * already been reported with better messages.
  *
- * @param {string} cidr    the network (e.g. "192.168.88.0/24")
- * @param {string} address the address that must be inside it
- * @param {string} what    noun for the error message (e.g. "gateway")
+ * @param cidr {string}    the network (e.g. "192.168.88.0/24")
+ * @param address {string} the address that must be inside it
+ * @param what {string}    noun for the error message (e.g. "gateway")
  * @throws {Error} kind "routeros" when the address is outside
  * @internal
  */
@@ -603,7 +597,7 @@ func ensureInNetwork(cidr as string, address as string, what as string) {
 /**
  * Reject a malformed MAC address.
  *
- * @param {string} mac the offending value
+ * @param mac {string} the offending value
  * @throws {Error} always, kind "routeros"
  * @internal
  */
@@ -615,7 +609,7 @@ func badMac(mac as string) {
 /**
  * Validate a MAC address: six colon-separated hex pairs, any case.
  *
- * @param {string} mac the candidate MAC
+ * @param mac {string} the candidate MAC
  * @throws {Error} kind "routeros" on any other shape
  * @internal
  */
@@ -640,7 +634,7 @@ func ensureMac(mac as string) {
 /**
  * Validate and normalize a comma-separated list of IP addresses.
  *
- * @param {string} csv e.g. "1.1.1.1, 9.9.9.9" (spaces tolerated)
+ * @param csv {string} e.g. "1.1.1.1, 9.9.9.9" (spaces tolerated)
  * @return {string} the normalized list, e.g. "1.1.1.1,9.9.9.9"
  * @throws {Error} kind "routeros" on an empty list, an empty entry, or
  *                 an entry that is not an IP address
@@ -666,7 +660,7 @@ func normalizedAddressList(csv as string) {
 /**
  * Test whether a string is a plain IP address (v4 or v6).
  *
- * @param {string} value the candidate
+ * @param value {string} the candidate
  * @return {bool} true when it parses as an address
  * @internal
  */
@@ -683,8 +677,8 @@ func isIpAddress(value as string) {
  * Read an integer property from a reply row; absent or unparseable
  * counts as 0.
  *
- * @param {map of string to string} row a reply row
- * @param {string} key property name
+ * @param row {map of string to string} a reply row
+ * @param key {string} property name
  * @return {int} the value or 0
  * @internal
  */
@@ -706,7 +700,7 @@ func rowInt(row as map of string to string, key as string) {
  * IP addresses and DNS names are both fine (the router resolves), so
  * only the obviously broken is rejected.
  *
- * @param {string} host the candidate (already trimmed)
+ * @param host {string} the candidate (already trimmed)
  * @throws {Error} kind "routeros" on an empty or space-containing host
  * @internal
  */
@@ -726,10 +720,10 @@ func ensureHost(host as string) {
  * id changes when it is re-added, its comment does not), so the
  * *ByComment verbs all funnel through here.
  *
- * @param {Client} c       an open client
- * @param {string} path    the list path to search
- * @param {string} comment the comment to look for
- * @param {string} what    noun for the error message (e.g. "firewall rule")
+ * @param c {Client}       an open client
+ * @param path {string}    the list path to search
+ * @param comment {string} the comment to look for
+ * @param what {string}    noun for the error message (e.g. "firewall rule")
  * @return {string} the item id
  * @throws {Error} kind "routeros" when nothing carries that comment
  * @internal
@@ -744,24 +738,15 @@ func requiredIdByComment(c as Client, path as string, comment as string, what as
 }
 
 /**
- * Turn command logging on or off for a client.
+ * Turn command logging on or off.
  *
- * With it on, every command routeros sends is printed to stdout just
- * before it goes out, so a provisioning script can be read as a
- * transcript of what it did to the router - and dry-run reviewed by
- * eye before anyone points it at production.
+ * When on, every command is printed to stdout before it is sent, with
+ * credentials shown as `<redacted>`. Returns a copy: keep it
+ * (`$c = mt.setVerbose($c, true);`), the argument is unchanged.
+ * `MT_VERBOSE` (`1`, `yes`, `true`, `on`) seeds the flag at connect time.
  *
- * A Jennifer module holds no mutable state, so this is not a global
- * switch: it returns a NEW client and you keep the returned one.
- *
- *     $c = mt.setVerbose($c, true);      # not mt.setVerbose($c, true);
- *
- * The environment variable `MT_VERBOSE` (`1` / `yes` / `true` / `on`)
- * seeds the flag at `connect` time, so a script can be traced without
- * editing it.
- *
- * @param {Client} c       an open client
- * @param {bool}   enabled true to print commands, false to stop
+ * @param c {Client}     an open client
+ * @param enabled {bool} print commands
  * @return {Client} a copy of the client with the flag set
  * @example
  *   def c as mt.Client init mt.connect($host, $user, $password);
@@ -773,9 +758,9 @@ export func setVerbose(c as Client, enabled as bool) {
 }
 
 /**
- * Whether this client is printing the commands it sends.
+ * Whether the client logs the commands it sends.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {bool} true when command logging is on
  */
 export func isVerbose(c as Client) {
@@ -790,9 +775,9 @@ export func isVerbose(c as Client) {
  * covers all of them - the topic files never reach for `mikrotik.run`
  * themselves.
  *
- * @param {Client} c       an open client
- * @param {string} command the full RouterOS command path
- * @param {map of string to string} attrs the `=key=value` attributes
+ * @param c {Client}       an open client
+ * @param command {string} the full RouterOS command path
+ * @param attrs {map of string to string} the `=key=value` attributes
  * @return {string} the `=ret=` value the router replied with
  * @internal
  */
@@ -805,9 +790,9 @@ func apiRun(c as Client, command as string, attrs as map of string to string) {
  * Send a command that returns reply rows, logging it first when the
  * client is verbose.
  *
- * @param {Client} c       an open client
- * @param {string} command the full RouterOS command path
- * @param {map of string to string} attrs the `=key=value` attributes
+ * @param c {Client}       an open client
+ * @param command {string} the full RouterOS command path
+ * @param attrs {map of string to string} the `=key=value` attributes
  * @return {list of map of string to string} the `!re` rows
  * @internal
  */
@@ -821,8 +806,8 @@ func apiTalk(c as Client, command as string, attrs as map of string to string) {
 /**
  * Read a whole list path, logging it first when the client is verbose.
  *
- * @param {Client} c    an open client
- * @param {string} path the normalized list path
+ * @param c {Client}    an open client
+ * @param path {string} the normalized list path
  * @return {list of map of string to string} the rows
  * @internal
  */
@@ -838,9 +823,9 @@ func apiPrint(c as Client, path as string) {
  * Read a list path filtered by RouterOS query words, logging it first
  * when the client is verbose.
  *
- * @param {Client} c       an open client
- * @param {string} path    the normalized list path
- * @param {list of string} queries the raw `?...` query words
+ * @param c {Client}       an open client
+ * @param path {string}    the normalized list path
+ * @param queries {list of string} the raw `?...` query words
  * @return {list of map of string to string} the matching rows
  * @internal
  */
@@ -859,9 +844,9 @@ func apiPrintWhere(c as Client, path as string, queries as list of string) {
 /**
  * Print one outgoing command, when the client is verbose.
  *
- * @param {Client} c       an open client
- * @param {string} command the command path
- * @param {map of string to string} attrs its attributes
+ * @param c {Client}       an open client
+ * @param command {string} the command path
+ * @param attrs {map of string to string} its attributes
  * @internal
  */
 func logCommand(c as Client, command as string, attrs as map of string to string) {
@@ -873,8 +858,8 @@ func logCommand(c as Client, command as string, attrs as map of string to string
 /**
  * Print how many rows a read returned, when the client is verbose.
  *
- * @param {Client} c    an open client
- * @param {list of map of string to string} rows the reply rows
+ * @param c {Client}    an open client
+ * @param rows {list of map of string to string} the reply rows
  * @internal
  */
 func logRows(c as Client, rows as list of map of string to string) {
@@ -893,7 +878,7 @@ func logRows(c as Client, rows as list of map of string to string) {
  * Insertion order is preserved, so the log shows the attributes in the
  * order they go on the wire.
  *
- * @param {map of string to string} attrs the attributes
+ * @param attrs {map of string to string} the attributes
  * @return {string} the rendered suffix, "" when there are none
  * @internal
  */
@@ -909,7 +894,7 @@ func formatAttrs(attrs as map of string to string) {
 /**
  * Render RouterOS query words for the log.
  *
- * @param {list of string} queries the raw `?...` words
+ * @param queries {list of string} the raw `?...` words
  * @return {string} the rendered suffix, "" when there are none
  * @internal
  */
@@ -925,8 +910,8 @@ func formatQueries(queries as list of string) {
  * The value to print for an attribute: the value itself, or a
  * placeholder when the key carries a secret.
  *
- * @param {string} key   the attribute name
- * @param {string} value the attribute value
+ * @param key {string}   the attribute name
+ * @param value {string} the attribute value
  * @return {string} what the log should show
  * @internal
  */
@@ -947,7 +932,7 @@ func loggedValue(key as string, value as string) {
  * certificate flag, and `passive` / `passthrough` merely start with the
  * same letters, so none of them are redacted.
  *
- * @param {string} key the attribute name
+ * @param key {string} the attribute name
  * @return {bool} true when the value must not be printed
  * @internal
  */
@@ -984,7 +969,7 @@ func verboseFromEnv() {
  * an unset variable) is false, so a stray value never silently turns
  * logging on.
  *
- * @param {string} raw the raw value
+ * @param raw {string} the raw value
  * @return {bool} true for "1" / "yes" / "true" / "on"
  * @internal
  */

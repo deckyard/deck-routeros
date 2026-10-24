@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - scheduled scripts.
@@ -11,17 +11,17 @@ export def const SCHEDULER_PATH as string init "/system/scheduler";
 /**
  * One scheduler entry: a script the router runs on a timer.
  *
- * @field {string} id        internal RouterOS id
- * @field {string} name      task name
- * @field {string} startTime when the timer starts ("HH:MM:SS" or "startup")
- * @field {string} startDate first day the timer is armed, as reported
- * @field {string} interval  time between runs ("1d", "00:30:00"; "0" = run once)
- * @field {string} onEvent   what runs: RouterOS script source, or the name
- *                           of a "/system/script"
- * @field {string} nextRun   when the task fires next, as reported
- * @field {int}    runCount  how often the task has run so far
- * @field {bool}   disabled  true when the task is switched off
- * @field {string} comment   free-text comment, "" when unset
+ * @field id {string} RouterOS item id
+ * @field name {string} task name
+ * @field startTime {string} "HH:MM:SS" or "startup"
+ * @field startDate {string} first day the timer is armed, as RouterOS prints it
+ * @field interval {string} time between runs ("1d", "00:30:00"; "0" runs once)
+ * @field onEvent {string} RouterOS script source, or the name of a
+ *        "/system/script"
+ * @field nextRun {string} next firing time, as RouterOS prints it
+ * @field runCount {int} number of runs so far
+ * @field disabled {bool} whether the task is switched off
+ * @field comment {string} free-text comment, "" when unset
  */
 export def struct ScheduledTask {
     id as string,
@@ -37,10 +37,10 @@ export def struct ScheduledTask {
 };
 
 /**
- * List every scheduled task on the router.
+ * List the scheduled tasks.
  *
- * @param {Client} c an open client
- * @return {list of ScheduledTask} all scheduler entries
+ * @param c {Client} an open client
+ * @return {list of ScheduledTask} every scheduler entry
  */
 export func scheduledTasks(c as Client) {
     def rows as list of map of string to string init getAll($c, SCHEDULER_PATH);
@@ -52,20 +52,20 @@ export func scheduledTasks(c as Client) {
 }
 
 /**
- * Run a RouterOS script repeatedly, every `interval`.
+ * Run a RouterOS script every `interval`.
  *
- * `source` is RouterOS scripting (the language of the router's console,
- * e.g. "/system backup save name=nightly"), or simply the name of an
- * existing "/system/script". The script runs with the rights of the
- * user this client is logged in as.
+ * `source` is RouterOS console script (e.g. "/system backup save
+ * name=nightly") or the name of a "/system/script". It runs with the
+ * policies of the user this client is logged in as.
  *
- * @param {Client} c        an open client
- * @param {string} name     name for the task; the handle for the other calls
- * @param {string} interval time between runs: "30s", "10m", "2h", "1d",
- *                          "1w", combined "1d12h", or "HH:MM:SS"
- * @param {string} source   what to run (RouterOS script source or script name)
+ * @param c {Client} an open client
+ * @param name {string} task name, the handle for the other calls
+ * @param interval {string} "30s", "10m", "2h", "1d", "1w", combined
+ *        "1d12h", bare seconds "90", or "HH:MM:SS"
+ * @param source {string} RouterOS script source or a stored script's name
  * @return {string} the RouterOS id of the new task
- * @throws {Error} kind "routeros" on a bad name, interval, or empty source
+ * @throws {Error} kind "routeros" on a bad name, a bad interval or an
+ *         empty source
  * @example
  *   mt.scheduleScript($c, "reboot-nightly", "1d", "/system reboot");
  */
@@ -80,13 +80,13 @@ export func scheduleScript(c as Client, name as string, interval as string, sour
 /**
  * Run a RouterOS script once a day at a fixed time.
  *
- * @param {Client} c         an open client
- * @param {string} name      name for the task
- * @param {string} startTime the daily time, "HH:MM:SS" (router-local,
- *                           e.g. "03:00:00")
- * @param {string} source    what to run (RouterOS script source or script name)
+ * @param c {Client} an open client
+ * @param name {string} task name
+ * @param startTime {string} router-local time "HH:MM:SS", e.g. "03:00:00"
+ * @param source {string} RouterOS script source or a stored script's name
  * @return {string} the RouterOS id of the new task
- * @throws {Error} kind "routeros" on a bad name, time, or empty source
+ * @throws {Error} kind "routeros" on a bad name, a bad time or an empty
+ *         source
  * @example
  *   mt.scheduleDaily($c, "nightly-backup", "03:00:00", "/system backup save name=nightly");
  */
@@ -104,11 +104,11 @@ export func scheduleDaily(c as Client, name as string, startTime as string, sour
 /**
  * Run a RouterOS script once at every boot.
  *
- * @param {Client} c      an open client
- * @param {string} name   name for the task
- * @param {string} source what to run (RouterOS script source or script name)
+ * @param c {Client} an open client
+ * @param name {string} task name
+ * @param source {string} RouterOS script source or a stored script's name
  * @return {string} the RouterOS id of the new task
- * @throws {Error} kind "routeros" on a bad name or empty source
+ * @throws {Error} kind "routeros" on a bad name or an empty source
  */
 export func scheduleAtStartup(c as Client, name as string, source as string) {
     ensureName($name, "task");
@@ -122,8 +122,8 @@ export func scheduleAtStartup(c as Client, name as string, source as string) {
 /**
  * Delete a scheduled task by name.
  *
- * @param {Client} c    an open client
- * @param {string} name the task's name
+ * @param c {Client} an open client
+ * @param name {string} task name
  * @throws {Error} kind "routeros" when no task has that name
  */
 export func removeScheduledTask(c as Client, name as string) {
@@ -133,8 +133,8 @@ export func removeScheduledTask(c as Client, name as string) {
 /**
  * Switch a scheduled task on.
  *
- * @param {Client} c    an open client
- * @param {string} name the task's name
+ * @param c {Client} an open client
+ * @param name {string} task name
  * @throws {Error} kind "routeros" when no task has that name
  */
 export func enableScheduledTask(c as Client, name as string) {
@@ -144,8 +144,8 @@ export func enableScheduledTask(c as Client, name as string) {
 /**
  * Switch a scheduled task off; it stays configured but stops firing.
  *
- * @param {Client} c    an open client
- * @param {string} name the task's name
+ * @param c {Client} an open client
+ * @param name {string} task name
  * @throws {Error} kind "routeros" when no task has that name
  */
 export func disableScheduledTask(c as Client, name as string) {
@@ -153,10 +153,10 @@ export func disableScheduledTask(c as Client, name as string) {
 }
 
 /**
- * Validate one clock component: all digits, within 0..max.
+ * Validate one clock component: one or two digits, within 0..max.
  *
- * @param {string} part the component (e.g. "03")
- * @param {int}    max  23 for hours, 59 for minutes/seconds
+ * @param part {string} the component, e.g. "03"
+ * @param max {int} 23 for hours, 59 for minutes and seconds
  * @throws {Error} kind "routeros" on a non-digit or out-of-range part
  * @internal
  */
@@ -178,7 +178,7 @@ func clockPart(part as string, max as int) {
 /**
  * Validate a wall-clock time "HH:MM:SS".
  *
- * @param {string} value the candidate (already trimmed)
+ * @param value {string} the candidate (already trimmed)
  * @throws {Error} kind "routeros" on any other shape
  * @internal
  */
@@ -199,7 +199,7 @@ func ensureClockTime(value as string) {
  * s / m / h / d / w, combined freely ("30s", "1d", "1d12h"); trailing
  * bare digits count as seconds ("90"). "0" (run once) is valid.
  *
- * @param {string} value the candidate (already trimmed)
+ * @param value {string} the candidate (already trimmed)
  * @throws {Error} kind "routeros" on any other shape
  * @internal
  */
@@ -236,9 +236,9 @@ func ensureSchedulerInterval(value as string) {
 }
 
 /**
- * Validate a scheduler script source: something must actually run.
+ * Validate a scheduler script source: it must not be blank.
  *
- * @param {string} source the candidate on-event content
+ * @param source {string} the candidate on-event content
  * @throws {Error} kind "routeros" when empty
  * @internal
  */
@@ -249,9 +249,9 @@ func ensureScriptSource(source as string) {
 }
 
 /**
- * Fold a reply row into a ScheduledTask.
+ * Fold a "/system/scheduler/print" row into a ScheduledTask.
  *
- * @param {map of string to string} row a "/system/scheduler/print" row
+ * @param row {map of string to string} the reply row
  * @return {ScheduledTask} the typed task
  * @internal
  */

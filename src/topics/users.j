@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - router users: accounts, groups, sessions.
@@ -29,13 +29,13 @@ export def const GROUP_WRITE as string init "write";
  * The password is write-only: set on creation or via `setUserPassword`,
  * never read back.
  *
- * @field {string} id           internal RouterOS id
- * @field {string} name         login name
- * @field {string} group        permission group ("full", "read", "write", or custom)
- * @field {string} address      networks the user may log in from, "" for anywhere
- * @field {string} lastLoggedIn last login time as reported, "" for never
- * @field {bool}   disabled     true when the account is switched off
- * @field {string} comment      free-text comment, "" when unset
+ * @field id {string}           internal RouterOS id
+ * @field name {string}         login name
+ * @field group {string}        permission group ("full", "read", "write", or custom)
+ * @field address {string}      networks the user may log in from, "" for anywhere
+ * @field lastLoggedIn {string} last login time as reported, "" for never
+ * @field disabled {bool}     true when the account is switched off
+ * @field comment {string}      free-text comment, "" when unset
  */
 export def struct User {
     id as string,
@@ -50,9 +50,9 @@ export def struct User {
 /**
  * One user group: a named bundle of permissions (policies).
  *
- * @field {string} id     internal RouterOS id
- * @field {string} name   group name
- * @field {string} policy comma-separated policies ("read,write,api,...")
+ * @field id {string}     internal RouterOS id
+ * @field name {string}   group name
+ * @field policy {string} comma-separated policies ("read,write,api,...")
  */
 export def struct UserGroup {
     id as string,
@@ -63,10 +63,10 @@ export def struct UserGroup {
 /**
  * One active login session on the router.
  *
- * @field {string} name    the logged-in user
- * @field {string} address where the login came from, "" for console
- * @field {string} via     how ("api", "ssh", "winbox", "console", ...)
- * @field {string} when    when the session started, as reported
+ * @field name {string}    the logged-in user
+ * @field address {string} where the login came from, "" for console
+ * @field via {string}     how ("api", "ssh", "winbox", "console", ...)
+ * @field when {string}    when the session started, as reported
  */
 export def struct UserSession {
     name as string,
@@ -78,7 +78,7 @@ export def struct UserSession {
 /**
  * List every user account on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of User} all accounts
  */
 export func users(c as Client) {
@@ -93,7 +93,7 @@ export func users(c as Client) {
 /**
  * List the user groups (permission bundles) on the router.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of UserGroup} built-in and custom groups
  */
 export func userGroups(c as Client) {
@@ -106,9 +106,9 @@ export func userGroups(c as Client) {
 }
 
 /**
- * Who is logged in right now, from where, and how.
+ * List the active login sessions: who, from where, and how.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of UserSession} the active sessions (yours included)
  */
 export func activeUsers(c as Client) {
@@ -123,16 +123,16 @@ export func activeUsers(c as Client) {
 /**
  * Create a router user.
  *
- * The group decides what the account may do - use GROUP_READ for
- * monitoring accounts, GROUP_WRITE for configuration without user /
- * package management, GROUP_FULL only where truly needed. The group
- * must exist (built-in or custom), and a user of that name must not.
- * Pick a long password; consider `restrictUser` on top.
+ * The group decides what the account may do: GROUP_READ for monitoring,
+ * GROUP_WRITE for configuration without user or package management,
+ * GROUP_FULL only where needed. The group must exist (built-in or
+ * custom); a user of that name must not. `restrictUser` adds a source
+ * address limit.
  *
- * @param {Client} c        an open client
- * @param {string} name     login name for the new account
- * @param {string} password its password (write-only from here on)
- * @param {string} group    permission group (e.g. GROUP_READ)
+ * @param c {Client}        an open client
+ * @param name {string}     login name for the new account
+ * @param password {string} its password (write-only from here on)
+ * @param group {string}    permission group (e.g. GROUP_READ)
  * @return {string} the RouterOS id of the new user
  * @throws {Error} kind "routeros" on a bad name, empty password,
  *                 unknown group, or a user that already exists
@@ -156,9 +156,9 @@ export func addUser(c as Client, name as string, password as string, group as st
  * Existing sessions of that user stay alive; new logins need the new
  * password.
  *
- * @param {Client} c        an open client
- * @param {string} name     the account
- * @param {string} password the new password
+ * @param c {Client}        an open client
+ * @param name {string}     the account
+ * @param password {string} the new password
  * @throws {Error} kind "routeros" on an empty password or unknown user
  */
 export func setUserPassword(c as Client, name as string, password as string) {
@@ -169,12 +169,12 @@ export func setUserPassword(c as Client, name as string, password as string) {
 /**
  * Move a user to another permission group.
  *
- * Refuses to change the group of the account this session is logged in
- * as - demoting yourself mid-session is a lockout.
+ * Refuses the account this session is logged in as: demoting it
+ * mid-session can lock you out.
  *
- * @param {Client} c     an open client
- * @param {string} name  the account
- * @param {string} group the new group (must exist)
+ * @param c {Client}     an open client
+ * @param name {string}  the account
+ * @param group {string} the new group (must exist)
  * @throws {Error} kind "routeros" on an unknown user or group, or on
  *                 your own account
  */
@@ -187,14 +187,13 @@ export func setUserGroup(c as Client, name as string, group as string) {
 /**
  * Limit where a user may log in from.
  *
- * With an address restriction, logins from anywhere else are refused -
- * a strong second line for admin accounts. Pass "" to lift the
- * restriction. Careful with your own account: the restriction applies
- * to NEW logins, so make sure your management network is in the list.
+ * Logins from any other address are refused. Pass "" to lift the
+ * restriction. It applies to new logins, so when restricting your own
+ * account include your management network.
  *
- * @param {Client} c         an open client
- * @param {string} name      the account
- * @param {string} addresses allowed sources: IPs and/or CIDR networks,
+ * @param c {Client}         an open client
+ * @param name {string}      the account
+ * @param addresses {string} allowed sources: IPs and/or CIDR networks,
  *                           comma-separated (e.g. "10.0.9.0/24"); "" = anywhere
  * @throws {Error} kind "routeros" on a malformed address or unknown user
  */
@@ -209,11 +208,10 @@ export func restrictUser(c as Client, name as string, addresses as string) {
 /**
  * Delete a user account.
  *
- * Refuses the account this session is logged in as - removing the
- * branch you sit on ends badly.
+ * Refuses the account this session is logged in as.
  *
- * @param {Client} c    an open client
- * @param {string} name the account to delete
+ * @param c {Client}    an open client
+ * @param name {string} the account to delete
  * @throws {Error} kind "routeros" on an unknown user or your own account
  */
 export func removeUser(c as Client, name as string) {
@@ -224,8 +222,8 @@ export func removeUser(c as Client, name as string) {
 /**
  * Switch a user account on.
  *
- * @param {Client} c    an open client
- * @param {string} name the account
+ * @param c {Client}    an open client
+ * @param name {string} the account
  * @throws {Error} kind "routeros" when no user has that name
  */
 export func enableUser(c as Client, name as string) {
@@ -237,8 +235,8 @@ export func enableUser(c as Client, name as string) {
  *
  * Refuses the account this session is logged in as.
  *
- * @param {Client} c    an open client
- * @param {string} name the account
+ * @param c {Client}    an open client
+ * @param name {string} the account
  * @throws {Error} kind "routeros" on an unknown user or your own account
  */
 export func disableUser(c as Client, name as string) {
@@ -249,9 +247,9 @@ export func disableUser(c as Client, name as string) {
 /**
  * Refuse an operation on the account this session runs as.
  *
- * @param {string} loggedIn the session's own user name
- * @param {string} name     the account the operation targets
- * @param {string} action   verb for the error message
+ * @param loggedIn {string} the session's own user name
+ * @param name {string}     the account the operation targets
+ * @param action {string}   verb for the error message
  * @throws {Error} kind "routeros" when both are the same account
  * @internal
  */
@@ -267,7 +265,7 @@ func ensureNotSelf(loggedIn as string, name as string, action as string) {
  *
  * RouterOS itself allows empty passwords; routeros does not.
  *
- * @param {string} password the candidate
+ * @param password {string} the candidate
  * @throws {Error} kind "routeros" when empty
  * @internal
  */
@@ -281,7 +279,7 @@ func ensureUserPassword(password as string) {
  * Validate and normalize a login-source list: IPs and CIDR networks,
  * comma-separated.
  *
- * @param {string} csv the candidate list (non-empty)
+ * @param csv {string} the candidate list (non-empty)
  * @return {string} the normalized list
  * @throws {Error} kind "routeros" on an empty entry or malformed address
  * @internal
@@ -307,7 +305,7 @@ func normalizedUserAddress(csv as string) {
 /**
  * Fold a reply row into a User.
  *
- * @param {map of string to string} row a "/user/print" row
+ * @param row {map of string to string} a "/user/print" row
  * @return {User} the typed account
  * @internal
  */
@@ -326,7 +324,7 @@ func userFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a UserGroup.
  *
- * @param {map of string to string} row a "/user/group/print" row
+ * @param row {map of string to string} a "/user/group/print" row
  * @return {UserGroup} the typed group
  * @internal
  */
@@ -341,7 +339,7 @@ func userGroupFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a UserSession.
  *
- * @param {map of string to string} row a "/user/active/print" row
+ * @param row {map of string to string} a "/user/active/print" row
  * @return {UserSession} the typed session
  * @internal
  */

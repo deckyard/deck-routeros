@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - certificates: TLS for the router's own services.
@@ -13,15 +13,15 @@ def const SSL_SERVICES as list of string init ["api-ssl", "www-ssl"];
 /**
  * One certificate in the router's store.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} name          store name (the handle everything binds to)
- * @field {string} commonName    the subject CN (usually the DNS name)
- * @field {string} issuer        who signed it, "" for a template not yet signed
- * @field {string} expiresAfter  time until expiry as reported (e.g. "51w6d")
- * @field {string} invalidAfter  the absolute expiry date as reported
- * @field {bool}   hasPrivateKey true when the router holds the key (usable for serving)
- * @field {bool}   trusted       true when marked trusted
- * @field {bool}   isCa          true for a CA certificate
+ * @field id {string}            internal RouterOS id
+ * @field name {string}          store name (the handle everything binds to)
+ * @field commonName {string}    the subject CN (usually the DNS name)
+ * @field issuer {string}        who signed it, "" for a template not yet signed
+ * @field expiresAfter {string}  time until expiry as reported (e.g. "51w6d")
+ * @field invalidAfter {string}  the absolute expiry date as reported
+ * @field hasPrivateKey {bool} true when the router holds the key (usable for serving)
+ * @field trusted {bool}       true when marked trusted
+ * @field isCa {bool}          true for a CA certificate
  */
 export def struct Certificate {
     id as string,
@@ -38,7 +38,7 @@ export def struct Certificate {
 /**
  * List every certificate in the store.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Certificate} all certificates
  */
 export func certificates(c as Client) {
@@ -53,8 +53,8 @@ export func certificates(c as Client) {
 /**
  * Look one certificate up by its store name.
  *
- * @param {Client} c    an open client
- * @param {string} name the certificate's name
+ * @param c {Client}    an open client
+ * @param name {string} the certificate's name
  * @return {Certificate} the certificate
  * @throws {Error} kind "routeros" when no certificate has that name
  */
@@ -67,12 +67,12 @@ export func certificateByName(c as Client, name as string) {
 }
 
 /**
- * The certificates that expire within a number of days.
+ * List the certificates that expire within a number of days.
  *
- * The renewal audit: run it periodically and renew what it returns.
+ * Certificates whose expiry is absent or does not parse are left out.
  *
- * @param {Client} c          an open client
- * @param {int}    withinDays the horizon (e.g. 30)
+ * @param c {Client}          an open client
+ * @param withinDays {int} the horizon in days (e.g. 30)
  * @return {list of Certificate} certificates expiring within the horizon
  */
 export func expiringCertificates(c as Client, withinDays as int) {
@@ -82,14 +82,15 @@ export func expiringCertificates(c as Client, withinDays as int) {
 /**
  * Create and sign a self-signed certificate on the router.
  *
- * Enough for TLS on LAN-only services (api-ssl, WebFig) - clients must
- * trust it manually. Signing generates the key on the router and takes
- * a few seconds.
+ * Suits LAN-only services (api-ssl, WebFig) whose clients trust it
+ * manually. The router generates the key while signing, which blocks for
+ * a few seconds. Key usage is digital-signature, key-encipherment,
+ * tls-server.
  *
- * @param {Client} c          an open client
- * @param {string} name       store name for the certificate
- * @param {string} commonName the name it certifies (e.g. "router.lan")
- * @param {int}    days       validity in days (e.g. 1095)
+ * @param c {Client}          an open client
+ * @param name {string}       store name for the certificate
+ * @param commonName {string} the name it certifies (e.g. "router.lan")
+ * @param days {int}       validity in days (e.g. 1095)
  * @return {string} the RouterOS id of the certificate
  * @throws {Error} kind "routeros" on a bad name, CN, days outside
  *                 1-7300, or a name already taken
@@ -119,18 +120,18 @@ export func generateSelfSigned(c as Client, name as string, commonName as string
 }
 
 /**
- * Get a real Let's Encrypt certificate via RouterOS's built-in ACME.
+ * Obtain a Let's Encrypt certificate with RouterOS's built-in ACME client.
  *
- * The simplest path when the router's port 80 is reachable from the
- * internet under `dnsName` (RouterOS v7; the router solves the http-01
- * challenge itself and renews on its own). Blocks until issued or
- * failed. For routers behind NAT, see the docs for the Jennifer `acme`
- * flow feeding `importCertificatePem`.
+ * Needs RouterOS v7 and port 80 reachable from the internet under
+ * `dnsName`: the router solves the http-01 challenge and renews by itself.
+ * Blocks until issued or failed. Behind NAT, use the Jennifer `acme`
+ * module and `importCertificatePem` instead.
  *
- * @param {Client} c       an open client
- * @param {string} dnsName the public DNS name (e.g. from `routerDnsName`)
- * @throws {Error} kind "routeros" on a bad name, kind "mikrotik" when
- *                 the challenge fails (port 80 unreachable, name wrong)
+ * @param c {Client}       an open client
+ * @param dnsName {string} the public DNS name (e.g. from `routerDnsName`)
+ * @throws {Error} kind "routeros" on an empty or spaced name,
+ *                 kind "mikrotik" when the challenge fails (port 80
+ *                 unreachable, wrong name)
  */
 export func enableLetsEncrypt(c as Client, dnsName as string) {
     def target as string init strings.trim($dnsName);
@@ -141,16 +142,17 @@ export func enableLetsEncrypt(c as Client, dnsName as string) {
 /**
  * Import a certificate and its private key from PEM text.
  *
- * The building block for externally obtained certificates (the
- * Jennifer `acme` module, your CA): the PEMs are written to temporary
- * files on the router, imported into the store under `name`, and the
- * files removed again (the key must not linger on flash).
+ * For certificates obtained elsewhere (the Jennifer `acme` module, your
+ * own CA). The PEMs are written to temporary files `<name>.crt` and
+ * `<name>.key` on the router, imported under `name`, and the files are
+ * removed so the key does not stay on flash.
  *
- * @param {Client} c       an open client
- * @param {string} name    store name for the certificate
- * @param {string} certPem the certificate (chain) as PEM text
- * @param {string} keyPem  the private key as PEM text
- * @throws {Error} kind "routeros" when either PEM looks wrong
+ * @param c {Client}       an open client
+ * @param name {string}    store name for the certificate
+ * @param certPem {string} the certificate (chain) as PEM text
+ * @param keyPem {string}  the private key as PEM text
+ * @throws {Error} kind "routeros" on a bad name, a certificate PEM without
+ *                 "BEGIN CERTIFICATE" or a key PEM without "PRIVATE KEY"
  */
 export func importCertificatePem(c as Client, name as string, certPem as string, keyPem as string) {
     ensureName($name, "certificate");
@@ -173,12 +175,12 @@ export func importCertificatePem(c as Client, name as string, certPem as string,
 /**
  * Bind a certificate to an SSL management service.
  *
- * The step that turns an `invalid` api-ssl / www-ssl into a running
- * one (see the services topic).
+ * Clears the `invalid` flag on api-ssl / www-ssl (see the services
+ * topic).
  *
- * @param {Client} c           an open client
- * @param {string} serviceName "api-ssl" or "www-ssl"
- * @param {string} certName    the certificate's store name
+ * @param c {Client}           an open client
+ * @param serviceName {string} "api-ssl" or "www-ssl"
+ * @param certName {string}    the certificate's store name
  * @throws {Error} kind "routeros" on a non-SSL service or unknown certificate
  */
 export func assignServiceCertificate(c as Client, serviceName as string, certName as string) {
@@ -197,10 +199,10 @@ export func assignServiceCertificate(c as Client, serviceName as string, certNam
 /**
  * Delete a certificate from the store.
  *
- * Services still referencing it fall back to none (and go `invalid`).
+ * Services still referencing it fall back to none and go `invalid`.
  *
- * @param {Client} c    an open client
- * @param {string} name the certificate's store name
+ * @param c {Client}    an open client
+ * @param name {string} the certificate's store name
  * @throws {Error} kind "routeros" when no certificate has that name
  */
 export func removeCertificate(c as Client, name as string) {
@@ -210,7 +212,7 @@ export func removeCertificate(c as Client, name as string) {
 /**
  * Convert a RouterOS duration ("51w6d", "4w2d13h", "90") to whole days.
  *
- * @param {string} value the duration as reported
+ * @param value {string} the duration as reported
  * @return {int} full days, or -1 when the value does not parse
  * @internal
  */
@@ -253,8 +255,8 @@ func durationToDays(value as string) {
  *
  * Certificates with an unparseable or absent expiry are skipped.
  *
- * @param {list of Certificate} certs the candidates
- * @param {int} withinDays the horizon
+ * @param certs {list of Certificate} the candidates
+ * @param withinDays {int} the horizon
  * @return {list of Certificate} the expiring ones, in order
  * @internal
  */
@@ -274,7 +276,7 @@ func expiringFrom(certs as list of Certificate, withinDays as int) {
 /**
  * Require PEM text to look like a certificate.
  *
- * @param {string} pem the candidate
+ * @param pem {string} the candidate
  * @throws {Error} kind "routeros" when it does not
  * @internal
  */
@@ -287,7 +289,7 @@ func ensurePemCertificate(pem as string) {
 /**
  * Require PEM text to look like a private key.
  *
- * @param {string} pem the candidate
+ * @param pem {string} the candidate
  * @throws {Error} kind "routeros" when it does not
  * @internal
  */
@@ -300,7 +302,7 @@ func ensurePemKey(pem as string) {
 /**
  * Fold a reply row into a Certificate.
  *
- * @param {map of string to string} row a "/certificate/print" row
+ * @param row {map of string to string} a "/certificate/print" row
  * @return {Certificate} the typed certificate
  * @internal
  */

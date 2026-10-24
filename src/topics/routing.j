@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - static routes.
@@ -19,8 +19,8 @@ export def const DEFAULT_ROUTE as string init "0.0.0.0/0";
 /**
  * RouterOS API path of the policy routing rules (RouterOS v7).
  *
- * RouterOS 6 kept these under "/ip/route/rule" - drive that with the
- * generic verbs on old routers.
+ * RouterOS 6 keeps them under "/ip/route/rule"; use the generic verbs
+ * there.
  */
 export def const ROUTING_RULE_PATH as string init "/routing/rule";
 
@@ -28,17 +28,17 @@ export def const ROUTING_RULE_PATH as string init "/routing/rule";
 export def const ROUTING_TABLE_PATH as string init "/routing/table";
 
 /**
- * One policy routing rule: who looks routes up in which table.
+ * One policy routing rule: which traffic looks routes up in which table.
  *
- * @field {string} id            internal RouterOS id
- * @field {string} srcAddress    whose traffic the rule matches, "" for any
- * @field {string} dstAddress    matched destination, "" for any
- * @field {string} interfaceName matched incoming interface, "" for any
- * @field {string} action        "lookup" (fall back to main),
- *                               "lookup-only-in-table" (strict), ...
- * @field {string} table         the routing table consulted
- * @field {bool}   disabled      true when switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string}            internal RouterOS id
+ * @field srcAddress {string}    matched source, "" for any
+ * @field dstAddress {string}    matched destination, "" for any
+ * @field interfaceName {string} matched incoming interface, "" for any
+ * @field action {string}        e.g. "lookup" (falls back to main) or
+ *                               "lookup-only-in-table" (no fallback)
+ * @field table {string}         the routing table consulted
+ * @field disabled {bool}      true when switched off
+ * @field comment {string}       free-text comment, "" when unset
  */
 export def struct RoutingRule {
     id as string,
@@ -52,18 +52,18 @@ export def struct RoutingRule {
 };
 
 /**
- * One route: where to send traffic for a destination network.
+ * One route: the next hop for a destination network.
  *
- * @field {string} id           internal RouterOS id
- * @field {string} dstAddress   destination network as CIDR ("0.0.0.0/0" is the default route)
- * @field {string} gateway      next hop: an IP address or an interface name
- * @field {string} distance     route preference; lower wins (RouterOS default "1")
- * @field {string} routingTable routing table the route lives in ("main" normally)
- * @field {bool}   active       true when the route is currently usable
- * @field {bool}   dynamic      true when a protocol or service created it
- *                              (dynamic routes cannot be removed by hand)
- * @field {bool}   disabled     true when the route is switched off
- * @field {string} comment      free-text comment, "" when unset
+ * @field id {string}           internal RouterOS id
+ * @field dstAddress {string}   destination network in CIDR; "0.0.0.0/0" is the default route
+ * @field gateway {string}      next hop, an IP address or an interface name
+ * @field distance {string}     preference, lower wins (RouterOS default "1")
+ * @field routingTable {string} routing table holding the route, normally "main"
+ * @field active {bool}       true when the route is currently usable
+ * @field dynamic {bool}      true when a protocol or service created it;
+ *                              such routes cannot be removed by hand
+ * @field disabled {bool}     true when the route is switched off
+ * @field comment {string}      free-text comment, "" when unset
  */
 export def struct Route {
     id as string,
@@ -78,11 +78,11 @@ export def struct Route {
 };
 
 /**
- * List every route the router knows: static, connected, and dynamic.
+ * List every route: static, connected and dynamic.
  *
- * Filter on the `dynamic` field to see only the hand-made ones.
+ * Filter on `dynamic` to keep only the static ones.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Route} all routes
  */
 export func routes(c as Client) {
@@ -95,17 +95,17 @@ export func routes(c as Client) {
 }
 
 /**
- * Add a static route: send traffic for a network to a next hop.
+ * Add a static route to a destination network via a next hop.
  *
- * @param {Client} c          an open client
- * @param {string} dstAddress destination network as CIDR (e.g. "10.20.0.0/16")
- * @param {string} gateway    next hop: the neighbouring router's IP
- *                            address, or an interface name for
- *                            point-to-point links
- * @param {string} comment    friendly note ("" for none)
+ * @param c {Client}          an open client
+ * @param dstAddress {string} destination network in CIDR (e.g. "10.20.0.0/16")
+ * @param gateway {string}    next hop: the neighbouring router's IP address,
+ *                            or an interface name on point-to-point links
+ * @param comment {string}    comment, "" for none
  * @return {string} the RouterOS id of the new route
- * @throws {Error} kind "routeros" on a malformed destination, or when
- *                 `gateway` is neither an IP address nor an existing interface
+ * @throws {Error} kind "routeros" on a destination that is not CIDR, an
+ *                 empty gateway, or a gateway that is neither an IP address
+ *                 nor an interface on the router
  * @example
  *   mt.addRoute($c, "10.20.0.0/16", "192.168.88.254", "to branch office");
  */
@@ -114,20 +114,20 @@ export func addRoute(c as Client, dstAddress as string, gateway as string, comme
 }
 
 /**
- * Add a static route with an explicit distance (route preference).
+ * Add a static route with an explicit distance.
  *
- * Lower distance wins; RouterOS's default for a static route is 1. A
- * second route to the same destination with a higher distance is a
- * backup that takes over when the preferred one fails.
+ * Lower distance wins; RouterOS defaults a static route to 1. A second
+ * route to the same destination with a higher distance is a backup that
+ * takes over when the preferred one becomes inactive.
  *
- * @param {Client} c          an open client
- * @param {string} dstAddress destination network as CIDR
- * @param {string} gateway    next hop: IP address or interface name
- * @param {int}    distance   route preference, 1-255
- * @param {string} comment    friendly note ("" for none)
+ * @param c {Client}          an open client
+ * @param dstAddress {string} destination network in CIDR
+ * @param gateway {string}    next hop, IP address or interface name
+ * @param distance {int}   route preference, 1-255
+ * @param comment {string}    comment, "" for none
  * @return {string} the RouterOS id of the new route
- * @throws {Error} kind "routeros" on a malformed destination, gateway,
- *                 or a distance outside 1-255
+ * @throws {Error} kind "routeros" on a distance outside 1-255, or the
+ *                 destination and gateway errors of `addRoute`
  */
 export func addRouteWithDistance(
     c as Client,
@@ -140,16 +140,16 @@ export func addRouteWithDistance(
 }
 
 /**
- * Add the default route: where all traffic without a better match goes.
- *
- * This is "the internet is that way" - the gateway is normally your
+ * Add the default route (`DEFAULT_ROUTE`, "0.0.0.0/0"), used by all
+ * traffic without a more specific route. The gateway is normally the
  * ISP's router.
  *
- * @param {Client} c       an open client
- * @param {string} gateway next hop: IP address or interface name
- * @param {string} comment friendly note ("" for none)
+ * @param c {Client}       an open client
+ * @param gateway {string} next hop, IP address or interface name
+ * @param comment {string} comment, "" for none
  * @return {string} the RouterOS id of the new route
- * @throws {Error} kind "routeros" on a bad gateway
+ * @throws {Error} kind "routeros" on an empty gateway, or one that is
+ *                 neither an IP address nor an interface on the router
  */
 export func addDefaultRoute(c as Client, gateway as string, comment as string) {
     return routeAdd($c, DEFAULT_ROUTE, $gateway, 0, $comment);
@@ -158,13 +158,13 @@ export func addDefaultRoute(c as Client, gateway as string, comment as string) {
 /**
  * Remove the static route to a destination.
  *
- * Only hand-made (non-dynamic) routes are considered. With several
- * static routes to the same destination (e.g. a backup with a higher
- * distance), the first one listed is removed - use the generic verbs
- * with the ids from `routes` for finer control.
+ * Dynamic routes are skipped. With several static routes to the same
+ * destination (e.g. a backup with a higher distance) the first one listed
+ * is removed; for another, pass its id from `routes` to the generic
+ * `remove`.
  *
- * @param {Client} c          an open client
- * @param {string} dstAddress the destination network, exactly as listed
+ * @param c {Client}          an open client
+ * @param dstAddress {string} destination network, exactly as the router lists it
  * @throws {Error} kind "routeros" when no static route to it exists
  */
 export func removeRoute(c as Client, dstAddress as string) {
@@ -172,10 +172,10 @@ export func removeRoute(c as Client, dstAddress as string) {
 }
 
 /**
- * Switch the static route to a destination on.
+ * Switch the first static route to a destination on.
  *
- * @param {Client} c          an open client
- * @param {string} dstAddress the destination network, exactly as listed
+ * @param c {Client}          an open client
+ * @param dstAddress {string} destination network, exactly as the router lists it
  * @throws {Error} kind "routeros" when no static route to it exists
  */
 export func enableRoute(c as Client, dstAddress as string) {
@@ -183,12 +183,11 @@ export func enableRoute(c as Client, dstAddress as string) {
 }
 
 /**
- * Switch the static route to a destination off.
+ * Switch the first static route to a destination off; it is kept but
+ * unused until enabled again.
  *
- * The route is kept but stops being used until enabled again.
- *
- * @param {Client} c          an open client
- * @param {string} dstAddress the destination network, exactly as listed
+ * @param c {Client}          an open client
+ * @param dstAddress {string} destination network, exactly as the router lists it
  * @throws {Error} kind "routeros" when no static route to it exists
  */
 export func disableRoute(c as Client, dstAddress as string) {
@@ -198,7 +197,7 @@ export func disableRoute(c as Client, dstAddress as string) {
 /**
  * Validate a route distance.
  *
- * @param {int} distance the candidate distance
+ * @param distance {int} the candidate distance
  * @throws {Error} kind "routeros" when outside 1-255
  * @internal
  */
@@ -209,17 +208,16 @@ func ensureDistance(distance as int) {
 }
 
 /**
- * Validate and create a route; distance 0 means "router default".
+ * Validate and create a route; distance 0 leaves the router default.
  *
- * A gateway that is not an IP address must be an existing interface
- * (checked against the router), so a typo in either form is caught with
- * a clear message.
+ * A gateway that is not an IP address must name an interface on the
+ * router.
  *
- * @param {Client} c          an open client
- * @param {string} dstAddress destination network as CIDR
- * @param {string} gateway    next hop: IP address or interface name
- * @param {int}    distance   validated distance, or 0 to omit
- * @param {string} comment    friendly note ("" for none)
+ * @param c {Client}          an open client
+ * @param dstAddress {string} destination network in CIDR
+ * @param gateway {string}    next hop, IP address or interface name
+ * @param distance {int}   validated distance, or 0 to omit
+ * @param comment {string}    comment, "" for none
  * @return {string} the RouterOS id of the new route
  * @throws {Error} kind "routeros" on a malformed destination or gateway
  * @internal
@@ -251,8 +249,8 @@ func routeAdd(
 /**
  * Find the first static (non-dynamic) route row to a destination.
  *
- * @param {list of map of string to string} rows "/ip/route/print" rows
- * @param {string} dstAddress the destination network to look for
+ * @param rows {list of map of string to string} "/ip/route/print" rows
+ * @param dstAddress {string} the destination network to look for
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -267,11 +265,10 @@ func staticRouteRow(rows as list of map of string to string, dstAddress as strin
 }
 
 /**
- * Resolve a destination to the id of its static route, with a friendly
- * error when there is none.
+ * Resolve a destination to the id of its first static route.
  *
- * @param {Client} c          an open client
- * @param {string} dstAddress the destination network
+ * @param c {Client}          an open client
+ * @param dstAddress {string} the destination network
  * @return {string} the route id
  * @throws {Error} kind "routeros" when no static route matches
  * @internal
@@ -288,7 +285,7 @@ func requiredStaticRouteId(c as Client, dstAddress as string) {
 /**
  * Fold a reply row into a Route.
  *
- * @param {map of string to string} row an "/ip/route/print" row
+ * @param row {map of string to string} an "/ip/route/print" row
  * @return {Route} the typed route
  * @internal
  */
@@ -309,7 +306,7 @@ func routeFromRow(row as map of string to string) {
 /**
  * List the policy routing rules.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of RoutingRule} all rules, in evaluation order
  */
 export func routingRules(c as Client) {
@@ -322,23 +319,25 @@ export func routingRules(c as Client) {
 }
 
 /**
- * Send a source's traffic through another routing table, with fallback.
+ * Route a source's traffic through another routing table, falling back
+ * to the main table.
  *
- * The clean way to do "this subnet uses the backup uplink": a rule
- * (matched before the main table) sends traffic from `srcAddress` to
- * table `table` - no per-packet marking needed (the mangle topic's
- * `markRoutingFor` is for matches that need firewall power). The table
- * is created if missing; give it a default route via the generic `add`
- * on ROUTE_PATH with `"routing-table": table`. With action "lookup",
- * destinations the table cannot answer fall back to the main table -
- * use `useRoutingTableOnly` for strict isolation. Idempotent.
+ * Adds a policy rule (action "lookup") sending traffic from `srcAddress`
+ * to `table`; no packet marking is needed. For matches that need
+ * firewall conditions use `markRoutingFor` (mangle). The table is created
+ * if missing; give it a default route with the generic `add` on
+ * `ROUTE_PATH` and `"routing-table": table`. Destinations the table has
+ * no route for fall back to the main table; `useRoutingTableOnly` does
+ * not fall back. Idempotent: an existing rule for the same source and
+ * table is reused.
  *
- * @param {Client} c          an open client
- * @param {string} srcAddress whose traffic: an IP or CIDR network
- * @param {string} table      the routing table to consult
- * @param {string} comment    friendly note ("" for none)
- * @return {string} the RouterOS id of the (new or existing) rule
- * @throws {Error} kind "routeros" on a bad address or table name
+ * @param c {Client}          an open client
+ * @param srcAddress {string} source, an IP address or CIDR network
+ * @param table {string}      routing table to consult
+ * @param comment {string}    comment, "" for none
+ * @return {string} the RouterOS id of the new or existing rule
+ * @throws {Error} kind "routeros" on a bad address, or an empty or spaced
+ *                 table name
  * @example
  *   mt.useRoutingTable($c, "10.30.0.0/24", "backupisp", "guests via backup");
  *   mt.add($c, mt.ROUTE_PATH, {"dst-address": "0.0.0.0/0",
@@ -349,17 +348,19 @@ export func useRoutingTable(c as Client, srcAddress as string, table as string, 
 }
 
 /**
- * Send a source's traffic through another table, WITHOUT fallback.
+ * Route a source's traffic through another table with no fallback
+ * (action "lookup-only-in-table").
  *
- * Strict isolation: destinations the table has no route for become
- * unreachable for the source - "backup uplink or nothing".
+ * Destinations the table has no route for are unreachable for that
+ * source. Otherwise as `useRoutingTable`.
  *
- * @param {Client} c          an open client
- * @param {string} srcAddress whose traffic: an IP or CIDR network
- * @param {string} table      the routing table to consult
- * @param {string} comment    friendly note ("" for none)
- * @return {string} the RouterOS id of the (new or existing) rule
- * @throws {Error} kind "routeros" on a bad address or table name
+ * @param c {Client}          an open client
+ * @param srcAddress {string} source, an IP address or CIDR network
+ * @param table {string}      routing table to consult
+ * @param comment {string}    comment, "" for none
+ * @return {string} the RouterOS id of the new or existing rule
+ * @throws {Error} kind "routeros" on a bad address, or an empty or spaced
+ *                 table name
  */
 export func useRoutingTableOnly(
     c as Client,
@@ -372,9 +373,9 @@ export func useRoutingTableOnly(
 /**
  * Remove the policy routing rule sending a source to a table.
  *
- * @param {Client} c          an open client
- * @param {string} srcAddress the rule's source
- * @param {string} table      the rule's table
+ * @param c {Client}          an open client
+ * @param srcAddress {string} rule source, as given when it was added
+ * @param table {string}      rule table
  * @throws {Error} kind "routeros" when no such rule exists
  */
 export func removeRoutingRule(c as Client, srcAddress as string, table as string) {
@@ -392,11 +393,11 @@ export func removeRoutingRule(c as Client, srcAddress as string, table as string
 /**
  * Validate and create (or reuse) a policy routing rule.
  *
- * @param {Client} c          an open client
- * @param {string} srcAddress the source (IP or CIDR)
- * @param {string} table      the routing table (created if missing)
- * @param {string} action     "lookup" or "lookup-only-in-table"
- * @param {string} comment    note, "" for none
+ * @param c {Client}          an open client
+ * @param srcAddress {string} the source (IP or CIDR)
+ * @param table {string}      the routing table (created if missing)
+ * @param action {string}     "lookup" or "lookup-only-in-table"
+ * @param comment {string}    note, "" for none
  * @return {string} the RouterOS id of the rule
  * @throws {Error} kind "routeros" on a bad address or table name
  * @internal
@@ -434,8 +435,8 @@ func routingRuleAdd(
 /**
  * Create a routing table if it does not exist ("main" always does).
  *
- * @param {Client} c     an open client
- * @param {string} table the table name
+ * @param c {Client}     an open client
+ * @param table {string} the table name
  * @internal
  */
 func ensureRoutingTable(c as Client, table as string) {
@@ -450,9 +451,9 @@ func ensureRoutingTable(c as Client, table as string) {
 /**
  * Find the rule matching a source and a table.
  *
- * @param {list of map of string to string} rows "/routing/rule/print" rows
- * @param {string} src   the source address/network
- * @param {string} table the table name
+ * @param rows {list of map of string to string} "/routing/rule/print" rows
+ * @param src {string}   the source address/network
+ * @param table {string} the table name
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -469,7 +470,7 @@ func findRoutingRuleRow(rows as list of map of string to string, src as string, 
 /**
  * Fold a reply row into a RoutingRule.
  *
- * @param {map of string to string} row a "/routing/rule/print" row
+ * @param row {map of string to string} a "/routing/rule/print" row
  * @return {RoutingRule} the typed rule
  * @internal
  */

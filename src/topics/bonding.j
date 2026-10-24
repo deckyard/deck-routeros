@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - bonding: several ethernet links acting as one.
@@ -27,17 +27,17 @@ def const BONDING_MODES as list of string init [
 /**
  * One bonding interface: several physical links acting as one.
  *
- * @field {string} id                 internal RouterOS id
- * @field {string} name               bond name (e.g. "bondtrunk")
- * @field {string} slaves             member interfaces, comma-separated
- * @field {string} mode               bonding mode ("802.3ad", "active-backup", ...)
- * @field {string} primary            preferred link in active-backup mode, "" otherwise
- * @field {string} transmitHashPolicy how 802.3ad spreads flows, "" when default
- * @field {string} mac                the bond's MAC address
- * @field {string} mtu                MTU as reported
- * @field {bool}   running            true when at least one member link is up
- * @field {bool}   disabled           true when the bond is switched off
- * @field {string} comment            free-text comment, "" when unset
+ * @field id {string}                 internal RouterOS id
+ * @field name {string}               bond name (e.g. "bondtrunk")
+ * @field slaves {string}             member interfaces, comma-separated
+ * @field mode {string}               bonding mode ("802.3ad", "active-backup", ...)
+ * @field primary {string}            preferred link in active-backup mode, "" otherwise
+ * @field transmitHashPolicy {string} how 802.3ad spreads flows, "" when default
+ * @field mac {string}                MAC address
+ * @field mtu {string}                MTU as reported
+ * @field running {bool}              at least one member link is up
+ * @field disabled {bool}             administratively off
+ * @field comment {string}            free-text comment, "" when unset
  */
 export def struct Bond {
     id as string,
@@ -54,9 +54,9 @@ export def struct Bond {
 };
 
 /**
- * List every bonding interface on the router.
+ * List the bonding interfaces.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Bond} all bonds
  */
 export func bonds(c as Client) {
@@ -69,10 +69,10 @@ export func bonds(c as Client) {
 }
 
 /**
- * Look one bond up by its name.
+ * Look a bond up by name.
  *
- * @param {Client} c    an open client
- * @param {string} name the bond's name
+ * @param c {Client}    an open client
+ * @param name {string} the bond's name
  * @return {Bond} the bond
  * @throws {Error} kind "routeros" when no bond has that name
  */
@@ -87,17 +87,15 @@ export func bondByName(c as Client, name as string) {
 /**
  * Create a bond in an explicit mode.
  *
- * Prefer the two shaped helpers - `addLacpBond` for throughput with a
- * managed switch, `addFailoverBond` for plain redundancy - and reach
- * for this one only when you need another mode. At least two member
- * interfaces are required (one link is not a bond), each must exist,
- * and none may already serve another bond. The bond then behaves like
- * any interface: bridge it, address it, VLAN it.
+ * `addLacpBond` and `addFailoverBond` cover the two common modes. The
+ * slave list needs at least two distinct interfaces, each must exist,
+ * and none may already belong to another bond. The bond is then an
+ * ordinary interface for bridges, addresses and VLANs.
  *
- * @param {Client} c      an open client
- * @param {string} name   name for the bond (e.g. "bondtrunk")
- * @param {string} slaves member interfaces, comma-separated (e.g. "ether1,ether2")
- * @param {string} mode   one of balance-rr, active-backup, balance-xor,
+ * @param c {Client}      an open client
+ * @param name {string}   name for the bond (e.g. "bondtrunk")
+ * @param slaves {string} member interfaces, comma-separated (e.g. "ether1,ether2")
+ * @param mode {string}   one of balance-rr, active-backup, balance-xor,
  *                        broadcast, 802.3ad, balance-tlb, balance-alb
  * @return {string} the RouterOS id of the new bond
  * @throws {Error} kind "routeros" on a bad name, mode, or slave list
@@ -113,16 +111,15 @@ export func addBond(c as Client, name as string, slaves as string, mode as strin
 /**
  * Aggregate links for throughput and redundancy with LACP (802.3ad).
  *
- * The other end must be a managed switch (or router) with a matching
- * LACP link-aggregation group on those ports - LACP negotiates the
- * bundle, so a mismatch fails visibly instead of looping. Note that
- * one *flow* still uses one link; aggregation raises total capacity,
- * not single-transfer speed (spread flows better via
- * transmit-hash-policy with the generic `set`).
+ * The peer must be a switch or router with a matching LACP group on
+ * those ports; LACP negotiates the bundle, so a mismatch fails visibly
+ * instead of looping. One flow still uses one link: aggregation raises
+ * total capacity, not single-transfer speed. Tune `transmit-hash-policy`
+ * with the generic `set`.
  *
- * @param {Client} c      an open client
- * @param {string} name   name for the bond
- * @param {string} slaves member interfaces, comma-separated
+ * @param c {Client}      an open client
+ * @param name {string}   name for the bond
+ * @param slaves {string} member interfaces, comma-separated
  * @return {string} the RouterOS id of the new bond
  * @throws {Error} kind "routeros" on a bad name or slave list
  * @example
@@ -136,14 +133,13 @@ export func addLacpBond(c as Client, name as string, slaves as string) {
 /**
  * Bundle links for pure failover (active-backup).
  *
- * One link carries the traffic; the others take over when it dies.
- * Works with ANY switch (no LACP needed), which makes it the safe
- * choice for redundancy across two independent switches.
+ * One link carries traffic; another takes over when it fails. Needs no
+ * LACP, so it works across two independent switches.
  *
- * @param {Client} c       an open client
- * @param {string} name    name for the bond
- * @param {string} slaves  member interfaces, comma-separated
- * @param {string} primary the preferred link (must be one of the slaves)
+ * @param c {Client}       an open client
+ * @param name {string}    name for the bond
+ * @param slaves {string}  member interfaces, comma-separated
+ * @param primary {string} the preferred link (must be one of the slaves)
  * @return {string} the RouterOS id of the new bond
  * @throws {Error} kind "routeros" on a bad name or slave list, or a
  *                 primary that is not a member
@@ -164,12 +160,12 @@ export func addFailoverBond(c as Client, name as string, slaves as string, prima
 /**
  * Change which interfaces a bond is made of.
  *
- * The same checks as on creation apply; the bond's own current members
- * do not count as "already in use".
+ * The checks of `addBond` apply; the bond's current members do not
+ * count as in use.
  *
- * @param {Client} c      an open client
- * @param {string} name   the bond's name
- * @param {string} slaves the new member list, comma-separated
+ * @param c {Client}      an open client
+ * @param name {string}   the bond's name
+ * @param slaves {string} the new member list, comma-separated
  * @throws {Error} kind "routeros" on an unknown bond or a bad slave list
  */
 export func setBondSlaves(c as Client, name as string, slaves as string) {
@@ -180,13 +176,13 @@ export func setBondSlaves(c as Client, name as string, slaves as string) {
 }
 
 /**
- * Delete a bond; its member interfaces become ordinary ports again.
+ * Delete a bond; its members become ordinary ports.
  *
- * Anything that referenced the bond (bridge port, addresses) loses its
- * interface - tear those down first.
+ * Bridge ports and addresses on the bond lose their interface; remove
+ * them first.
  *
- * @param {Client} c    an open client
- * @param {string} name the bond's name
+ * @param c {Client}    an open client
+ * @param name {string} the bond's name
  * @throws {Error} kind "routeros" when no bond has that name
  */
 export func removeBond(c as Client, name as string) {
@@ -194,10 +190,10 @@ export func removeBond(c as Client, name as string) {
 }
 
 /**
- * Switch a bond on.
+ * Enable a bond.
  *
- * @param {Client} c    an open client
- * @param {string} name the bond's name
+ * @param c {Client}    an open client
+ * @param name {string} the bond's name
  * @throws {Error} kind "routeros" when no bond has that name
  */
 export func enableBond(c as Client, name as string) {
@@ -205,10 +201,10 @@ export func enableBond(c as Client, name as string) {
 }
 
 /**
- * Switch a bond off; all its links stop carrying traffic.
+ * Disable a bond; none of its links carry traffic.
  *
- * @param {Client} c    an open client
- * @param {string} name the bond's name
+ * @param c {Client}    an open client
+ * @param name {string} the bond's name
  * @throws {Error} kind "routeros" when no bond has that name
  */
 export func disableBond(c as Client, name as string) {
@@ -218,7 +214,7 @@ export func disableBond(c as Client, name as string) {
 /**
  * Validate a bonding mode.
  *
- * @param {string} mode the candidate
+ * @param mode {string} the candidate
  * @throws {Error} kind "routeros" on an unknown mode
  * @internal
  */
@@ -233,7 +229,7 @@ func ensureBondMode(mode as string) {
  * Validate and normalize a slave list: at least two distinct,
  * space-free interface names.
  *
- * @param {string} csv the candidate list
+ * @param csv {string} the candidate list
  * @return {string} the normalized list
  * @throws {Error} kind "routeros" on fewer than two members, an empty
  *                 entry, a spaced name, or a duplicate
@@ -262,8 +258,8 @@ func normalizedSlaves(csv as string) {
 /**
  * Test whether a bond's slave list contains an interface.
  *
- * @param {string} slavesCsv the bond's "slaves" value
- * @param {string} name      the interface to look for (exact)
+ * @param slavesCsv {string} the bond's "slaves" value
+ * @param name {string}      the interface to look for (exact)
  * @return {bool} true when present
  * @internal
  */
@@ -280,8 +276,8 @@ func bondHasSlave(slavesCsv as string, name as string) {
 /**
  * Which bond (if any) already uses an interface as a slave?
  *
- * @param {list of map of string to string} rows "/interface/bonding/print" rows
- * @param {string} name the interface to look for
+ * @param rows {list of map of string to string} "/interface/bonding/print" rows
+ * @param name {string} the interface to look for
  * @return {string} the bond's name, or "" when the interface is free
  * @internal
  */
@@ -297,8 +293,8 @@ func bondUsingSlave(rows as list of map of string to string, name as string) {
 /**
  * Require the primary of a failover bond to be one of its slaves.
  *
- * @param {string} slavesCsv the normalized slave list
- * @param {string} primary   the candidate primary
+ * @param slavesCsv {string} the normalized slave list
+ * @param primary {string}   the candidate primary
  * @throws {Error} kind "routeros" when the primary is not a member
  * @internal
  */
@@ -312,9 +308,9 @@ func ensurePrimaryInSlaves(slavesCsv as string, primary as string) {
 /**
  * Verify every member exists and serves no other bond.
  *
- * @param {Client} c          an open client
- * @param {string} membersCsv the normalized slave list
- * @param {string} ownBond    bond name whose current membership does not
+ * @param c {Client}          an open client
+ * @param membersCsv {string} the normalized slave list
+ * @param ownBond {string}    bond name whose current membership does not
  *                            count as "in use" ("" on creation)
  * @throws {Error} kind "routeros" on an unknown interface or one that
  *                 already serves another bond
@@ -338,7 +334,7 @@ func ensureSlavesFree(c as Client, membersCsv as string, ownBond as string) {
 /**
  * Fold a reply row into a Bond.
  *
- * @param {map of string to string} row an "/interface/bonding/print" row
+ * @param row {map of string to string} an "/interface/bonding/print" row
  * @return {Bond} the typed bond
  * @internal
  */

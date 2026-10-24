@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - OpenVPN: the cross-platform remote-access VPN.
+# routeros - OpenVPN remote-access server and dial-out clients.
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the OpenVPN server settings (single row). */
 export def const OVPN_SERVER_PATH as string init "/interface/ovpn-server/server";
 
-/** RouterOS API path of the OpenVPN client list (dial OUT to a server). */
+/** RouterOS API path of the OpenVPN client list (dial-out tunnels). */
 export def const OVPN_CLIENT_PATH as string init "/interface/ovpn-client";
 
 /**
  * The OpenVPN server settings.
  *
- * @field {bool}   enabled        true when the server accepts connections
- * @field {int}    port           the port it listens on (1194 by default)
- * @field {string} mode           "ip" (routed / tun) or "ethernet" (bridged / tap)
- * @field {string} certificate    the TLS certificate it serves
- * @field {string} defaultProfile the PPP profile applied to logins
+ * @field enabled {bool} true when the server accepts connections
+ * @field port {int} TCP port it listens on (1194 by default)
+ * @field mode {string} "ip" (routed, tun) or "ethernet" (bridged, tap)
+ * @field certificate {string} TLS certificate it serves
+ * @field defaultProfile {string} PPP profile applied to logins
  */
 export def struct OvpnServer {
     enabled as bool,
@@ -29,15 +29,15 @@ export def struct OvpnServer {
 };
 
 /**
- * One OpenVPN client (this router dialing out to an OpenVPN server).
+ * One OpenVPN client: this router dialing out to an OpenVPN server.
  *
- * @field {string} id        internal RouterOS id
- * @field {string} name      the client interface name
- * @field {string} connectTo the server address
- * @field {string} user      the login on the server
- * @field {bool}   running   true when the tunnel is up
- * @field {bool}   disabled  true when switched off
- * @field {string} comment   free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} client interface name
+ * @field connectTo {string} server address
+ * @field user {string} login on the server
+ * @field running {bool} true when the tunnel is up
+ * @field disabled {bool} true when switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct OvpnClient {
     id as string,
@@ -52,7 +52,7 @@ export def struct OvpnClient {
 /**
  * Read the OpenVPN server settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {OvpnServer} the server state
  */
 export func ovpnServerStatus(c as Client) {
@@ -60,18 +60,16 @@ export func ovpnServerStatus(c as Client) {
 }
 
 /**
- * Turn on a routed (tun) OpenVPN remote-access server.
+ * Turn on a routed (`mode=ip`, tun) OpenVPN remote-access server.
  *
- * OpenVPN is the portable standard: a client exists for every OS, and
- * TLS-over-TCP crosses firewalls like SSTP. RouterOS's OpenVPN needs a
- * TLS certificate (certificates topic) and, on the client side, a
- * matching config profile - so it is less plug-and-play than L2TP.
- * Opens the firewall for the chosen port. Add logins with `addVpnUser`.
+ * Clients exist for every OS, but each needs a config profile, so it is
+ * less plug-and-play than L2TP. Needs a TLS certificate. Accepts the
+ * port over TCP in the input chain. Add logins with `addVpnUser`.
  * Idempotent.
  *
- * @param {Client} c           an open client
- * @param {string} certificate the TLS certificate's store name
- * @param {int}    port        the port (1194 is the OpenVPN default)
+ * @param c {Client} an open client
+ * @param certificate {string} name of the TLS certificate in the store
+ * @param port {int} TCP port (1194 is the OpenVPN default)
  * @throws {Error} kind "routeros" on a bad port or unknown certificate
  * @example
  *   mt.enableOvpnServer($c, "router-le-cert", 1194);
@@ -95,7 +93,7 @@ export func enableOvpnServer(c as Client, certificate as string, port as int) {
 /**
  * Turn the OpenVPN server off and remove its firewall opening.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableOvpnServer(c as Client) {
     apiRun($c, OVPN_SERVER_PATH + "/set", {"enabled": "no"});
@@ -105,7 +103,7 @@ export func disableOvpnServer(c as Client) {
 /**
  * List the OpenVPN clients (dial-out tunnels).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of OvpnClient} all OpenVPN clients
  */
 export func ovpnClients(c as Client) {
@@ -118,15 +116,19 @@ export func ovpnClients(c as Client) {
 }
 
 /**
- * Dial out to a remote OpenVPN server (create an OpenVPN client).
+ * Dial out to a remote OpenVPN server.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the client interface
- * @param {string} serverAddress the server's address or DNS name
- * @param {string} user          the login on the server
- * @param {string} password      its password
- * @return {string} the RouterOS id of the (new or existing) client
- * @throws {Error} kind "routeros" on bad input
+ * When a client of that name exists, its id is returned and nothing is
+ * changed.
+ *
+ * @param c {Client} an open client
+ * @param name {string} client interface name
+ * @param serverAddress {string} server address or DNS name
+ * @param user {string} login on the server
+ * @param password {string} password for that login
+ * @return {string} the RouterOS id of the new or existing client
+ * @throws {Error} kind "routeros" on an empty or spaced name or user, an
+ *         empty password, or an empty or spaced server address
  */
 export func addOvpnClient(
     c as Client,
@@ -149,8 +151,8 @@ export func addOvpnClient(
 /**
  * Remove an OpenVPN client.
  *
- * @param {Client} c    an open client
- * @param {string} name the client interface name
+ * @param c {Client} an open client
+ * @param name {string} client interface name
  * @throws {Error} kind "routeros" when no such client exists
  */
 export func removeOvpnClient(c as Client, name as string) {
@@ -160,7 +162,7 @@ export func removeOvpnClient(c as Client, name as string) {
 /**
  * Fold a reply row into an OvpnServer.
  *
- * @param {map of string to string} row the "/interface/ovpn-server/server" row
+ * @param row {map of string to string} the "/interface/ovpn-server/server" row
  * @return {OvpnServer} the typed server state
  * @internal
  */
@@ -177,7 +179,7 @@ func ovpnServerFromRow(row as map of string to string) {
 /**
  * Fold a reply row into an OvpnClient.
  *
- * @param {map of string to string} row an "/interface/ovpn-client/print" row
+ * @param row {map of string to string} an "/interface/ovpn-client/print" row
  * @return {OvpnClient} the typed client
  * @internal
  */

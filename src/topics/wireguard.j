@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - WireGuard VPN tunnels (RouterOS v7).
@@ -14,19 +14,19 @@ export def const WIREGUARD_PEER_PATH as string init "/interface/wireguard/peers"
 def const KEY_CHARS as string init "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
 /**
- * One WireGuard interface: the local end of one or more VPN tunnels.
+ * One WireGuard interface: the local end of one or more tunnels.
  *
- * The private key is deliberately not part of this struct - the router
- * generates and keeps it; only the public key (safe to share) is read.
+ * The private key is not read: the router generates and keeps it. Only
+ * the public key, safe to share, is.
  *
- * @field {string} id         internal RouterOS id
- * @field {string} name       interface name (e.g. "wgvpn")
- * @field {string} publicKey  the router's public key - hand this to peers
- * @field {int}    listenPort UDP port the router listens on
- * @field {string} mtu        MTU as reported
- * @field {bool}   running    true when the interface is up
- * @field {bool}   disabled   true when the interface is switched off
- * @field {string} comment    free-text comment, "" when unset
+ * @field id {string}         internal RouterOS id
+ * @field name {string}       interface name (e.g. "wgvpn")
+ * @field publicKey {string}  router's public key, to hand to peers
+ * @field listenPort {int} UDP port the router listens on
+ * @field mtu {string}        MTU as reported
+ * @field running {bool}    true when the interface is up
+ * @field disabled {bool}   true when the interface is switched off
+ * @field comment {string}    free-text comment, "" when unset
  */
 export def struct WireguardInterface {
     id as string,
@@ -42,21 +42,20 @@ export def struct WireguardInterface {
 /**
  * One WireGuard peer: a remote party allowed through a tunnel.
  *
- * @field {string} id              internal RouterOS id
- * @field {string} interfaceName   WireGuard interface the peer belongs to
- * @field {string} publicKey       the peer's public key
- * @field {string} endpointAddress where the router dials the peer, "" when
- *                                 the peer dials in
- * @field {string} endpointPort    the peer's UDP port, "" / "0" when dialing in
- * @field {string} allowedAddress  addresses allowed (and routed) through
- *                                 this peer, comma-separated CIDRs
- * @field {string} keepalive       persistent keepalive as reported, "" when off
- * @field {string} lastHandshake   time since the last handshake - the sign
- *                                 of life of a tunnel
- * @field {string} rx              bytes received from the peer
- * @field {string} tx              bytes sent to the peer
- * @field {bool}   disabled        true when the peer is switched off
- * @field {string} comment         free-text comment; the handle for removal
+ * @field id {string}              internal RouterOS id
+ * @field interfaceName {string}   WireGuard interface the peer belongs to
+ * @field publicKey {string}       the peer's public key
+ * @field endpointAddress {string} address the router dials, "" when the
+ *                                 peer dials in
+ * @field endpointPort {string}    peer's UDP port, "" or "0" when it dials in
+ * @field allowedAddress {string}  comma-separated CIDRs accepted from and
+ *                                 routed to this peer
+ * @field keepalive {string}       persistent keepalive as reported, "" when off
+ * @field lastHandshake {string}   time since the last handshake
+ * @field rx {string}              bytes received from the peer
+ * @field tx {string}              bytes sent to the peer
+ * @field disabled {bool}        true when the peer is switched off
+ * @field comment {string}         free-text comment, the handle for removal
  */
 export def struct WireguardPeer {
     id as string,
@@ -76,9 +75,11 @@ export def struct WireguardPeer {
 /**
  * List every WireGuard interface on the router.
  *
- * Returns an empty list on routers without WireGuard (RouterOS v6).
+ * Any read error yields an empty list. That covers routers without
+ * WireGuard (RouterOS v6), but also hides a dropped connection or a
+ * permission error.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of WireguardInterface} all WireGuard interfaces
  */
 export func wireguardInterfaces(c as Client) {
@@ -98,15 +99,16 @@ export func wireguardInterfaces(c as Client) {
 /**
  * Create a WireGuard interface; the router generates the keypair.
  *
- * Idempotent by name: an existing interface of that name is reused.
- * After creating, read the router's public key with
- * `wireguardPublicKey` and hand it to the other side.
+ * Idempotent by name: an existing interface of that name is returned
+ * unchanged, even when its listen port differs. Read the public key for
+ * the other side with `wireguardPublicKey`.
  *
- * @param {Client} c          an open client
- * @param {string} name       name for the interface (e.g. "wgvpn")
- * @param {int}    listenPort UDP port to listen on (e.g. 13231)
- * @return {string} the RouterOS id of the (new or existing) interface
- * @throws {Error} kind "routeros" on a bad name or port
+ * @param c {Client}          an open client
+ * @param name {string}       interface name (e.g. "wgvpn")
+ * @param listenPort {int} UDP listen port, 1-65535 (e.g. 13231)
+ * @return {string} the RouterOS id of the new or existing interface
+ * @throws {Error} kind "routeros" on an empty or spaced name, or a port
+ *                 outside 1-65535
  */
 export func addWireguard(c as Client, name as string, listenPort as int) {
     ensureName($name, "WireGuard interface");
@@ -121,11 +123,11 @@ export func addWireguard(c as Client, name as string, listenPort as int) {
 /**
  * Read the router's public key for a WireGuard interface.
  *
- * This is the value the other side of the tunnel needs; it is safe to
- * share. (The private key never leaves the router through routeros.)
+ * The other side of the tunnel needs it; it is safe to share. The
+ * private key never leaves the router through this deck.
  *
- * @param {Client} c    an open client
- * @param {string} name the WireGuard interface name
+ * @param c {Client}    an open client
+ * @param name {string} WireGuard interface name
  * @return {string} the base64 public key
  * @throws {Error} kind "routeros" when no such interface exists
  */
@@ -139,22 +141,22 @@ export func wireguardPublicKey(c as Client, name as string) {
 }
 
 /**
- * Stand up a complete WireGuard server in one call.
+ * Set up a WireGuard server: interface, VPN address and firewall opening.
  *
- * Creates the interface (keypair generated by the router), puts the
- * given VPN address on it, and opens the listen port in the firewall
- * (an accept rule on the input chain, comment "wireguard: <name>").
- * Idempotent: each of the three pieces is only created if missing, so
- * calling it again is safe. Peers are added afterwards with
+ * Creates the interface (`addWireguard`), puts `address` on it, and
+ * accepts the listen port with an input-chain rule commented
+ * "wireguard: <name>". Idempotent: each piece is created only if missing
+ * (the address is matched by value, the rule by comment). Add peers with
  * `addWireguardPeer`.
  *
- * @param {Client} c          an open client
- * @param {string} name       name for the interface (e.g. "wgvpn")
- * @param {int}    listenPort UDP port to listen on (e.g. 13231)
- * @param {string} address    the router's address INSIDE the VPN, with
- *                            prefix (e.g. "10.100.0.1/24")
+ * @param c {Client}          an open client
+ * @param name {string}       interface name (e.g. "wgvpn")
+ * @param listenPort {int} UDP listen port, 1-65535 (e.g. 13231)
+ * @param address {string}    router's address inside the VPN, in CIDR
+ *                            (e.g. "10.100.0.1/24")
  * @return {string} the RouterOS id of the WireGuard interface
- * @throws {Error} kind "routeros" on a bad name, port, or address
+ * @throws {Error} kind "routeros" on an address without prefix, or the
+ *                 `addWireguard` errors
  * @example
  *   mt.setupWireguardServer($c, "wgvpn", 13231, "10.100.0.1/24");
  *   io.printf("server key: %s\n", mt.wireguardPublicKey($c, "wgvpn"));
@@ -182,13 +184,14 @@ export func setupWireguardServer(
 }
 
 /**
- * List WireGuard peers, with traffic counters and handshake age.
+ * List WireGuard peers with traffic counters and handshake age.
  *
- * `lastHandshake` is the health signal: a peer that handshook within
- * the last ~2 minutes is alive.
+ * A peer whose `lastHandshake` is within about 2 minutes is alive. Any
+ * read error yields an empty list, as for `wireguardInterfaces` (meant
+ * for RouterOS v6; it also hides a dropped connection).
  *
- * @param {Client} c an open client
- * @return {list of WireguardPeer} all peers across all WireGuard interfaces
+ * @param c {Client} an open client
+ * @return {list of WireguardPeer} peers of all WireGuard interfaces
  */
 export func wireguardPeers(c as Client) {
     def out as list of WireguardPeer init [];
@@ -205,22 +208,23 @@ export func wireguardPeers(c as Client) {
 }
 
 /**
- * Allow a remote party into a tunnel (add a peer that dials in).
+ * Add a peer that dials in (server side): a laptop, phone or router.
  *
- * The server-side shape: the peer (a laptop, a phone, another router)
- * connects to us. `allowedAddress` is the peer's address INSIDE the
- * VPN - traffic from and to it is only accepted for these addresses,
- * so a single device is "10.100.0.2/32".
+ * Traffic from and to the peer is accepted only for `allowedAddress`,
+ * its address inside the VPN; a single device is "10.100.0.2/32". Not
+ * idempotent: each call adds a peer.
  *
- * @param {Client} c              an open client
- * @param {string} interfaceName  the WireGuard interface (must exist)
- * @param {string} publicKey      the peer's public key (44 base64 characters)
- * @param {string} allowedAddress the peer's VPN address(es), CIDR,
- *                                comma-separated when several
- * @param {string} comment        friendly handle for the peer (e.g. "laptop")
+ * @param c {Client}              an open client
+ * @param interfaceName {string}  existing WireGuard interface
+ * @param publicKey {string}      peer's public key, 44 base64 characters
+ *                                ending in "="
+ * @param allowedAddress {string} peer's VPN address(es) in CIDR,
+ *                                comma-separated
+ * @param comment {string}        handle for the peer (e.g. "laptop"), "" for none
  * @return {string} the RouterOS id of the new peer
- * @throws {Error} kind "routeros" on a bad key or address, or an
- *                 unknown interface
+ * @throws {Error} kind "routeros" on an unknown interface, a malformed
+ *                 key, or an allowed-address entry that is empty, has no
+ *                 prefix or does not parse
  */
 export func addWireguardPeer(
     c as Client,
@@ -243,23 +247,24 @@ export func addWireguardPeer(
 }
 
 /**
- * Connect out to a remote WireGuard server (add a dialing peer).
+ * Add a peer the router dials (client side).
  *
- * The client-side shape: the router dials the remote endpoint and keeps
- * the tunnel alive through NAT with a 25-second keepalive. Route
- * everything through the tunnel with allowedAddress "0.0.0.0/0", or
- * just the remote networks with their CIDRs.
+ * Sets a 25-second persistent keepalive so the tunnel stays open through
+ * NAT. allowedAddress "0.0.0.0/0" sends everything through the tunnel;
+ * the remote networks' CIDRs send only those.
  *
- * @param {Client} c               an open client
- * @param {string} interfaceName   the WireGuard interface (must exist)
- * @param {string} publicKey       the server's public key
- * @param {string} endpointHost    the server's address or DNS name
- * @param {int}    endpointPort    the server's UDP port (e.g. 13231)
- * @param {string} allowedAddress  what to send through the tunnel, CIDR,
- *                                 comma-separated when several
- * @param {string} comment         friendly handle for the peer
+ * @param c {Client}               an open client
+ * @param interfaceName {string}   existing WireGuard interface
+ * @param publicKey {string}       server's public key
+ * @param endpointHost {string}    server's address or DNS name
+ * @param endpointPort {int}    server's UDP port, 1-65535 (e.g. 13231)
+ * @param allowedAddress {string}  networks to send through the tunnel in
+ *                                 CIDR, comma-separated
+ * @param comment {string}         handle for the peer, "" for none
  * @return {string} the RouterOS id of the new peer
- * @throws {Error} kind "routeros" on bad input or an unknown interface
+ * @throws {Error} kind "routeros" on an unknown interface, a malformed
+ *                 key, an empty or spaced host, a port outside 1-65535,
+ *                 or a bad allowed-address entry
  * @example
  *   mt.addWireguard($c, "wghome", 13231);
  *   mt.connectWireguard($c, "wghome", $serverKey, "vpn.example.org", 13231,
@@ -297,8 +302,8 @@ export func connectWireguard(
 /**
  * Remove the WireGuard peer that carries a comment.
  *
- * @param {Client} c       an open client
- * @param {string} comment the comment given to the peer when it was added
+ * @param c {Client}       an open client
+ * @param comment {string} comment the peer was added with
  * @throws {Error} kind "routeros" when no peer carries that comment
  */
 export func removeWireguardPeerByComment(c as Client, comment as string) {
@@ -311,14 +316,14 @@ export func removeWireguardPeerByComment(c as Client, comment as string) {
 }
 
 /**
- * Delete a WireGuard interface, its peers, and what setupWireguardServer
- * created for it.
+ * Delete a WireGuard interface with its peers and what
+ * `setupWireguardServer` created for it.
  *
- * Removes the interface (peers go with it), any IP address sitting on
- * it, and the "wireguard: <name>" firewall rule if present.
+ * Removes the first IP address on the interface, the "wireguard: <name>"
+ * firewall rule if present, and the interface (its peers go with it).
  *
- * @param {Client} c    an open client
- * @param {string} name the WireGuard interface name
+ * @param c {Client}    an open client
+ * @param name {string} WireGuard interface name
  * @throws {Error} kind "routeros" when no such interface exists
  */
 export func removeWireguard(c as Client, name as string) {
@@ -342,8 +347,8 @@ export func removeWireguard(c as Client, name as string) {
 /**
  * Switch a WireGuard interface on.
  *
- * @param {Client} c    an open client
- * @param {string} name the WireGuard interface name
+ * @param c {Client}    an open client
+ * @param name {string} WireGuard interface name
  * @throws {Error} kind "routeros" when no such interface exists
  */
 export func enableWireguard(c as Client, name as string) {
@@ -353,8 +358,8 @@ export func enableWireguard(c as Client, name as string) {
 /**
  * Switch a WireGuard interface off; all its tunnels go down.
  *
- * @param {Client} c    an open client
- * @param {string} name the WireGuard interface name
+ * @param c {Client}    an open client
+ * @param name {string} WireGuard interface name
  * @throws {Error} kind "routeros" when no such interface exists
  */
 export func disableWireguard(c as Client, name as string) {
@@ -364,7 +369,7 @@ export func disableWireguard(c as Client, name as string) {
 /**
  * Validate a WireGuard key: 44 base64 characters ending in "=".
  *
- * @param {string} key the candidate key
+ * @param key {string} the candidate key
  * @throws {Error} kind "routeros" on any other shape
  * @internal
  */
@@ -386,11 +391,10 @@ func ensureWireguardKey(key as string) {
 /**
  * Validate and normalize a comma-separated allowed-address list.
  *
- * Every entry must carry a prefix - a single device is "x.x.x.x/32",
- * and that hint is in the error because a bare address is the most
- * common WireGuard configuration mistake.
+ * Every entry needs a prefix. A bare address is the most common
+ * WireGuard mistake, so the error suggests the "/32" form.
  *
- * @param {string} csv the candidate list
+ * @param csv {string} the candidate list
  * @return {string} the normalized list
  * @throws {Error} kind "routeros" on an empty list or a bad entry
  * @internal
@@ -419,7 +423,7 @@ func normalizedAllowedAddress(csv as string) {
 /**
  * Fold a reply row into a WireguardInterface.
  *
- * @param {map of string to string} row an "/interface/wireguard/print" row
+ * @param row {map of string to string} an "/interface/wireguard/print" row
  * @return {WireguardInterface} the typed interface
  * @internal
  */
@@ -439,7 +443,7 @@ func wireguardFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a WireguardPeer.
  *
- * @param {map of string to string} row an "/interface/wireguard/peers/print" row
+ * @param row {map of string to string} an "/interface/wireguard/peers/print" row
  * @return {WireguardPeer} the typed peer
  * @internal
  */

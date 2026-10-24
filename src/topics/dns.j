@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - DNS resolver settings, static entries, and the cache.
@@ -14,18 +14,18 @@ export def const DNS_STATIC_PATH as string init "/ip/dns/static";
 /** RouterOS API path of the DNS adlist (blocklists, RouterOS 7.15+). */
 export def const DNS_ADLIST_PATH as string init "/ip/dns/adlist";
 
-/** RouterOS API path of the DNS cache (what the resolver knows right now). */
+/** RouterOS API path of the DNS cache. */
 export def const DNS_CACHE_PATH as string init "/ip/dns/cache";
 
 /**
- * One DNS cache record: what the resolver would answer right now.
+ * One DNS cache record.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} name     the DNS name the record answers for
- * @field {string} kind     record type ("A", "AAAA", "CNAME", ...)
- * @field {string} data     the answer (an address for A/AAAA, a name for CNAME)
- * @field {string} ttl      time until the record expires from the cache
- * @field {bool}   isStatic true when it comes from a static entry (never expires)
+ * @field id {string}       internal RouterOS id
+ * @field name {string}     DNS name the record answers for
+ * @field kind {string}     record type ("A", "AAAA", "CNAME", ...)
+ * @field data {string}     answer: an address for A/AAAA, a name for CNAME
+ * @field ttl {string}      time until the record expires from the cache
+ * @field isStatic {bool}   true for a static entry, which never expires
  */
 export def struct DnsCacheEntry {
     id as string,
@@ -37,12 +37,12 @@ export def struct DnsCacheEntry {
 };
 
 /**
- * The DNS resolver configuration of the router.
+ * The router's DNS resolver configuration.
  *
- * @field {string} servers             upstream servers, comma-separated
- * @field {bool}   allowRemoteRequests true when the router answers DNS for its clients
- * @field {string} cacheSize           resolver cache size as reported
- * @field {string} cacheUsed           resolver cache usage as reported
+ * @field servers {string}             upstream servers, comma-separated
+ * @field allowRemoteRequests {bool} true when the router answers its clients' queries
+ * @field cacheSize {string}           cache size as RouterOS prints it (e.g. "2048KiB")
+ * @field cacheUsed {string}           cache usage as RouterOS prints it
  */
 export def struct DnsSettings {
     servers as string,
@@ -52,14 +52,14 @@ export def struct DnsSettings {
 };
 
 /**
- * One static DNS entry (a local name that resolves to a fixed address).
+ * One static DNS entry: a local name with a fixed address.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} name     the DNS name (e.g. "nas.lan")
- * @field {string} address  the IP address it resolves to
- * @field {string} ttl      time-to-live as reported (e.g. "1d")
- * @field {bool}   disabled true when the entry is switched off
- * @field {string} comment  free-text comment, "" when unset
+ * @field id {string}       internal RouterOS id
+ * @field name {string}     DNS name (e.g. "nas.lan")
+ * @field address {string}  address it resolves to
+ * @field ttl {string}      time-to-live as RouterOS prints it (e.g. "1d")
+ * @field disabled {bool}   true when switched off
+ * @field comment {string}  free-text comment, "" when unset
  */
 export def struct DnsEntry {
     id as string,
@@ -73,7 +73,7 @@ export def struct DnsEntry {
 /**
  * Read the router's DNS resolver configuration.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {DnsSettings} the resolver state
  */
 export func dnsSettings(c as Client) {
@@ -83,34 +83,35 @@ export func dnsSettings(c as Client) {
 /**
  * Point the router's resolver at upstream DNS servers.
  *
- * @param {Client} c       an open client
- * @param {string} servers one or more server addresses, comma-separated
- *                         (e.g. "1.1.1.1,9.9.9.9"); spaces are tolerated
- * @throws {Error} kind "routeros" when an entry is not an IP address
+ * @param c {Client}       an open client
+ * @param servers {string} comma-separated IP addresses (e.g.
+ *                         "1.1.1.1, 9.9.9.9"); spaces are dropped
+ * @throws {Error} kind "routeros" on an empty list, an empty entry, or an
+ *                 entry that is not an IP address (DNS names are rejected)
  */
 export func setDnsServers(c as Client, servers as string) {
     apiRun($c, DNS_PATH + "/set", {"servers": normalizedAddressList($servers)});
 }
 
 /**
- * Let (or stop letting) the router answer DNS queries from its clients.
+ * Answer, or stop answering, DNS queries from clients.
  *
- * Switch this on when DHCP clients use the router as their DNS server.
- * Caution: it answers on ALL interfaces - on an internet-facing router,
- * block UDP/TCP port 53 on the WAN side (see `firewallRule`) or you are
- * running an open resolver.
+ * Needed when DHCP clients use the router as their DNS server. The router
+ * then answers on every interface: on an internet-facing router, drop
+ * UDP and TCP port 53 from the WAN (see `firewallRule`), or it is an open
+ * resolver.
  *
- * @param {Client} c     an open client
- * @param {bool}   allow true to answer client queries, false to refuse them
+ * @param c {Client}   an open client
+ * @param allow {bool} true to answer client queries
  */
 export func allowRemoteDnsRequests(c as Client, allow as bool) {
     apiRun($c, DNS_PATH + "/set", {"allow-remote-requests": boolWord($allow)});
 }
 
 /**
- * List the static DNS entries (local names the router resolves itself).
+ * List the static DNS entries.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DnsEntry} all static entries
  */
 export func dnsStaticEntries(c as Client) {
@@ -123,16 +124,17 @@ export func dnsStaticEntries(c as Client) {
 }
 
 /**
- * Add a static DNS entry: a local name that resolves to a fixed address.
+ * Add a static DNS entry: a local name with a fixed address.
  *
- * Clients only see it when they use the router as their DNS server
- * (see `allowRemoteDnsRequests`).
+ * Clients see it only when they use the router as their DNS server
+ * (see `allowRemoteDnsRequests`). Not idempotent: a second call adds a
+ * second entry.
  *
- * @param {Client} c       an open client
- * @param {string} name    the DNS name (e.g. "nas.lan")
- * @param {string} address the IP address it should resolve to
+ * @param c {Client}       an open client
+ * @param name {string}    DNS name (e.g. "nas.lan")
+ * @param address {string} IP address (v4 or v6) it resolves to
  * @return {string} the RouterOS id of the new entry
- * @throws {Error} kind "routeros" on an empty name or malformed address
+ * @throws {Error} kind "routeros" on an empty or spaced name or a malformed address
  */
 export func addDnsEntry(c as Client, name as string, address as string) {
     ensureName($name, "DNS entry");
@@ -143,8 +145,8 @@ export func addDnsEntry(c as Client, name as string, address as string) {
 /**
  * Remove a static DNS entry by its name.
  *
- * @param {Client} c    an open client
- * @param {string} name the DNS name of the entry
+ * @param c {Client}    an open client
+ * @param name {string} DNS name of the entry
  * @throws {Error} kind "routeros" when no entry has that name
  */
 export func removeDnsEntry(c as Client, name as string) {
@@ -152,13 +154,13 @@ export func removeDnsEntry(c as Client, name as string) {
 }
 
 /**
- * Read the whole DNS cache: everything the resolver knows right now.
+ * Read the whole DNS cache.
  *
- * On a busy router this is large - prefer `dnsCacheFor` /
- * `resolvedAddresses` for one name. Cache fill level is in
- * `dnsSettings` (`cacheUsed` / `cacheSize`).
+ * Large on a busy router; for one name use `dnsCacheFor` or
+ * `resolvedAddresses`. The fill level is in `dnsSettings`
+ * (`cacheUsed` / `cacheSize`).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DnsCacheEntry} all cached records
  */
 export func dnsCache(c as Client) {
@@ -171,14 +173,14 @@ export func dnsCache(c as Client) {
 }
 
 /**
- * The cached records for one name (case-insensitive).
+ * List the cached records for one name, matched case-insensitively.
  *
- * Answers "what would the router resolve this to right now" - several
- * records are normal (A + AAAA, or a CNAME chain). An empty result
- * means the router has not resolved that name recently.
+ * Several records are normal (A and AAAA, or a CNAME chain). An empty
+ * list means the router has not resolved the name recently. The whole
+ * cache is read and filtered locally.
  *
- * @param {Client} c    an open client
- * @param {string} name the DNS name to look up in the cache
+ * @param c {Client}    an open client
+ * @param name {string} DNS name to look up
  * @return {list of DnsCacheEntry} the matching records, possibly empty
  * @throws {Error} kind "routeros" on an empty or spaced name
  */
@@ -194,11 +196,11 @@ export func dnsCacheFor(c as Client, name as string) {
 }
 
 /**
- * The IP addresses the cache currently holds for a name (A and AAAA
- * records only - CNAMEs and other types are skipped).
+ * List the addresses the cache holds for a name: the data of its A and
+ * AAAA records, in cache order. CNAMEs are not followed.
  *
- * @param {Client} c    an open client
- * @param {string} name the DNS name
+ * @param c {Client}    an open client
+ * @param name {string} DNS name, matched case-insensitively
  * @return {list of string} the cached addresses, possibly empty
  * @throws {Error} kind "routeros" on an empty or spaced name
  * @example
@@ -212,13 +214,12 @@ export func resolvedAddresses(c as Client, name as string) {
 }
 
 /**
- * Empty the DNS cache; the resolver re-asks upstream for everything.
+ * Empty the DNS cache, so the resolver asks upstream again.
  *
- * The classic fix for "it still resolves to the old address" after a
- * DNS change - and the right follow-up to `setDnsServers`. Static
- * entries survive (they are configuration, not cache).
+ * Use it after a DNS change or `setDnsServers`. Static entries are
+ * configuration and survive.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func flushDnsCache(c as Client) {
     def none as map of string to string init {};
@@ -228,7 +229,7 @@ export func flushDnsCache(c as Client) {
 /**
  * Fold a reply row into the DnsSettings.
  *
- * @param {map of string to string} row the "/ip/dns/print" row
+ * @param row {map of string to string} the "/ip/dns/print" row
  * @return {DnsSettings} the typed resolver state
  * @internal
  */
@@ -244,7 +245,7 @@ func dnsSettingsFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a DnsEntry.
  *
- * @param {map of string to string} row an "/ip/dns/static/print" row
+ * @param row {map of string to string} an "/ip/dns/static/print" row
  * @return {DnsEntry} the typed entry
  * @internal
  */
@@ -263,8 +264,8 @@ func dnsEntryFromRow(row as map of string to string) {
  * The cache rows answering for a name, compared case-insensitively
  * (DNS names are).
  *
- * @param {list of map of string to string} rows "/ip/dns/cache/print" rows
- * @param {string} name the name to match
+ * @param rows {list of map of string to string} "/ip/dns/cache/print" rows
+ * @param name {string} the name to match
  * @return {list of map of string to string} the matching rows, in order
  * @internal
  */
@@ -282,8 +283,8 @@ func cacheRowsForName(rows as list of map of string to string, name as string) {
 /**
  * The cached A/AAAA addresses for a name.
  *
- * @param {list of map of string to string} rows "/ip/dns/cache/print" rows
- * @param {string} name the name to match (case-insensitive)
+ * @param rows {list of map of string to string} "/ip/dns/cache/print" rows
+ * @param name {string} the name to match (case-insensitive)
  * @return {list of string} the address record data, in cache order
  * @internal
  */
@@ -302,7 +303,7 @@ func addressesFromCacheRows(rows as list of map of string to string, name as str
 /**
  * Fold a reply row into a DnsCacheEntry.
  *
- * @param {map of string to string} row an "/ip/dns/cache/print" row
+ * @param row {map of string to string} an "/ip/dns/cache/print" row
  * @return {DnsCacheEntry} the typed record
  * @internal
  */
@@ -318,12 +319,12 @@ func dnsCacheEntryFromRow(row as map of string to string) {
 }
 
 /**
- * One DNS adlist: a hosts/blocklist the resolver applies (v7.15+).
+ * One DNS adlist: a hosts-format blocklist the resolver applies (v7.15+).
  *
- * @field {string} id        internal RouterOS id
- * @field {string} url       the blocklist URL, "" for a local-file list
- * @field {string} matchCount how many names it currently blocks
- * @field {bool}   disabled  true when switched off
+ * @field id {string}        internal RouterOS id
+ * @field url {string}        blocklist URL, "" for a local-file list
+ * @field matchCount {string} number of names it blocks, as RouterOS prints it
+ * @field disabled {bool}    true when switched off
  */
 export def struct DnsAdlist {
     id as string,
@@ -335,7 +336,7 @@ export def struct DnsAdlist {
 /**
  * List the DNS adlists (blocklists).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of DnsAdlist} all adlists
  */
 export func dnsAdlists(c as Client) {
@@ -348,19 +349,17 @@ export func dnsAdlists(c as Client) {
 }
 
 /**
- * Add a DNS blocklist by URL (router-wide ad / malware blocking).
+ * Add a DNS blocklist by URL, for router-wide ad and malware blocking.
  *
- * RouterOS 7.15+ downloads the hosts-format list and answers 0.0.0.0
- * for every name on it, for every client using the router as resolver
- * (see `allowRemoteDnsRequests`). Needs a chunk of RAM for large lists.
- * Idempotent by URL. After adding, RouterOS loads it on the next
- * refresh (or `mt.getAll` triggers none - reload via the generic verbs
- * if needed).
+ * RouterOS 7.15+ downloads the hosts-format list and answers 0.0.0.0 for
+ * every name on it, to every client that uses the router as resolver
+ * (see `allowRemoteDnsRequests`). Large lists take noticeable RAM.
+ * Idempotent by URL. RouterOS loads the list on its next refresh.
  *
- * @param {Client} c   an open client
- * @param {string} url the blocklist URL (https, hosts format)
+ * @param c {Client}   an open client
+ * @param url {string} blocklist URL, hosts format
  * @return {string} the RouterOS id of the (new or existing) adlist
- * @throws {Error} kind "routeros" on an empty or non-http URL
+ * @throws {Error} kind "routeros" on a URL that does not start with "http"
  * @example
  *   mt.allowRemoteDnsRequests($c, true);
  *   mt.addAdlist($c, "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts");
@@ -381,8 +380,8 @@ export func addAdlist(c as Client, url as string) {
 /**
  * Remove a DNS blocklist.
  *
- * @param {Client} c   an open client
- * @param {string} url the blocklist URL
+ * @param c {Client}   an open client
+ * @param url {string} blocklist URL, as added
  * @throws {Error} kind "routeros" when no adlist has that URL
  */
 export func removeAdlist(c as Client, url as string) {
@@ -397,7 +396,7 @@ export func removeAdlist(c as Client, url as string) {
 /**
  * Fold a reply row into a DnsAdlist.
  *
- * @param {map of string to string} row an "/ip/dns/adlist/print" row
+ * @param row {map of string to string} an "/ip/dns/adlist/print" row
  * @return {DnsAdlist} the typed adlist
  * @internal
  */

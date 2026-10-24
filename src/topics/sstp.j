@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
-# routeros - SSTP: a TLS remote-access VPN that crosses firewalls.
+# routeros - SSTP remote-access VPN server and dial-out clients.
 # Spliced into routeros.j via include - not a standalone module.
 
 /** RouterOS API path of the SSTP server settings (single row). */
 export def const SSTP_SERVER_PATH as string init "/interface/sstp-server/server";
 
-/** RouterOS API path of the SSTP client list (dial OUT to a server). */
+/** RouterOS API path of the SSTP client list (dial-out tunnels). */
 export def const SSTP_CLIENT_PATH as string init "/interface/sstp-client";
 
 /**
  * The SSTP server settings.
  *
- * @field {bool}   enabled        true when the server accepts connections
- * @field {int}    port           the TCP port it listens on (443 by default)
- * @field {string} certificate    the TLS certificate it serves
- * @field {string} defaultProfile the PPP profile applied to logins
+ * @field enabled {bool} true when the server accepts connections
+ * @field port {int} TCP port it listens on (443 by default)
+ * @field certificate {string} TLS certificate it serves
+ * @field defaultProfile {string} PPP profile applied to logins
  */
 export def struct SstpServer {
     enabled as bool,
@@ -27,15 +27,15 @@ export def struct SstpServer {
 };
 
 /**
- * One SSTP client (this router dialing out to an SSTP server).
+ * One SSTP client: this router dialing out to an SSTP server.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} name     the client interface name
- * @field {string} connectTo the server address
- * @field {string} user     the login on the server
- * @field {bool}   running  true when the tunnel is up
- * @field {bool}   disabled true when switched off
- * @field {string} comment  free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} client interface name
+ * @field connectTo {string} server address
+ * @field user {string} login on the server
+ * @field running {bool} true when the tunnel is up
+ * @field disabled {bool} true when switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct SstpClient {
     id as string,
@@ -50,7 +50,7 @@ export def struct SstpClient {
 /**
  * Read the SSTP server settings.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {SstpServer} the server state
  */
 export func sstpServerStatus(c as Client) {
@@ -58,19 +58,18 @@ export func sstpServerStatus(c as Client) {
 }
 
 /**
- * Turn on an SSTP remote-access VPN server.
+ * Turn on an SSTP remote-access server.
  *
- * SSTP rides TLS on TCP 443, so it looks like HTTPS and slips through
- * restrictive firewalls and captive networks where L2TP/IKE is blocked.
- * It needs a TLS certificate (see the certificates topic - a public
- * Let's Encrypt cert lets built-in clients connect without warnings; a
- * self-signed one means importing it on each client). Opens the
- * firewall for the chosen port. Add logins with `addVpnUser`.
+ * SSTP is TLS over TCP; on port 443 it looks like HTTPS and passes
+ * firewalls and captive networks that block L2TP or IKE. With a public
+ * (Let's Encrypt) certificate built-in clients connect without
+ * warnings; a self-signed one must be imported on each client. Accepts
+ * the TCP port in the input chain. Add logins with `addVpnUser`.
  * Idempotent.
  *
- * @param {Client} c           an open client
- * @param {string} certificate the TLS certificate's store name
- * @param {int}    port        the TCP port (443 to blend in with HTTPS)
+ * @param c {Client} an open client
+ * @param certificate {string} name of the TLS certificate in the store
+ * @param port {int} TCP port (443 to look like HTTPS)
  * @throws {Error} kind "routeros" on a bad port or unknown certificate
  * @example
  *   mt.enableSstpServer($c, "router-le-cert", 443);
@@ -89,7 +88,7 @@ export func enableSstpServer(c as Client, certificate as string, port as int) {
 /**
  * Turn the SSTP server off and remove its firewall opening.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  */
 export func disableSstpServer(c as Client) {
     apiRun($c, SSTP_SERVER_PATH + "/set", {"enabled": "no"});
@@ -99,7 +98,7 @@ export func disableSstpServer(c as Client) {
 /**
  * List the SSTP clients (dial-out tunnels).
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of SstpClient} all SSTP clients
  */
 export func sstpClients(c as Client) {
@@ -112,15 +111,20 @@ export func sstpClients(c as Client) {
 }
 
 /**
- * Dial out to a remote SSTP server (create an SSTP client).
+ * Dial out to a remote SSTP server.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the client interface
- * @param {string} serverAddress the server's address or DNS name
- * @param {string} user          the login on the server
- * @param {string} password      its password
- * @return {string} the RouterOS id of the (new or existing) client
- * @throws {Error} kind "routeros" on bad input
+ * The client is created with `verify-server-certificate=no`: it does not
+ * check the server's certificate. When a client of that name exists,
+ * its id is returned and nothing is changed.
+ *
+ * @param c {Client} an open client
+ * @param name {string} client interface name
+ * @param serverAddress {string} server address or DNS name
+ * @param user {string} login on the server
+ * @param password {string} password for that login
+ * @return {string} the RouterOS id of the new or existing client
+ * @throws {Error} kind "routeros" on an empty or spaced name or user, an
+ *         empty password, or an empty or spaced server address
  */
 export func addSstpClient(
     c as Client,
@@ -143,8 +147,8 @@ export func addSstpClient(
 /**
  * Remove an SSTP client.
  *
- * @param {Client} c    an open client
- * @param {string} name the client interface name
+ * @param c {Client} an open client
+ * @param name {string} client interface name
  * @throws {Error} kind "routeros" when no such client exists
  */
 export func removeSstpClient(c as Client, name as string) {
@@ -154,7 +158,7 @@ export func removeSstpClient(c as Client, name as string) {
 /**
  * Fold a reply row into an SstpServer.
  *
- * @param {map of string to string} row the "/interface/sstp-server/server" row
+ * @param row {map of string to string} the "/interface/sstp-server/server" row
  * @return {SstpServer} the typed server state
  * @internal
  */
@@ -170,7 +174,7 @@ func sstpServerFromRow(row as map of string to string) {
 /**
  * Fold a reply row into an SstpClient.
  *
- * @param {map of string to string} row an "/interface/sstp-client/print" row
+ * @param row {map of string to string} an "/interface/sstp-client/print" row
  * @return {SstpClient} the typed client
  * @internal
  */

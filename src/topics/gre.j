@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - GRE tunnels: a routed point-to-point link over IP.
@@ -9,20 +9,17 @@
 export def const GRE_PATH as string init "/interface/gre";
 
 /**
- * One GRE tunnel: a layer-3 point-to-point link carried over IP.
+ * One GRE tunnel: a routed (layer-3) point-to-point link over IP.
  *
- * Unlike EoIP (layer 2, bridged), a GRE tunnel is ROUTED: give both
- * ends an address in a small shared network and point routes at it.
- *
- * @field {string} id            internal RouterOS id
- * @field {string} name          tunnel interface name (e.g. "grebranch")
- * @field {string} remoteAddress the other router's IP address
- * @field {string} localAddress  our source address, "" for automatic
- * @field {string} mtu           MTU as reported
- * @field {string} keepalive     keepalive setting as reported
- * @field {bool}   running       true when the tunnel is up
- * @field {bool}   disabled      true when the tunnel is switched off
- * @field {string} comment       free-text comment, "" when unset
+ * @field id {string} internal RouterOS id
+ * @field name {string} tunnel interface name (e.g. "grebranch")
+ * @field remoteAddress {string} the other router's IP address
+ * @field localAddress {string} our source address, "" for automatic
+ * @field mtu {string} MTU as reported
+ * @field keepalive {string} keepalive setting as reported
+ * @field running {bool} true when the tunnel is up
+ * @field disabled {bool} true when the tunnel is switched off
+ * @field comment {string} comment, "" when unset
  */
 export def struct GreTunnel {
     id as string,
@@ -37,9 +34,9 @@ export def struct GreTunnel {
 };
 
 /**
- * List every GRE tunnel on the router.
+ * List the GRE tunnels.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of GreTunnel} all GRE tunnels
  */
 export func greTunnels(c as Client) {
@@ -52,10 +49,10 @@ export func greTunnels(c as Client) {
 }
 
 /**
- * Look one GRE tunnel up by its name.
+ * Look up a GRE tunnel by name.
  *
- * @param {Client} c    an open client
- * @param {string} name the tunnel's name
+ * @param c {Client} an open client
+ * @param name {string} tunnel name
  * @return {GreTunnel} the tunnel
  * @throws {Error} kind "routeros" when no GRE tunnel has that name
  */
@@ -70,18 +67,15 @@ export func greTunnelByName(c as Client, name as string) {
 /**
  * Create a GRE tunnel to another router.
  *
- * The other end needs the mirror tunnel (your address as its remote).
- * A GRE tunnel is a routed link: give each end an address in a small
- * shared network (a /30 fits exactly two) and add routes through it -
- * the example shows the whole shape. GRE is standard (RFC 2784), so
- * the far end can be any vendor, not just a MikroTik.
+ * The far end needs the mirror tunnel, with our address as its remote.
+ * Address each end in a small shared network (a /30 holds two) and
+ * route through it, as in the example. GRE (RFC 2784) interoperates
+ * with other vendors. It is not encrypted: across untrusted paths use
+ * `addSecureGreTunnel` or WireGuard.
  *
- * GRE itself is NOT encrypted - across untrusted paths use
- * `addSecureGreTunnel` or prefer WireGuard outright.
- *
- * @param {Client} c             an open client
- * @param {string} name          name for the tunnel interface (e.g. "grebranch")
- * @param {string} remoteAddress the other router's IP address
+ * @param c {Client} an open client
+ * @param name {string} tunnel interface name (e.g. "grebranch")
+ * @param remoteAddress {string} the other router's IP address
  * @return {string} the RouterOS id of the new tunnel
  * @throws {Error} kind "routeros" on a bad name or address, a name
  *                 already taken, or an existing tunnel to that remote
@@ -98,15 +92,14 @@ export func addGreTunnel(c as Client, name as string, remoteAddress as string) {
 /**
  * Create a GRE tunnel encrypted with RouterOS's coupled IPsec.
  *
- * Setting the shared secret makes RouterOS wrap the tunnel in an IPsec
- * transport automatically - the same secret must be configured on the
- * other end. Pick a long random secret; it is the only thing
- * protecting the traffic.
+ * With `ipsec-secret` set, RouterOS wraps the tunnel in IPsec transport
+ * mode itself. The far end needs the same secret. Use a long random
+ * secret: it is the only thing protecting the traffic.
  *
- * @param {Client} c             an open client
- * @param {string} name          name for the tunnel interface
- * @param {string} remoteAddress the other router's IP address
- * @param {string} ipsecSecret   the shared IPsec secret (write-only)
+ * @param c {Client} an open client
+ * @param name {string} tunnel interface name
+ * @param remoteAddress {string} the other router's IP address
+ * @param ipsecSecret {string} shared IPsec secret (write-only)
  * @return {string} the RouterOS id of the new tunnel
  * @throws {Error} kind "routeros" on bad input or an empty secret
  */
@@ -124,11 +117,11 @@ export func addSecureGreTunnel(
 /**
  * Delete a GRE tunnel.
  *
- * Addresses on it disappear with it; routes through it become
- * unreachable - clean those up first for a tidy teardown.
+ * Addresses on it go with it; routes through it become unreachable, so
+ * remove those first.
  *
- * @param {Client} c    an open client
- * @param {string} name the tunnel's name
+ * @param c {Client} an open client
+ * @param name {string} tunnel name
  * @throws {Error} kind "routeros" when no GRE tunnel has that name
  */
 export func removeGreTunnel(c as Client, name as string) {
@@ -138,8 +131,8 @@ export func removeGreTunnel(c as Client, name as string) {
 /**
  * Switch a GRE tunnel on.
  *
- * @param {Client} c    an open client
- * @param {string} name the tunnel's name
+ * @param c {Client} an open client
+ * @param name {string} tunnel name
  * @throws {Error} kind "routeros" when no GRE tunnel has that name
  */
 export func enableGreTunnel(c as Client, name as string) {
@@ -149,8 +142,8 @@ export func enableGreTunnel(c as Client, name as string) {
 /**
  * Switch a GRE tunnel off; routes through it lose their link.
  *
- * @param {Client} c    an open client
- * @param {string} name the tunnel's name
+ * @param c {Client} an open client
+ * @param name {string} tunnel name
  * @throws {Error} kind "routeros" when no GRE tunnel has that name
  */
 export func disableGreTunnel(c as Client, name as string) {
@@ -158,13 +151,13 @@ export func disableGreTunnel(c as Client, name as string) {
 }
 
 /**
- * Validate and create a GRE tunnel; empty secret omits the IPsec
+ * Validate and create a GRE tunnel; an empty secret omits the IPsec
  * coupling.
  *
- * @param {Client} c             an open client
- * @param {string} name          tunnel name
- * @param {string} remoteAddress the far end
- * @param {string} secret        IPsec secret, "" for none
+ * @param c {Client} an open client
+ * @param name {string} tunnel name
+ * @param remoteAddress {string} the far end's IP address
+ * @param secret {string} IPsec secret, "" for none
  * @return {string} the RouterOS id of the new tunnel
  * @throws {Error} kind "routeros" on bad input or a clashing tunnel
  * @internal
@@ -192,7 +185,7 @@ func greAdd(c as Client, name as string, remoteAddress as string, secret as stri
 /**
  * Fold a reply row into a GreTunnel.
  *
- * @param {map of string to string} row an "/interface/gre/print" row
+ * @param row {map of string to string} an "/interface/gre/print" row
  * @return {GreTunnel} the typed tunnel
  * @internal
  */

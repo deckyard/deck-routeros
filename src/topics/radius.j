@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - RADIUS: central authentication for logins, VPN, hotspot.
@@ -21,12 +21,12 @@ def const RADIUS_SERVICES as list of string init [
 /**
  * One RADIUS server the router authenticates against.
  *
- * @field {string} id       internal RouterOS id
- * @field {string} address  the RADIUS server's address
- * @field {string} services which subsystems use it, comma-separated
- * @field {string} timeout  the request timeout as reported
- * @field {bool}   disabled true when switched off
- * @field {string} comment  free-text comment, "" when unset
+ * @field id {string}       internal RouterOS id
+ * @field address {string}  server address
+ * @field services {string} subsystems that use it, comma-separated
+ * @field timeout {string}  request timeout as RouterOS prints it
+ * @field disabled {bool}   true when switched off
+ * @field comment {string}  free-text comment, "" when unset
  */
 export def struct RadiusServer {
     id as string,
@@ -40,7 +40,7 @@ export def struct RadiusServer {
 /**
  * List the configured RADIUS servers.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of RadiusServer} all servers
  */
 export func radiusServers(c as Client) {
@@ -55,21 +55,21 @@ export func radiusServers(c as Client) {
 /**
  * Point one or more subsystems at a RADIUS server.
  *
- * Centralizes authentication: instead of local `/user` accounts or PPP
- * secrets, logins are checked against the RADIUS server - the usual
- * back end for a large VPN (`ppp`, `ipsec`), a hotspot, or admin
- * `login`. The shared secret authenticates the router TO the server.
- * Idempotent by address.
+ * Logins for the listed subsystems are then checked against the server
+ * instead of local `/user` accounts or PPP secrets. The shared secret
+ * authenticates the router to the server. Idempotent by address: when a
+ * server with that address exists, its id is returned and its secret,
+ * services and comment are left unchanged.
  *
- * @param {Client} c        an open client
- * @param {string} address  the RADIUS server's address
- * @param {string} secret   the shared secret (write-only)
- * @param {string} services which subsystems use it, comma-separated:
- *                          login, ppp, hotspot, wireless, dhcp, ipsec, dot1x
- * @param {string} comment  friendly note ("" for none)
- * @return {string} the RouterOS id of the (new or existing) server
- * @throws {Error} kind "routeros" on a bad address, empty secret, or
- *                 unknown service
+ * @param c {Client}        an open client
+ * @param address {string}  server IP address (v4 or v6, not a DNS name)
+ * @param secret {string}   shared secret, write-only on the router
+ * @param services {string} comma-separated subsystems: login, ppp,
+ *                          hotspot, wireless, dhcp, ipsec, dot1x
+ * @param comment {string}  free-text note, "" for none
+ * @return {string} the id of the new or existing server
+ * @throws {Error} kind "routeros" on an address that is not an IP, an
+ *                 empty secret, or an empty or unknown service
  * @example
  *   mt.addRadiusServer($c, "10.0.9.20", "a shared secret", "login,ppp", "AD");
  */
@@ -104,9 +104,9 @@ export func addRadiusServer(
 /**
  * Remove a RADIUS server.
  *
- * @param {Client} c       an open client
- * @param {string} address the server's address
- * @throws {Error} kind "routeros" when no such server exists
+ * @param c {Client}       an open client
+ * @param address {string} the server's address
+ * @throws {Error} kind "routeros" when no server has that address
  */
 export func removeRadiusServer(c as Client, address as string) {
     def rows as list of map of string to string init getAll($c, RADIUS_PATH);
@@ -123,7 +123,7 @@ export func removeRadiusServer(c as Client, address as string) {
 /**
  * Validate and normalize a RADIUS service list.
  *
- * @param {string} csv the candidate list
+ * @param csv {string} the candidate list
  * @return {string} the normalized list
  * @throws {Error} kind "routeros" on an empty list or an unknown service
  * @internal
@@ -151,7 +151,7 @@ func normalizedRadiusServices(csv as string) {
 /**
  * Fold a reply row into a RadiusServer.
  *
- * @param {map of string to string} row a "/radius/print" row
+ * @param row {map of string to string} a "/radius/print" row
  * @return {RadiusServer} the typed server
  * @internal
  */

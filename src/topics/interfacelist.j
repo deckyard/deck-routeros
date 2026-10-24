@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - interface lists: named groups of interfaces (WAN/LAN/...).
@@ -14,10 +14,10 @@ export def const INTERFACE_LIST_MEMBER_PATH as string init "/interface/list/memb
 /**
  * One interface list: a named group of interfaces.
  *
- * @field {string} id      internal RouterOS id
- * @field {string} name    the list name (e.g. "WAN", "LAN")
- * @field {bool}   dynamic true when built by the system, not by hand
- * @field {string} comment free-text comment, "" when unset
+ * @field id {string}      internal RouterOS id
+ * @field name {string}    the list name (e.g. "WAN", "LAN")
+ * @field dynamic {bool}  created by the system, not configured
+ * @field comment {string} free-text comment, "" when unset
  */
 export def struct InterfaceList {
     id as string,
@@ -27,11 +27,10 @@ export def struct InterfaceList {
 };
 
 /**
- * List the interface lists.
+ * List the interface lists, including the built-in "all", "none" and
+ * "dynamic".
  *
- * The built-in lists "all", "none", and "dynamic" always exist.
- *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of InterfaceList} all lists
  */
 export func interfaceLists(c as Client) {
@@ -46,16 +45,15 @@ export func interfaceLists(c as Client) {
 /**
  * Create an interface list.
  *
- * Grouping interfaces as "WAN", "LAN", "MGMT", ... lets firewall rules
- * match a whole group (`withInInterfaceList` / `withOutInterfaceList`) -
- * add or move an interface and every rule follows, no rule edits. This
- * is how the RouterOS v7 default configuration is built. Idempotent by
- * name.
+ * Firewall rules can match a whole list (`withInInterfaceList`,
+ * `withOutInterfaceList`), so moving an interface between lists needs no
+ * rule edits. The RouterOS v7 default configuration uses "WAN" and "LAN".
+ * Idempotent by name: an existing list's id is returned unchanged.
  *
- * @param {Client} c       an open client
- * @param {string} name    the list name (e.g. "WAN")
- * @param {string} comment friendly note ("" for none)
- * @return {string} the RouterOS id of the (new or existing) list
+ * @param c {Client}       an open client
+ * @param name {string}    list name (e.g. "WAN")
+ * @param comment {string} comment, "" for none
+ * @return {string} the id of the new or existing list
  * @throws {Error} kind "routeros" on an invalid name
  * @example
  *   mt.addInterfaceList($c, "WAN", "internet-facing ports");
@@ -79,10 +77,10 @@ export func addInterfaceList(c as Client, name as string, comment as string) {
 }
 
 /**
- * Delete an interface list (its memberships go with it).
+ * Delete an interface list; RouterOS drops its memberships with it.
  *
- * @param {Client} c    an open client
- * @param {string} name the list name
+ * @param c {Client}    an open client
+ * @param name {string} the list name
  * @throws {Error} kind "routeros" when no list has that name
  */
 export func removeInterfaceList(c as Client, name as string) {
@@ -90,11 +88,13 @@ export func removeInterfaceList(c as Client, name as string) {
 }
 
 /**
- * The interfaces that are members of a list.
+ * Name the interfaces in a list.
  *
- * @param {Client} c        an open client
- * @param {string} listName the list name
- * @return {list of string} the member interface names, in order
+ * An unknown list gives an empty list, not an error.
+ *
+ * @param c {Client}        an open client
+ * @param listName {string} the list name
+ * @return {list of string} member interface names, in router order
  */
 export func interfaceListMembers(c as Client, listName as string) {
     def rows as list of map of string to string init getAll($c, INTERFACE_LIST_MEMBER_PATH);
@@ -110,13 +110,13 @@ export func interfaceListMembers(c as Client, listName as string) {
 /**
  * Put an interface into a list.
  *
- * The list is created if it does not exist; the interface must exist.
- * Idempotent - adding a member twice is a no-op.
+ * Creates the list when missing; the interface must exist. Idempotent:
+ * an existing membership's id is returned.
  *
- * @param {Client} c             an open client
- * @param {string} listName      the list (e.g. "WAN")
- * @param {string} interfaceName the interface to add
- * @return {string} the RouterOS id of the (new or existing) membership
+ * @param c {Client}             an open client
+ * @param listName {string}      the list (e.g. "WAN")
+ * @param interfaceName {string} the interface to add
+ * @return {string} the id of the new or existing membership
  * @throws {Error} kind "routeros" on a bad list name or unknown interface
  */
 export func addToInterfaceList(c as Client, listName as string, interfaceName as string) {
@@ -136,9 +136,9 @@ export func addToInterfaceList(c as Client, listName as string, interfaceName as
 /**
  * Remove an interface from a list.
  *
- * @param {Client} c             an open client
- * @param {string} listName      the list
- * @param {string} interfaceName the member interface
+ * @param c {Client}             an open client
+ * @param listName {string}      the list
+ * @param interfaceName {string} the member interface
  * @throws {Error} kind "routeros" when the interface is not in the list
  */
 export func removeFromInterfaceList(c as Client, listName as string, interfaceName as string) {
@@ -154,9 +154,9 @@ export func removeFromInterfaceList(c as Client, listName as string, interfaceNa
 /**
  * Find a membership row by list and interface.
  *
- * @param {list of map of string to string} rows member rows
- * @param {string} listName      the list
- * @param {string} interfaceName the interface
+ * @param rows {list of map of string to string} member rows
+ * @param listName {string}      the list
+ * @param interfaceName {string} the interface
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
@@ -176,7 +176,7 @@ func memberRow(
 /**
  * Fold a reply row into an InterfaceList.
  *
- * @param {map of string to string} row an "/interface/list/print" row
+ * @param row {map of string to string} an "/interface/list/print" row
  * @return {InterfaceList} the typed list
  * @internal
  */

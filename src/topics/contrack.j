@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # routeros - connection tracking: the live connection table.
@@ -12,11 +12,12 @@ export def const CONNTRACK_SETTINGS_PATH as string init "/ip/firewall/connection
 export def const CONNECTION_PATH as string init "/ip/firewall/connection";
 
 /**
- * The connection-tracking settings.
+ * The connection-tracking settings and table fill.
  *
- * @field {string} enabled      "auto" / "yes" / "no" as reported
- * @field {int}    totalEntries connections tracked right now
- * @field {int}    maxEntries   the table's capacity
+ * @field enabled {string} "auto", "yes" or "no", as reported
+ * @field totalEntries {int} connections tracked now
+ * @field maxEntries {int} table capacity; new connections are dropped
+ *        when it is full
  */
 export def struct ConntrackSettings {
     enabled as string,
@@ -27,13 +28,13 @@ export def struct ConntrackSettings {
 /**
  * One tracked connection.
  *
- * @field {string} id          internal RouterOS id
- * @field {string} protocol    the protocol ("tcp", "udp", ...)
- * @field {string} srcAddress  source address:port
- * @field {string} dstAddress  destination address:port
- * @field {string} tcpState    TCP state ("established", ...), "" for non-TCP
- * @field {string} timeout     time until the entry expires
- * @field {string} connectionMark the connection mark, "" when none
+ * @field id {string} internal RouterOS id
+ * @field protocol {string} protocol, e.g. "tcp" or "udp"
+ * @field srcAddress {string} source address:port
+ * @field dstAddress {string} destination address:port
+ * @field tcpState {string} TCP state such as "established", "" for non-TCP
+ * @field timeout {string} time until the entry expires
+ * @field connectionMark {string} connection mark, "" when none
  */
 export def struct Connection {
     id as string,
@@ -46,23 +47,22 @@ export def struct Connection {
 };
 
 /**
- * Read the connection-tracking settings (how full is the table?).
+ * Read the connection-tracking settings and how full the table is.
  *
- * @param {Client} c an open client
- * @return {ConntrackSettings} the settings and current fill
+ * @param c {Client} an open client
+ * @return {ConntrackSettings} settings and current fill
  */
 export func conntrackSettings(c as Client) {
     return conntrackFromRow(singleRow($c, CONNTRACK_SETTINGS_PATH));
 }
 
 /**
- * List the live connection table.
+ * Read the live connection table.
  *
- * Large on a busy router (thousands of rows) - prefer
- * `connectionsFor` to filter. NAT'd connections show their translated
- * form here.
+ * Thousands of rows on a busy router; `connectionsFor` filters to one
+ * host. NAT'd connections appear in translated form.
  *
- * @param {Client} c an open client
+ * @param c {Client} an open client
  * @return {list of Connection} every tracked connection
  */
 export func connections(c as Client) {
@@ -75,14 +75,15 @@ export func connections(c as Client) {
 }
 
 /**
- * The connections a host is involved in (as source or destination).
+ * List the connections whose source or destination contains an address.
  *
- * "What is this device actually talking to" - the fast way to spot a
- * chatty or compromised host. Matching is a substring test, so an
- * address matches whatever port it appears with.
+ * Warning: the match is a substring test on the "address:port" strings,
+ * not an exact host match, so "10.0.0.1" also matches 10.0.0.10-19,
+ * 10.0.0.100-199 and 110.0.0.1. Filter the result on `srcAddress` /
+ * `dstAddress` when that matters.
  *
- * @param {Client} c       an open client
- * @param {string} address the host IP to look for
+ * @param c {Client} an open client
+ * @param address {string} host IP to look for
  * @return {list of Connection} the matching connections
  * @throws {Error} kind "routeros" on a malformed address
  */
@@ -100,14 +101,20 @@ export func connectionsFor(c as Client, address as string) {
 }
 
 /**
- * Drop all tracked connections of a host (forces them to re-establish).
+ * Remove the tracked connections whose source or destination contains an
+ * address, forcing them to re-establish.
  *
- * The precise way to cut off a device without a firewall rule, or to
- * reset connections stuck after a routing change.
+ * Cuts a device's flows without a firewall rule, or resets flows stuck
+ * after a routing change. The host can open new connections at once.
  *
- * @param {Client} c       an open client
- * @param {string} address the host IP whose connections to drop
- * @return {int} how many connections were removed
+ * Warning: the match is the same substring test as `connectionsFor`, so
+ * "10.0.0.1" also drops the connections of 10.0.0.10-19, 10.0.0.100-199
+ * and 110.0.0.1. For an exact match, filter `connections` yourself and
+ * remove by id with the generic `remove`.
+ *
+ * @param c {Client} an open client
+ * @param address {string} host IP whose connections to drop
+ * @return {int} number of connections removed
  * @throws {Error} kind "routeros" on a malformed address
  */
 export func dropConnectionsFor(c as Client, address as string) {
@@ -127,7 +134,7 @@ export func dropConnectionsFor(c as Client, address as string) {
 /**
  * Fold a reply row into the ConntrackSettings.
  *
- * @param {map of string to string} row the tracking-settings row
+ * @param row {map of string to string} the tracking-settings row
  * @return {ConntrackSettings} the typed settings
  * @internal
  */
@@ -142,7 +149,7 @@ func conntrackFromRow(row as map of string to string) {
 /**
  * Fold a reply row into a Connection.
  *
- * @param {map of string to string} row an "/ip/firewall/connection/print" row
+ * @param row {map of string to string} an "/ip/firewall/connection/print" row
  * @return {Connection} the typed connection
  * @internal
  */
