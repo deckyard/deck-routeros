@@ -1,7 +1,8 @@
 # routeros
 
 `@deckyard/routeros` drives a MikroTik router over the RouterOS binary API.
-Each guide covers one topic; the [cheatsheet](cheatsheet.md) lists every
+Most guides cover one topic, and [Remote-access VPN](vpn.md) covers L2TP,
+SSTP and OpenVPN together; the [cheatsheet](cheatsheet.md) lists every
 function, constant and struct. MikroTik's
 [RouterOS documentation](https://help.mikrotik.com/docs/) describes the menus
 behind the paths.
