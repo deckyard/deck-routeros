@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # routeros - diagnostics: ping, traceroute, bandwidth test, fetch, e-mail.
 # Spliced into routeros.j via include - not a standalone module.
