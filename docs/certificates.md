@@ -53,12 +53,12 @@ or http-01 served by the host) and pushes it in:
 ```jennifer
 use crypto;
 import "acme.j";
-def key as bytes init crypto.ecGenerateKey("p256");
-def csr as bytes init crypto.csr($key, "vpn.example.org", []);
+def key as bytes init crypto.keypair("p256").private;
+def csr as bytes init crypto.csr($key, ["vpn.example.org"]);
 # order, challenge, finalize: see the acme module docs; try the staging CA first
 # def certPem as string init acme.downloadCertificate($client, $order);
 # mt.importCertificatePem($c, "vpn-example-org", $certPem,
-#     convert.stringFromBytes($key, "utf-8"));
+#     convert.stringFromBytes("utf-8", $key));
 # mt.assignServiceCertificate($c, "api-ssl", "vpn-example-org");
 ```
 
