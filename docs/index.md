@@ -7,6 +7,14 @@ function, constant and struct. MikroTik's
 [RouterOS documentation](https://help.mikrotik.com/docs/) describes the menus
 behind the paths.
 
+**Infrastructure as Code (IaC).** A router's configuration becomes a Jennifer
+program: kept in version control, reviewed, and re-run like any other code.
+Many `add*` and `setup*` helpers are idempotent (by name, interface or
+comment; the [cheatsheet](cheatsheet.md) says which), so a script can be
+applied again to bring a router back to the configuration it describes; the
+others add a new item on every run. There is no plan or diff step: the deck
+applies what the script says and does not detect drift.
+
 This deck is part of [Deckyard](https://github.com/deckyard), community decks for [Jennifer](https://jennifer-lang.dev/).
 
 ## Conventions

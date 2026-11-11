@@ -7,7 +7,7 @@ authors = ["mplx <mplx@jennifer-lang.dev>"]
 # The deck drives a router over the RouterOS binary API, so it opens sockets.
 # No `exec`: it shells out to nothing. No `sql`.
 capabilities = ["net"]
-keywords = ["routeros", "mikrotik", "network", "router", "api"]
+keywords = ["routeros", "mikrotik", "network", "router", "api", "iac"]
 
 [package.urls]
 deck = "https://raw.githubusercontent.com/deckyard/deck-routeros/main/deck.toml"
@@ -17,4 +17,4 @@ manual = "https://deckyard.github.io/deck-routeros/"
 # Only the default binary. The deck talks to a router over a socket, which the
 # constrained build has no capability for.
 [engines]
-jennifer = ">=0.25.0"
+jennifer = ">=0.26.0"

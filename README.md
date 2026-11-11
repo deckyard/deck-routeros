@@ -12,6 +12,14 @@ VPNs, queues, users, certificates, system maintenance and more. Input is
 validated before anything is sent; local validation failures throw
 `Error{kind: "routeros"}`, router and transport failures `Error{kind: "mikrotik"}`.
 
+**Infrastructure as Code (IaC).** A router's configuration becomes a Jennifer
+program: kept in version control, reviewed, and re-run like any other code.
+Many `add*` and `setup*` helpers are idempotent (by name, interface or
+comment; the [cheatsheet](docs/cheatsheet.md) says which), so a script can be
+applied again to bring a router back to the configuration it describes; the
+others add a new item on every run. There is no plan or diff step: the deck
+applies what the script says and does not detect drift.
+
 ## Install
 
 ```sh
@@ -22,7 +30,7 @@ jvc vendors the deck's `src/` to `vendor/deckyard/routeros/`. Without jvc,
 unpack the `src/` subtree of a release archive
 (`deckyard-routeros-<version>.tar.gz`) there.
 
-Requires Jennifer 0.25.0 or newer, the default `jennifer` binary (the transport
+Requires Jennifer 0.26.0 or newer, the default `jennifer` binary (the transport
 needs `net`; `jennifer-tiny` stubs it) and a router with the `api` (8728) or
 `api-ssl` (8729) service enabled. Login works on RouterOS 6.43+ and v7; the
 transport falls back to MD5 challenge-response for older routers.
