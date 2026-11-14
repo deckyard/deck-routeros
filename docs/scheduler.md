@@ -26,7 +26,7 @@ Reboot when the uplink has been gone for good:
 
 ```jennifer
 mt.scheduleScript($c, "uplink-watchdog", "10m",
-    ":if ([/ping 1.1.1.1 count=5] = 0) do={/system reboot}");
+    ':if ([/ping 1.1.1.1 count=5] = 0) do={/system reboot}');
 ```
 
 Log a marker at every boot:
