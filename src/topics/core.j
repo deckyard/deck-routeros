@@ -38,7 +38,8 @@ export def struct Client {
  * @param user {string}     RouterOS user name
  * @param password {string} RouterOS password
  * @return {Client} an authenticated client
- * @throws {Error} kind "mikrotik" when the connection or login fails
+ * @throws {Error} kind "mikrotik" when the login fails, a `net.NetError`
+ *   (kind "net") when the router cannot be reached
  */
 export func connect(host as string, user as string, password as string) {
     return Client{
@@ -57,7 +58,8 @@ export func connect(host as string, user as string, password as string) {
  * @param user {string}     RouterOS user name
  * @param password {string} RouterOS password
  * @return {Client} an authenticated client
- * @throws {Error} kind "mikrotik" when the connection or login fails
+ * @throws {Error} kind "mikrotik" when the login fails, a `net.NetError`
+ *   (kind "net") when the router cannot be reached
  */
 export func connectTLS(host as string, user as string, password as string) {
     return Client{
@@ -77,7 +79,8 @@ export func connectTLS(host as string, user as string, password as string) {
  * @param tls {bool}        wrap the connection in TLS
  * @return {Client} an authenticated client
  * @throws {Error} kind "routeros" on an invalid port,
- *                 kind "mikrotik" when the connection or login fails
+ *                 kind "mikrotik" when the login fails, a `net.NetError`
+ *                 (kind "net") when the router cannot be reached
  */
 export func connectWith(
     host as string,

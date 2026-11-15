@@ -13,8 +13,9 @@
  * diagnostics, users, services, certificates, clock, files, logging and
  * system maintenance. Inputs are validated before anything is sent and
  * reply rows are folded into value-semantic structs. Local validation
- * failures throw `Error{kind: "routeros"}`; router and transport errors
- * throw `Error{kind: "mikrotik"}`.
+ * failures throw `Error{kind: "routeros"}`; router refusals and failed
+ * logins throw `mikrotik.MikrotikError` (kind `"mikrotik"`), and a router
+ * that cannot be reached `net.NetError` (kind `"net"`).
  *
  * The topic files under `topics/` are spliced in with `include`, so this
  * file is the module boundary and holds every `export`. The white-box

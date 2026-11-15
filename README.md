@@ -10,7 +10,9 @@
 typed verbs and structs for interfaces, bridges, VLANs, the firewall, DHCP, DNS,
 VPNs, queues, users, certificates, system maintenance and more. Input is
 validated before anything is sent; local validation failures throw
-`Error{kind: "routeros"}`, router and transport failures `Error{kind: "mikrotik"}`.
+`Error{kind: "routeros"}`, router refusals and failed logins
+`mikrotik.MikrotikError` (kind `"mikrotik"`), and a router that cannot be
+reached `net.NetError` (kind `"net"`).
 
 **Infrastructure as Code (IaC).** A router's configuration becomes a Jennifer
 program: kept in version control, reviewed, and re-run like any other code.

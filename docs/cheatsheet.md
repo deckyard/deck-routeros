@@ -9,7 +9,8 @@ def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
 ```
 
 Unless a row says otherwise, invalid input throws `Error{kind: "routeros"}`
-before anything is sent, and a router refusal throws `Error{kind: "mikrotik"}`.
+before anything is sent, a router refusal throws `Error{kind: "mikrotik"}`, and a
+router that cannot be reached throws `net.NetError` (kind `"net"`).
 The `*_PATH` constants are RouterOS menu paths for the generic verbs in
 [Core](#core).
 

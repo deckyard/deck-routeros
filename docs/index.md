@@ -30,8 +30,10 @@ mt.disconnect($c);
 ```
 
 - **Errors.** Input rejected locally throws `Error{kind: "routeros"}` before
-  anything is sent. Errors from the router or the connection throw
-  `Error{kind: "mikrotik"}`. Both carry a readable `message`.
+  anything is sent. A router refusal or a failed login throws
+  `mikrotik.MikrotikError` (kind `"mikrotik"`); a router that cannot be
+  reached throws `net.NetError` (kind `"net"`), a deadline `"timeout"`, a
+  dropped connection `"closed"`. All carry a readable `message`.
 - **Ids.** RouterOS gives every list item an id like `"*3"`. `add*` functions
   return it, structs carry it in `.id`, and the generic verbs take it. Most
   helpers take a name or a comment instead, because ids change when an item is

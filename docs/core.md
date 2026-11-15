@@ -110,8 +110,13 @@ mt> /tool/e-mail/set server=smtp.example.org user=router password=<redacted>
 
 - `Error{kind: "routeros"}`: local validation refused the input; nothing
   was sent.
-- `Error{kind: "mikrotik"}`: the router refused (`!trap`), or the
-  connection or login failed.
+- `mikrotik.MikrotikError` (kind `"mikrotik"`): the router refused
+  (`!trap`, `!fatal`), or the login failed.
+- `net.NetError` (kind `"net"`): the router could not be reached (refused,
+  reset, unreachable, no DNS answer, a failed TLS handshake); its `reason`
+  and `op` fields say which. A deadline that passes is kind `"timeout"`, a
+  connection closed under a command kind `"closed"`. The deck passes these
+  on from the transport unchanged.
 
 ```jennifer
 try {
