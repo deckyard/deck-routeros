@@ -21,11 +21,36 @@ mt.disconnect($c);
 
 The router must have the `api-ssl` (8729) service enabled under
 `/ip/service`, with a certificate the host can verify for the name or
-address it dials: one from a public CA (Let's Encrypt, see
-[certificates.md](certificates.md)), or a private or self-signed one added
-to the host's trusted roots. Login works on RouterOS 6.43+ and v7;
+address it dials. `connectTLS` and `connectWith` verify it against the
+host's trusted roots, which covers a public CA (Let's Encrypt, see
+[certificates.md](certificates.md)). Login works on RouterOS 6.43+ and v7;
 the transport falls back to MD5 challenge-response for older versions.
 `connectWith` rejects a port outside 1-65535 before dialling.
+
+### Self-signed or private-CA certificates: `connectTLSWithCA`
+
+A router certificate from `generateSelfSigned` or from your own CA is not
+in the host's trusted roots, so `connectTLS` fails the handshake with a
+`net.NetError`. Pass the certificate to trust instead:
+
+```jennifer
+use fs;
+
+# PEM of the private CA, or of the self-signed router certificate itself
+def caPem as string init fs.readString("router-lan.crt");
+def c as mt.Client init mt.connectTLSWithCA("192.168.88.1", "admin", "secret", $caPem);
+
+# the same on an api-ssl port moved off 8729
+def cs as mt.Client init mt.connectWithCA("192.168.88.1", 18729, "admin", "secret", $caPem);
+```
+
+The router's certificate is still verified, against `caPem` in place of
+the system roots, and must name the dialled host, IP address or DNS name,
+in its subject alternative names; the common name alone does not count.
+A `caPem` without a `BEGIN CERTIFICATE` block is refused with
+`Error{kind: "routeros"}` before dialling. How to get the PEM of a
+self-signed router certificate is in
+[certificates.md](certificates.md#trusting-a-self-signed-certificate).
 
 ### Plain TCP: `allowInsecureAuth`
 

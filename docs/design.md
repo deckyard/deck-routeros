@@ -87,7 +87,11 @@ nothing.
   patterns has to be added to the redaction and its tests. Query words of
   `apiPrintWhere` are logged unredacted.
 - TLS is the way in: `connectTLS` dials api-ssl and verifies the router's
-  certificate. The plain `api` service (8728) sends the login in the clear
+  certificate against the host's roots; `connectTLSWithCA` and
+  `connectWithCA` pass a PEM through to `mikrotik.withCA` (in 0.26.0), which
+  verifies against it instead, for self-signed and private-CA routers.
+  `generateSelfSigned` sets the subject alternative name from the common
+  name, because Go's TLS ignores the common name. The plain `api` service (8728) sends the login in the clear
   on RouterOS 6.43 and later (an MD5 challenge on older routers) and every
   command after it, so the deck logs in over it only on an explicit
   `allowInsecureAuth` (`connectWith`'s last argument), the name and meaning

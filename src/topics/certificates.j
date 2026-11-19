@@ -83,13 +83,17 @@ export func expiringCertificates(c as Client, withinDays as int) {
  * Create and sign a self-signed certificate on the router.
  *
  * Suits LAN-only services (api-ssl, WebFig) whose clients trust it
- * manually. The router generates the key while signing, which blocks for
- * a few seconds. Key usage is digital-signature, key-encipherment,
- * tls-server.
+ * manually (`connectTLSWithCA` with the certificate's PEM). The router
+ * generates the key while signing, which blocks for a few seconds. Key
+ * usage is digital-signature, key-encipherment, tls-server. `commonName`
+ * also goes into the subject alternative name (`IP:` for an address,
+ * `DNS:` otherwise), which TLS clients match against the dialled host;
+ * they ignore the common name.
  *
  * @param c {Client}          an open client
  * @param name {string}       store name for the certificate
- * @param commonName {string} the name it certifies (e.g. "router.lan")
+ * @param commonName {string} the name or IP address clients dial (e.g.
+ *        "router.lan", "192.168.88.1")
  * @param days {int}       validity in days (e.g. 1095)
  * @return {string} the RouterOS id of the certificate
  * @throws {Error} kind "routeros" on a bad name, CN, days outside
@@ -112,11 +116,30 @@ export func generateSelfSigned(c as Client, name as string, commonName as string
         {
             "name": $name,
             "common-name": $commonName,
+            "subject-alt-name": subjectAltNameFor($commonName),
             "days-valid": convert.toString($days),
             "key-usage": "digital-signature,key-encipherment,tls-server"
         });
     apiTalk($c, CERTIFICATE_PATH + "/sign", {".id": $id});
     return $id;
+}
+
+/**
+ * The RouterOS `subject-alt-name` value for a certificate's common name.
+ *
+ * @param commonName {string} a DNS name or an IP address
+ * @return {string} "IP:<address>" for an address, "DNS:<name>" otherwise
+ * @internal
+ */
+func subjectAltNameFor(commonName as string) {
+    def name as string init strings.trim($commonName);
+    try {
+        ipnet.parseAddress($name);
+        return "IP:" + $name;
+    } catch (e) {
+        return "DNS:" + $name;
+    }
+    return "DNS:" + $name;
 }
 
 /**

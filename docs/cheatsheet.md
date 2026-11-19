@@ -22,6 +22,8 @@ Guide: [Core](core.md).
 |---|---|---|
 | `connect(host, user, password)` | | always refused (`routeros` error, nothing dialled): plain TCP needs `connectWith` with `allowInsecureAuth` |
 | `connectTLS(host, user, password)` | `Client` | api-ssl, port 8729, the recommended way in; the certificate is verified; `MT_VERBOSE` seeds the verbose flag |
+| `connectTLSWithCA(host, user, password, caPem)` | `Client` | api-ssl, port 8729, verified against `caPem` (a private CA or the self-signed router certificate) instead of the system roots; the certificate must name the host in its SAN; a `caPem` without `BEGIN CERTIFICATE` is a `routeros` error |
+| `connectWithCA(host, port, user, password, caPem)` | `Client` | `connectTLSWithCA` on an explicit port (1-65535, else `routeros` error) |
 | `connectWith(host, port, user, password, tls, allowInsecureAuth)` | `Client` | explicit port (1-65535, else `routeros` error) and TLS choice; without TLS only when `allowInsecureAuth` is true (password in clear text), else `routeros` error |
 | `disconnect(c)` | | close the session; the client is unusable afterwards |
 | `getAll(c, path)` | `list of map of string to string` | every item under any list path, one property map each |
@@ -2161,7 +2163,7 @@ Guide: [Certificates](certificates.md).
 | `certificates(c)` | `list of Certificate` | the whole store |
 | `certificateByName(c, name)` | `Certificate` | unknown name rejected |
 | `expiringCertificates(c, withinDays)` | `list of Certificate` | expiry within `withinDays`; durations like "51w6d" parsed to whole days, unparseable ones skipped |
-| `generateSelfSigned(c, name, commonName, days)` | `string` | signed on the router (a few seconds); days 1-7300; name must be free |
+| `generateSelfSigned(c, name, commonName, days)` | `string` | signed on the router (a few seconds); days 1-7300; name must be free; `commonName` also set as the SAN (`IP:` or `DNS:`); connect with `connectTLSWithCA` |
 | `enableLetsEncrypt(c, dnsName)` |  | RouterOS v7 built-in ACME (http-01); port 80 must be reachable under the name; blocks |
 | `importCertificatePem(c, name, certPem, keyPem)` |  | via temporary `<name>.crt` / `<name>.key` files, removed afterwards; PEMs checked for BEGIN CERTIFICATE / PRIVATE KEY |
 | `assignServiceCertificate(c, serviceName, certName)` |  | "api-ssl" or "www-ssl" only; clears the `invalid` flag |

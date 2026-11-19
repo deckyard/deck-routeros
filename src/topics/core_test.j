@@ -606,3 +606,55 @@ func failMoveRuleToBottomEmptyId() {
 func testMoveRuleToBottomRejectsEmptyId() {
     testing.assertThrows("failMoveRuleToBottomEmptyId", "routeros");
 }
+
+# A self-signed certificate (SAN IP:127.0.0.1, DNS:localhost), valid to 2126.
+def const TEST_CA_PEM as string init "-----BEGIN CERTIFICATE-----\n" +
+    "MIIBfzCCASSgAwIBAgIUAhr1ZW5i6HXmzEYKoR3hGSYiBhgwCgYIKoZIzj0EAwIw\n" +
+    "FjEUMBIGA1UEAwwLcm91dGVyLnRlc3QwIBcNMjYxMTE5MjAxNDQxWhgPMjEyNjEw\n" +
+    "MjYyMDE0NDFaMBYxFDASBgNVBAMMC3JvdXRlci50ZXN0MFkwEwYHKoZIzj0CAQYI\n" +
+    "KoZIzj0DAQcDQgAEojlGEbTkhAtO38fwjqq8OIJnSzZynCp8/C1qlVTr/6EOci28\n" +
+    "iQy0h//lcqQNsPUhtC5NwBLadir1aPmw2SozdKNOMEwwHQYDVR0OBBYEFOf60QHK\n" +
+    "wlKe5wdy/bGNNSD9d6tMMA8GA1UdEwEB/wQFMAMBAf8wGgYDVR0RBBMwEYcEfwAA\n" +
+    "AYIJbG9jYWxob3N0MAoGCCqGSM49BAMCA0kAMEYCIQChC2kUHEkp/0kgieSo5Gk4\n" +
+    "bOx0wXpRYV+FHSY4ihs8dgIhANniB0yvBRFCQQgM+bJHKCcV1VjpkrcsQUcwTV+b\n" +
+    "NRzf\n" +
+    "-----END CERTIFICATE-----\n";
+
+func testOptionsWithCACarryTheCertificate() {
+    def o as mikrotik.Options init optionsWithCA("10.0.0.1", 18729, "admin", "secret", TEST_CA_PEM);
+    testing.assertTrue($o.tls);
+    testing.assertFalse($o.skipVerify);
+    testing.assertEqual($o.host, "10.0.0.1");
+    testing.assertEqual($o.port, 18729);
+    testing.assertEqual($o.user, "admin");
+    testing.assertEqual(convert.stringFromBytes("utf-8", $o.caCert), TEST_CA_PEM);
+}
+
+func failConnectTLSWithCANoPem() {
+    connectTLSWithCA("192.168.88.1", "admin", "secret", "");
+}
+
+func failConnectTLSWithCAKeyOnly() {
+    connectTLSWithCA("192.168.88.1", "admin", "secret", "-----BEGIN PRIVATE KEY-----\n");
+}
+
+func failConnectWithCAPortZero() {
+    connectWithCA("192.168.88.1", 0, "admin", "secret", TEST_CA_PEM);
+}
+
+func testConnectWithCAValidatesBeforeDialling() {
+    testing.assertThrows("failConnectTLSWithCANoPem", "routeros");
+    testing.assertThrows("failConnectTLSWithCAKeyOnly", "routeros");
+    testing.assertThrows("failConnectWithCAPortZero", "routeros");
+}
+
+# Nothing listens on loopback port 1, so nothing leaves the machine. The
+# certificate is accepted by the TLS layer (an unparseable one would fail
+# there with kind "runtime"), and the dial fails with kind "net".
+func failDialWithCA() {
+    mikrotik.connect(optionsWithCA("127.0.0.1", 1, "admin", "secret", TEST_CA_PEM));
+}
+
+func testConnectWithCAReachesTheDial() {
+    testing.assertThrows("failDialWithCA", "net");
+}

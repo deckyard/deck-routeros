@@ -37,7 +37,8 @@ needs `net`; `jennifer-tiny` stubs it) and a router with the `api-ssl` (8729)
 or `api` (8728) service enabled. Login works on RouterOS 6.43+ and v7; the
 transport falls back to MD5 challenge-response for older routers.
 
-`connectTLS` (api-ssl) is the way in. The plain `api` service, which many
+`connectTLS` (api-ssl) is the way in; a router with a self-signed or
+private-CA certificate takes `connectTLSWithCA` and the PEM to trust. The plain `api` service, which many
 home-lab routers run, sends the password in clear text, so the deck uses it
 only when asked: `mt.connectWith(host, 8728, user, password, false, true)`,
 the last argument being `allowInsecureAuth`. See [docs/core.md](docs/core.md).

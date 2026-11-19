@@ -166,3 +166,11 @@ func failImportCertificatePemJunkKey() {
 func testImportCertificatePemRejectsJunkKey() {
     testing.assertThrows("failImportCertificatePemJunkKey", "routeros");
 }
+
+func testSubjectAltNameForNamesAndAddresses() {
+    # Go's TLS verification ignores the common name, so a self-signed
+    # certificate without a SAN never verified with connectTLSWithCA.
+    testing.assertEqual(subjectAltNameFor("router.lan"), "DNS:router.lan");
+    testing.assertEqual(subjectAltNameFor(" 192.168.88.1 "), "IP:192.168.88.1");
+    testing.assertEqual(subjectAltNameFor("fd00::1"), "IP:fd00::1");
+}

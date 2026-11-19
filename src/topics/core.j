@@ -11,11 +11,15 @@ def const HEX_CHARS as string init "0123456789abcdefABCDEF";
 
 def const DIGIT_CHARS as string init "0123456789";
 
+# The api-ssl service's default port.
+def const API_SSL_PORT as int init 8729;
+
 /**
  * An open, authenticated connection to one router.
  *
- * Made by `connect`, `connectTLS` or `connectWith`; passed first to every
- * other call; closed with `disconnect`.
+ * Made by `connectTLS`, `connectTLSWithCA`, `connectWith` or
+ * `connectWithCA`; passed first to every other call; closed with
+ * `disconnect`.
  *
  * @field session {mikrotik.Session} the underlying API session
  * @field user {string} the logged-in account; the user helpers refuse to
@@ -49,8 +53,9 @@ export func connect(host as string, user as string, password as string) {
 /**
  * Connect over the TLS API port 8729 (api-ssl). The recommended way in.
  *
- * The transport verifies the router's certificate. `MT_VERBOSE` in the
- * environment seeds the verbose flag.
+ * The transport verifies the router's certificate against the host's trusted
+ * roots; for a self-signed or private-CA certificate use `connectTLSWithCA`.
+ * `MT_VERBOSE` in the environment seeds the verbose flag.
  *
  * @param host {string}     router IP address or DNS name
  * @param user {string}     RouterOS user name
@@ -65,6 +70,83 @@ export func connectTLS(host as string, user as string, password as string) {
         user: $user,
         verbose: verboseFromEnv()
     };
+}
+
+/**
+ * Connect over api-ssl (port 8729), trusting the given CA certificate.
+ *
+ * For a router whose certificate the host's trusted roots do not cover: a
+ * self-signed one (`generateSelfSigned`) or one issued by a private CA. The
+ * certificate is still verified, against `caPem` in place of the system
+ * roots, and must name the dialled host (IP or DNS name) in its subject
+ * alternative names. `MT_VERBOSE` in the environment seeds the verbose flag.
+ *
+ * @param host {string}     router IP address or DNS name
+ * @param user {string}     RouterOS user name
+ * @param password {string} RouterOS password
+ * @param caPem {string}    PEM text of the CA, or of the self-signed router
+ *        certificate itself
+ * @return {Client} an authenticated client
+ * @throws {Error} kind "routeros" when `caPem` holds no certificate (nothing
+ *   is dialled), kind "mikrotik" when the login fails, a `net.NetError`
+ *   (kind "net") when the router cannot be reached or its certificate does
+ *   not verify
+ */
+export func connectTLSWithCA(host as string, user as string, password as string, caPem as string) {
+    return connectWithCA($host, API_SSL_PORT, $user, $password, $caPem);
+}
+
+/**
+ * Connect over TLS on an explicit port, trusting the given CA certificate.
+ *
+ * `connectTLSWithCA` with a port: for an api-ssl service moved off 8729.
+ *
+ * @param host {string}     router IP address or DNS name
+ * @param port {int}        API TCP port, 1-65535
+ * @param user {string}     RouterOS user name
+ * @param password {string} RouterOS password
+ * @param caPem {string}    PEM text of the CA, or of the self-signed router
+ *        certificate itself
+ * @return {Client} an authenticated client
+ * @throws {Error} kind "routeros" on an invalid port or a `caPem` without a
+ *   certificate (nothing is dialled), otherwise as `connectTLSWithCA`
+ */
+export func connectWithCA(
+    host as string,
+    port as int,
+    user as string,
+    password as string,
+    caPem as string) {
+    return Client{
+        session: mikrotik.connect(optionsWithCA($host, $port, $user, $password, $caPem)),
+        user: $user,
+        verbose: verboseFromEnv()
+    };
+}
+
+/**
+ * Build the `mikrotik` TLS options for `connectWithCA`, validated.
+ *
+ * @param host {string}     router IP address or DNS name
+ * @param port {int}        API TCP port, 1-65535
+ * @param user {string}     RouterOS user name
+ * @param password {string} RouterOS password
+ * @param caPem {string}    PEM text of the certificate to trust
+ * @return {mikrotik.Options} TLS options on `port` trusting `caPem`
+ * @throws {Error} kind "routeros" on an invalid port or a `caPem` without a
+ *   certificate
+ * @internal
+ */
+func optionsWithCA(
+    host as string,
+    port as int,
+    user as string,
+    password as string,
+    caPem as string) {
+    ensurePort($port);
+    ensurePemCertificate($caPem);
+    def o as mikrotik.Options init mikrotik.optionsTLS($host, $user, $password);
+    return mikrotik.withCA(mikrotik.withPort($o, $port), convert.bytesFromString("utf-8", $caPem));
 }
 
 /**
