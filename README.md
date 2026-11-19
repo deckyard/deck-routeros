@@ -33,16 +33,21 @@ unpack the `src/` subtree of a release archive
 (`deckyard-routeros-<version>.tar.gz`) there.
 
 Requires Jennifer 0.26.0 or newer, the default `jennifer` binary (the transport
-needs `net`; `jennifer-tiny` stubs it) and a router with the `api` (8728) or
-`api-ssl` (8729) service enabled. Login works on RouterOS 6.43+ and v7; the
+needs `net`; `jennifer-tiny` stubs it) and a router with the `api-ssl` (8729)
+or `api` (8728) service enabled. Login works on RouterOS 6.43+ and v7; the
 transport falls back to MD5 challenge-response for older routers.
+
+`connectTLS` (api-ssl) is the way in. The plain `api` service, which many
+home-lab routers run, sends the password in clear text, so the deck uses it
+only when asked: `mt.connectWith(host, 8728, user, password, false, true)`,
+the last argument being `allowInsecureAuth`. See [docs/core.md](docs/core.md).
 
 ## Example
 
 ```jennifer
 import "@deckyard/routeros/" as mt;
 
-def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
+def c as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
 $c = mt.setVerbose($c, true);   # print each command, credentials redacted
 
 mt.addBridge($c, "brlan");

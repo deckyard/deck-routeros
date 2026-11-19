@@ -25,7 +25,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def bnds as list of mt.Bond init mt.bonds($c);
 if (len($bnds) == 0) {

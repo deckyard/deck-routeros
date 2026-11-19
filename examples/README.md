@@ -9,5 +9,10 @@ MT_HOST=192.168.88.1 MT_USER=admin MT_PASSWORD=secret jennifer run examples/fire
 ```
 
 The examples import `../src/routeros.j` as `mt` and exit 1 with a usage line
-unless `MT_HOST` and `MT_USER` are set. Guides: [../docs/index.md](../docs/index.md);
+unless `MT_HOST` and `MT_USER` are set. They connect with `connectTLS`
+(api-ssl, port 8729, certificate verified). For a router with only the plain
+`api` service, change that line to
+`mt.connectWith($host, 8728, $user, $password, false, true)`: the last
+argument, `allowInsecureAuth`, accepts the password crossing the network in
+clear text. Guides: [../docs/index.md](../docs/index.md);
 reference: [../docs/cheatsheet.md](../docs/cheatsheet.md).

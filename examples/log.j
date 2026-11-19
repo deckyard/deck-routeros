@@ -25,7 +25,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def tail as list of mt.LogEntry init mt.recentLogEntries($c, 10);
 for (def e in $tail) {

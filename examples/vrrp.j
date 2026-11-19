@@ -24,7 +24,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def vrrps as list of mt.VrrpInterface init mt.vrrpInterfaces($c);
 if (len($vrrps) == 0) {

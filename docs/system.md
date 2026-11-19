@@ -26,7 +26,7 @@ if ($st.updateAvailable) {
     io.printf("updating %s -> %s\n", $st.installedVersion, $st.latestVersion);
     mt.installUpdates($c);          # router reboots itself; $c is dead now
     # after the router is back:
-    # def c2 as mt.Client init mt.connect($host, $user, $password);
+    # def c2 as mt.Client init mt.connectTLS($host, $user, $password);
     # if (mt.routerboard($c2).upgradeAvailable) {
     #     mt.upgradeRouterboard($c2);
     #     mt.reboot($c2);           # firmware takes effect

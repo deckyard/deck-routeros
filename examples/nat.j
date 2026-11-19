@@ -24,7 +24,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def nats as list of mt.NatRule init mt.natRules($c);
 for (def n in $nats) {

@@ -25,7 +25,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def p as mt.PingResult init mt.ping($c, "1.1.1.1");
 if ($p.reachable) {

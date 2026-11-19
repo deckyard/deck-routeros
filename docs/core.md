@@ -10,22 +10,40 @@ Reference: [cheatsheet](cheatsheet.md#core).
 ```jennifer
 import "@deckyard/routeros/" as mt;
 
-# plaintext API, port 8728
-def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
-
 # TLS (api-ssl), port 8729; the router's certificate is verified
-def cs as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
+def c as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
 
 # explicit port and TLS choice
-def cc as mt.Client init mt.connectWith("192.168.88.1", 18728, "admin", "secret", false);
+def cs as mt.Client init mt.connectWith("192.168.88.1", 18729, "admin", "secret", true, false);
 
 mt.disconnect($c);
 ```
 
-The router must have the `api` (8728) or `api-ssl` (8729) service enabled
-under `/ip/service`. Login works on RouterOS 6.43+ and v7; the transport
-falls back to MD5 challenge-response for older versions. `connectWith`
-rejects a port outside 1-65535 before dialling.
+The router must have the `api-ssl` (8729) service enabled under
+`/ip/service`, with a certificate the host can verify for the name or
+address it dials: one from a public CA (Let's Encrypt, see
+[certificates.md](certificates.md)), or a private or self-signed one added
+to the host's trusted roots. Login works on RouterOS 6.43+ and v7;
+the transport falls back to MD5 challenge-response for older versions.
+`connectWith` rejects a port outside 1-65535 before dialling.
+
+### Plain TCP: `allowInsecureAuth`
+
+Home-lab and factory-default routers often have only the plain `api`
+service (port 8728) enabled. Over it the user name, the password and every
+command cross the network in clear text, readable by anyone on the path.
+The deck therefore logs in over plain TCP only when asked to:
+
+```jennifer
+# plain API, port 8728, on a link you trust (a lab network, a cable, a VPN)
+def c as mt.Client init mt.connectWith("192.168.88.1", 8728, "admin", "secret", false, true);
+```
+
+The last argument, `allowInsecureAuth`, is passed on to the `mikrotik`
+options of the same name. Without it (`false`), `connectWith` with `tls`
+false throws `Error{kind: "routeros"}` before dialling, and so does
+`connect`, the plain-TCP shortcut of earlier releases. Prefer turning
+api-ssl on once and connecting with `connectTLS`.
 
 ## Generic verbs
 

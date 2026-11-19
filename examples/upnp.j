@@ -24,7 +24,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def s as mt.UpnpSettings init mt.upnpStatus($c);
 io.printf("upnp enabled=%t\n", $s.enabled);

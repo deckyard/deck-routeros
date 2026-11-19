@@ -26,7 +26,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def s as mt.SmsSettings init mt.smsSettings($c);
 io.printf("sms receive=%t port=%s keepMax=%d\n", $s.receiveEnabled, $s.port, $s.keepMaxSms);

@@ -24,7 +24,7 @@ Snippets assume a connection:
 ```jennifer
 import "@deckyard/routeros/" as mt;
 
-def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
+def c as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
 # ... snippet ...
 mt.disconnect($c);
 ```
@@ -33,13 +33,15 @@ mt.disconnect($c);
   anything is sent. A router refusal or a failed login throws
   `mikrotik.MikrotikError` (kind `"mikrotik"`); a router that cannot be
   reached throws `net.NetError` (kind `"net"`), a deadline `"timeout"`, a
-  dropped connection `"closed"`. All carry a readable `message`.
+  dropped connection `"closed"`, a reply over the `mikrotik` client's size
+  caps `"limit"` (jennifer 0.27.0 and later; close the client then). All
+  carry a readable `message`.
 - **Ids.** RouterOS gives every list item an id like `"*3"`. `add*` functions
   return it, structs carry it in `.id`, and the generic verbs take it. Most
   helpers take a name or a comment instead, because ids change when an item is
   re-created.
 - **Verbose mode.** `$c = mt.setVerbose($c, true);` prints every command sent,
-  with credentials redacted; `MT_VERBOSE=1` sets it at `connect`. See
+  with credentials redacted; `MT_VERBOSE=1` sets it when connecting. See
   [core.md](core.md).
 
 Every topic has a read-only example in

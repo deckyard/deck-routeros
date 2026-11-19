@@ -25,7 +25,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def wifis as list of mt.WifiInterface init mt.wifiInterfaces($c);
 if (len($wifis) == 0) {

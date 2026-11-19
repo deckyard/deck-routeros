@@ -25,7 +25,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def s as mt.OvpnServer init mt.ovpnServerStatus($c);
 io.printf("ovpn server enabled=%t port=%d mode=%s\n", $s.enabled, $s.port, $s.mode);

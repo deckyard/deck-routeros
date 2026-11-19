@@ -25,7 +25,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 # the generic verbs reach any RouterOS path, typed helpers or not
 def rows as list of map of string to string init mt.getAll($c, "/system/resource");

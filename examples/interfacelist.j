@@ -26,7 +26,7 @@ if ($host == "" or $user == "") {
     exit 1;
 }
 
-def c as mt.Client init mt.connect($host, $user, $password);
+def c as mt.Client init mt.connectTLS($host, $user, $password);
 
 def ils as list of mt.InterfaceList init mt.interfaceLists($c);
 for (def il in $ils) {

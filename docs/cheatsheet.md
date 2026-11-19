@@ -5,7 +5,7 @@ take an open `Client` as `c`:
 
 ```jennifer
 import "@deckyard/routeros/" as mt;
-def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
+def c as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
 ```
 
 Unless a row says otherwise, invalid input throws `Error{kind: "routeros"}`
@@ -20,9 +20,9 @@ Guide: [Core](core.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `connect(host, user, password)` | `Client` | plaintext API, port 8728; `MT_VERBOSE` seeds the verbose flag |
-| `connectTLS(host, user, password)` | `Client` | api-ssl, port 8729; the certificate is verified |
-| `connectWith(host, port, user, password, tls)` | `Client` | explicit port (1-65535, else `routeros` error) and TLS choice |
+| `connect(host, user, password)` | | always refused (`routeros` error, nothing dialled): plain TCP needs `connectWith` with `allowInsecureAuth` |
+| `connectTLS(host, user, password)` | `Client` | api-ssl, port 8729, the recommended way in; the certificate is verified; `MT_VERBOSE` seeds the verbose flag |
+| `connectWith(host, port, user, password, tls, allowInsecureAuth)` | `Client` | explicit port (1-65535, else `routeros` error) and TLS choice; without TLS only when `allowInsecureAuth` is true (password in clear text), else `routeros` error |
 | `disconnect(c)` | | close the session; the client is unusable afterwards |
 | `getAll(c, path)` | `list of map of string to string` | every item under any list path, one property map each |
 | `add(c, path, attrs)` | `string` | create an item; returns its id (e.g. `"*3"`) |
