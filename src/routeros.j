@@ -26,7 +26,7 @@
  * @example
  *   import "./routeros.j" as mt;
  *
- *   def c as mt.Client init mt.connect("192.168.88.1", "admin", "secret");
+ *   def c as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
  *   mt.addBridge($c, "brlan");
  *   mt.addBridgePort($c, "brlan", "ether2");
  *   mt.allowService($c, "tcp", 22, "ssh management");

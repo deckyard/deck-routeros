@@ -30,29 +30,27 @@ export def struct Client {
 };
 
 /**
- * Connect over the plaintext API port 8728.
+ * Refused: the plain API port 8728 needs an explicit opt-in.
  *
- * `MT_VERBOSE` in the environment seeds the verbose flag.
+ * The plain `api` service sends the password in clear text, so the deck no
+ * longer logs in over it by default. Use `connectTLS` (api-ssl, port 8729),
+ * or `connectWith` with `tls` false and `allowInsecureAuth` true on a link
+ * you trust. Kept so that an old call fails with this pointer.
  *
  * @param host {string}     router IP address or DNS name
  * @param user {string}     RouterOS user name
  * @param password {string} RouterOS password
- * @return {Client} an authenticated client
- * @throws {Error} kind "mikrotik" when the login fails, a `net.NetError`
- *   (kind "net") when the router cannot be reached
+ * @throws {Error} always, kind "routeros", before anything is dialled
  */
 export func connect(host as string, user as string, password as string) {
-    return Client{
-        session: mikrotik.connect(mikrotik.options($host, $user, $password)),
-        user: $user,
-        verbose: verboseFromEnv()
-    };
+    refusePlainLogin();
 }
 
 /**
- * Connect over the TLS API port 8729 (api-ssl).
+ * Connect over the TLS API port 8729 (api-ssl). The recommended way in.
  *
- * The transport verifies the router's certificate.
+ * The transport verifies the router's certificate. `MT_VERBOSE` in the
+ * environment seeds the verbose flag.
  *
  * @param host {string}     router IP address or DNS name
  * @param user {string}     RouterOS user name
@@ -72,32 +70,78 @@ export func connectTLS(host as string, user as string, password as string) {
 /**
  * Connect on an explicit port, with or without TLS.
  *
+ * Without TLS the login and every command cross the network in clear text,
+ * so it needs `allowInsecureAuth` (passed on to the `mikrotik` options of the
+ * same name); with TLS the flag is ignored.
+ *
  * @param host {string}     router IP address or DNS name
  * @param port {int}        API TCP port, 1-65535
  * @param user {string}     RouterOS user name
  * @param password {string} RouterOS password
- * @param tls {bool}        wrap the connection in TLS
+ * @param tls {bool}        wrap the connection in TLS (api-ssl)
+ * @param allowInsecureAuth {bool} log in without TLS anyway, on a link you
+ *        trust; refused when false and `tls` is false
  * @return {Client} an authenticated client
- * @throws {Error} kind "routeros" on an invalid port,
- *                 kind "mikrotik" when the login fails, a `net.NetError`
- *                 (kind "net") when the router cannot be reached
+ * @throws {Error} kind "routeros" on an invalid port or plain TCP without
+ *                 `allowInsecureAuth`, kind "mikrotik" when the login
+ *                 fails, a `net.NetError` (kind "net") when the router
+ *                 cannot be reached
  */
 export func connectWith(
     host as string,
     port as int,
     user as string,
     password as string,
-    tls as bool) {
+    tls as bool,
+    allowInsecureAuth as bool) {
     ensurePort($port);
-    def o as mikrotik.Options init mikrotik.options($host, $user, $password);
-    if ($tls) {
-        $o = mikrotik.optionsTLS($host, $user, $password);
+    def o as mikrotik.Options init mikrotik.optionsTLS($host, $user, $password);
+    if (not $tls) {
+        if (not $allowInsecureAuth) {
+            refusePlainLogin();
+        }
+        $o = withInsecureAuth(mikrotik.options($host, $user, $password));
     }
     return Client{
         session: mikrotik.connect(mikrotik.withPort($o, $port)),
         user: $user,
         verbose: verboseFromEnv()
     };
+}
+
+/**
+ * Refuse a login over plain TCP that was not opted into.
+ *
+ * @throws {Error} always, kind "routeros"
+ * @internal
+ */
+func refusePlainLogin() {
+    raiseError("refusing to log in over the plain API (no TLS): the password would " +
+        "travel in clear text; use connectTLS, or connectWith with allowInsecureAuth true");
+}
+
+/**
+ * Copy `mikrotik` options with `allowInsecureAuth` set.
+ *
+ * The field is new in the `mikrotik` of jennifer 0.27.0, which refuses a
+ * plain-TCP login without it. The 0.26 `mikrotik` has no such field and logs
+ * in anyway; there the assignment throws kind "runtime" and the options go
+ * out unchanged. Drop the `try` when the deck moves to `@jennifer/mikrotik`.
+ *
+ * @param o {mikrotik.Options} plain-TCP options
+ * @return {mikrotik.Options} the options, opted into a plain-TCP login
+ * @internal
+ */
+func withInsecureAuth(o as mikrotik.Options) {
+    def out as mikrotik.Options init $o;
+    try {
+        $out.allowInsecureAuth = true;
+    } catch (e) {
+        if ($e.kind != "runtime") {
+            throw $e;
+        }
+    }
+    return $out;
 }
 
 /**
@@ -752,7 +796,7 @@ func requiredIdByComment(c as Client, path as string, comment as string, what as
  * @param enabled {bool} print commands
  * @return {Client} a copy of the client with the flag set
  * @example
- *   def c as mt.Client init mt.connect($host, $user, $password);
+ *   def c as mt.Client init mt.connectTLS($host, $user, $password);
  *   $c = mt.setVerbose($c, true);
  *   mt.addBridge($c, "brlan");     # prints: mt> /interface/bridge/add name=brlan
  */

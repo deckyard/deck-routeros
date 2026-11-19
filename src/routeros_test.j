@@ -9,7 +9,8 @@
  * tests cover validation, reply-row folding, builders and log redaction,
  * and call the verbs on a never-connected client (`offlineClient` in
  * `core_test.j`) to check that bad input is rejected before any I/O. Nothing
- * here opens a connection; behaviour against a router is not tested here.
+ * here opens a connection (one test dials port 0 on loopback, which the
+ * kernel refuses); behaviour against a router is not tested here.
  */
 
 use testing;

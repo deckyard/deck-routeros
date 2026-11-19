@@ -22,7 +22,6 @@ clearSmsInbox
 clock
 cloudStatus
 commentInterface
-connect
 connectTLS
 connectWireguard
 connections

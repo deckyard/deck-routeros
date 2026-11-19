@@ -467,7 +467,7 @@ func testTruthyWordRejectsEverythingElse() {
 # Verbs: local validation before any I/O
 
 func failConnectWithPortZero() {
-    connectWith("192.168.88.1", 0, "admin", "secret", false);
+    connectWith("192.168.88.1", 0, "admin", "secret", false, true);
 }
 
 func testConnectWithRejectsPortZero() {
@@ -475,11 +475,40 @@ func testConnectWithRejectsPortZero() {
 }
 
 func failConnectWithPortTooBig() {
-    connectWith("192.168.88.1", 70000, "admin", "secret", true);
+    connectWith("192.168.88.1", 70000, "admin", "secret", true, false);
 }
 
 func testConnectWithRejectsPortTooBig() {
     testing.assertThrows("failConnectWithPortTooBig", "routeros");
+}
+
+func failConnectPlain() {
+    connect("192.168.88.1", "admin", "secret");
+}
+
+func testConnectRefusesPlainLogin() {
+    testing.assertThrows("failConnectPlain", "routeros");
+}
+
+func failConnectWithPlainNotAllowed() {
+    connectWith("192.168.88.1", 8728, "admin", "secret", false, false);
+}
+
+func testConnectWithRefusesPlainWithoutAllowInsecureAuth() {
+    testing.assertThrows("failConnectWithPlainNotAllowed", "routeros");
+}
+
+# Port 0 is refused by the local kernel, so nothing leaves the machine. An
+# opted-in plain login gets past mikrotik's own plain-TCP refusal (kind
+# "mikrotik" on jennifer 0.27+) to the dial, which fails with kind "net".
+func failPlainDialOptedIn() {
+    mikrotik.connect(mikrotik.withPort(
+        withInsecureAuth(mikrotik.options("127.0.0.1", "admin", "secret")),
+        0));
+}
+
+func testWithInsecureAuthPassesMikrotiksRefusal() {
+    testing.assertThrows("failPlainDialOptedIn", "net");
 }
 
 func failGetAllEmptyPath() {
