@@ -498,17 +498,19 @@ func testConnectWithRefusesPlainWithoutAllowInsecureAuth() {
     testing.assertThrows("failConnectWithPlainNotAllowed", "routeros");
 }
 
-# Port 0 is refused by the local kernel, so nothing leaves the machine. An
-# opted-in plain login gets past mikrotik's own plain-TCP refusal (kind
-# "mikrotik" on jennifer 0.27+) to the dial, which fails with kind "net".
-func failPlainDialOptedIn() {
-    mikrotik.connect(mikrotik.withPort(
-        withInsecureAuth(mikrotik.options("127.0.0.1", "admin", "secret")),
-        0));
+# A plain login opted into gets past mikrotik's own plain-TCP refusal (kind
+# "mikrotik") to the dial. The port was free a moment ago and is closed
+# again, so the local kernel refuses it and nothing leaves the machine: kind
+# "net".
+func failConnectWithPlainAllowed() {
+    def listener as net.Listener init net.listen("127.0.0.1:0");
+    def port as int init convert.toInt(strings.split(net.address($listener), ":")[1]);
+    net.close($listener);
+    connectWith("127.0.0.1", $port, "admin", "secret", false, true);
 }
 
-func testWithInsecureAuthPassesMikrotiksRefusal() {
-    testing.assertThrows("failPlainDialOptedIn", "net");
+func testConnectWithPlainAllowedPassesMikrotiksRefusal() {
+    testing.assertThrows("failConnectWithPlainAllowed", "net");
 }
 
 func failGetAllEmptyPath() {

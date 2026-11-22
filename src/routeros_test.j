@@ -13,6 +13,7 @@
  * kernel refuses); behaviour against a router is not tested here.
  */
 
+use net;
 use testing;
 
 include "topics/core_test.j";

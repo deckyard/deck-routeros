@@ -182,7 +182,8 @@ export func connectWith(
         if (not $allowInsecureAuth) {
             refusePlainLogin();
         }
-        $o = withInsecureAuth(mikrotik.options($host, $user, $password));
+        $o = mikrotik.options($host, $user, $password);
+        $o.allowInsecureAuth = true;
     }
     return Client{
         session: mikrotik.connect(mikrotik.withPort($o, $port)),
@@ -200,20 +201,6 @@ export func connectWith(
 func refusePlainLogin() {
     raiseError("refusing to log in over the plain API (no TLS): the password would " +
         "travel in clear text; use connectTLS, or connectWith with allowInsecureAuth true");
-}
-
-/**
- * Copy `mikrotik` options with `allowInsecureAuth` set, without which
- * `mikrotik` refuses a plain-TCP login.
- *
- * @param o {mikrotik.Options} plain-TCP options
- * @return {mikrotik.Options} the options, opted into a plain-TCP login
- * @internal
- */
-func withInsecureAuth(o as mikrotik.Options) {
-    def out as mikrotik.Options init $o;
-    $out.allowInsecureAuth = true;
-    return $out;
 }
 
 /**
