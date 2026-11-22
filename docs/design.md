@@ -145,9 +145,6 @@ offline-testable path is validation) are not called from any overlay;
 - `net.NetError` and the `"net"` kind for transport failures (`jennifer`'s
   M28.65, transport errors have their own kind).
 - `mikrotik.MikrotikError` as a thrown struct, and the 0.26 certificate API
-  the certificates topic uses; floor `>=0.26.0`.
-- `mikrotik.Options.allowInsecureAuth` (jennifer 0.27.0), which the 0.26
-  `mikrotik` lacks. `withInsecureAuth` (core.j) sets it inside a `try` and
-  treats the kind `"runtime"` of a missing field as "0.26, no opt-in
-  needed", since an unknown field fails only when the assignment runs. The
-  `try` goes when the deck moves to `@jennifer/mikrotik`.
+  the certificates topic uses.
+- Floor `>=0.27.0`: `mikrotik.Options.allowInsecureAuth`, the UTF-8 codecs
+  of `encoding.encode` / `decode` and `strings.replicate` arrived in 0.27.0.

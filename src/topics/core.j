@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # routeros - connection, generic verbs, shared validation and row helpers.
 # Spliced into routeros.j via include - not a standalone module.
@@ -146,7 +146,7 @@ func optionsWithCA(
     ensurePort($port);
     ensurePemCertificate($caPem);
     def o as mikrotik.Options init mikrotik.optionsTLS($host, $user, $password);
-    return mikrotik.withCA(mikrotik.withPort($o, $port), convert.bytesFromString("utf-8", $caPem));
+    return mikrotik.withCA(mikrotik.withPort($o, $port), encoding.encode("utf-8", $caPem));
 }
 
 /**
@@ -203,12 +203,8 @@ func refusePlainLogin() {
 }
 
 /**
- * Copy `mikrotik` options with `allowInsecureAuth` set.
- *
- * The field is new in the `mikrotik` of jennifer 0.27.0, which refuses a
- * plain-TCP login without it. The 0.26 `mikrotik` has no such field and logs
- * in anyway; there the assignment throws kind "runtime" and the options go
- * out unchanged. Drop the `try` when the deck moves to `@jennifer/mikrotik`.
+ * Copy `mikrotik` options with `allowInsecureAuth` set, without which
+ * `mikrotik` refuses a plain-TCP login.
  *
  * @param o {mikrotik.Options} plain-TCP options
  * @return {mikrotik.Options} the options, opted into a plain-TCP login
@@ -216,13 +212,7 @@ func refusePlainLogin() {
  */
 func withInsecureAuth(o as mikrotik.Options) {
     def out as mikrotik.Options init $o;
-    try {
-        $out.allowInsecureAuth = true;
-    } catch (e) {
-        if ($e.kind != "runtime") {
-            throw $e;
-        }
-    }
+    $out.allowInsecureAuth = true;
     return $out;
 }
 

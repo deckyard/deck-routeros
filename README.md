@@ -32,7 +32,7 @@ jvc vendors the deck's `src/` to `vendor/deckyard/routeros/`. Without jvc,
 unpack the `src/` subtree of a release archive
 (`deckyard-routeros-<version>.tar.gz`) there.
 
-Requires Jennifer 0.26.0 or newer, the default `jennifer` binary (the transport
+Requires Jennifer 0.27.0 or newer, the default `jennifer` binary (the transport
 needs `net`; `jennifer-tiny` stubs it) and a router with the `api-ssl` (8729)
 or `api` (8728) service enabled. Login works on RouterOS 6.43+ and v7; the
 transport falls back to MD5 challenge-response for older routers.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # routeros - white-box tests for the wireless topic.
 # Spliced into routeros_test.j via include - run with:
@@ -135,7 +135,7 @@ func testSetupWifiAccessPointRejectsShortPassword() {
 }
 
 func failSetWifiSsidTooLong() {
-    setWifiSsid(offlineClient(), "wlan1", strings.repeat("a", 33));
+    setWifiSsid(offlineClient(), "wlan1", strings.replicate("a", 33));
 }
 
 func testSetWifiSsidRejectsTooLong() {
@@ -159,7 +159,7 @@ func testAddVirtualApRejectsSpacedName() {
 }
 
 func failAddVirtualApLongPassword() {
-    addVirtualAp(offlineClient(), "wlan1", "wlanguest", "guests", strings.repeat("p", 64));
+    addVirtualAp(offlineClient(), "wlan1", "wlanguest", "guests", strings.replicate("p", 64));
 }
 
 func testAddVirtualApRejectsLongPassword() {

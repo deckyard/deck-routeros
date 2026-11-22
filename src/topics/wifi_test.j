@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # routeros - white-box tests for the wifi (wave2) topic.
 # Spliced into routeros_test.j via include - run with:
@@ -60,7 +60,7 @@ func testWifiRegistrationFromRow() {
 # verb that got past its checks would fail with kind "closed", not "routeros".
 
 func failSetupWifiTooLongSsid() {
-    setupWifi(offlineClient(), "wifi1", strings.repeat("s", 33), "correct-horse");
+    setupWifi(offlineClient(), "wifi1", strings.replicate("s", 33), "correct-horse");
 }
 
 func testSetupWifiRejectsTooLongSsid() {
@@ -68,7 +68,7 @@ func testSetupWifiRejectsTooLongSsid() {
 }
 
 func failSetWifiPassphraseTooLong() {
-    setWifiPassphrase(offlineClient(), "wifi1", strings.repeat("p", 64));
+    setWifiPassphrase(offlineClient(), "wifi1", strings.replicate("p", 64));
 }
 
 func testSetWifiPassphraseRejectsTooLong() {

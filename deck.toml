@@ -17,4 +17,4 @@ manual = "https://deckyard.github.io/deck-routeros/"
 # Only the default binary. The deck talks to a router over a socket, which the
 # constrained build has no capability for.
 [engines]
-jennifer = ">=0.26.0"
+jennifer = ">=0.27.0"

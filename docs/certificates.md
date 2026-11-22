@@ -100,7 +100,7 @@ def csr as bytes init crypto.csr($key, ["vpn.example.org"]);
 # order, challenge, finalize: see the acme module docs; try the staging CA first
 # def certPem as string init acme.downloadCertificate($client, $order);
 # mt.importCertificatePem($c, "vpn-example-org", $certPem,
-#     convert.stringFromBytes("utf-8", $key));
+#     encoding.decode("utf-8", $key));
 # mt.assignServiceCertificate($c, "api-ssl", "vpn-example-org");
 ```
 

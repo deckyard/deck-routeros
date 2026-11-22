@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * routeros - typed verbs and structs over the MikroTik RouterOS API.
@@ -39,6 +39,7 @@ use maps;
 use convert;
 use io;
 use os;
+use encoding;
 
 import "mikrotik.j";
 import "ipnet.j";
