@@ -45,7 +45,7 @@ if ($s.disabled) {
             $origin = "dynamic";
         }
         io.printf(
-            "  %-30s %-10s %s advertise=%t\n",
+            "  %s|pad=30|align=left %s|pad=10|align=left %s advertise=%t\n",
             $a.address,
             $a.interfaceName,
             $origin,
@@ -56,7 +56,7 @@ if ($s.disabled) {
     io.printf("advertisements (%d):\n", len($nd));
     for (def n in $nd) {
         io.printf(
-            "  %-10s M=%t O=%t dns=%t disabled=%t\n",
+            "  %s|pad=10|align=left M=%t O=%t dns=%t disabled=%t\n",
             $n.interfaceName,
             $n.managed,
             $n.otherConfig,
