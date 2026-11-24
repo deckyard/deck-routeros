@@ -13,9 +13,9 @@ Reference: [cheatsheet](cheatsheet.md#switch-chip-hardware-offload).
 
 ## Background
 
-Many MikroTik boards (CRS switches, hEX and other RB models) have a
+Many MikroTik™ boards (CRS switches, hEX and other RB models) have a
 switch chip that forwards frames between ports at wire speed without the
-CPU. On RouterOS v7 you do not configure the chip directly: build a
+CPU. On RouterOS™ v7 you do not configure the chip directly: build a
 [VLAN-aware bridge](vlans.md) (`enableVlanFiltering`, `addBridgeVlan`,
 `setPortPvid`) and RouterOS pushes an offloadable configuration down to
 the chip. The legacy per-chip config (`/interface/ethernet/switch/vlan`,

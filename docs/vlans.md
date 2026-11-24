@@ -7,7 +7,7 @@ Reference: [cheatsheet](cheatsheet.md#vlans).
 ## Background
 
 An 802.1Q VLAN lets several networks share one cable: each frame carries
-a tag (1-4094), and both ends must use the same tag. In RouterOS a VLAN
+a tag (1-4094), and both ends must use the same tag. In RouterOS™ a VLAN
 interface sits on a parent (an ethernet port or a bridge): traffic sent
 through it leaves the parent tagged, and frames arriving with that tag
 come in on it. It is an ordinary interface otherwise: address it, serve

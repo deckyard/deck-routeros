@@ -6,7 +6,7 @@ File: `src/topics/dhcp.j`. Paths: `/ip/pool` (`IP_POOL_PATH`),
 `/ip/dhcp-client` (`DHCP_CLIENT_PATH`), `/ip/dhcp-relay`
 (`DHCP_RELAY_PATH`). Reference: [cheatsheet](cheatsheet.md#dhcp).
 
-A DHCP server in RouterOS is three objects: an address pool (the range),
+A DHCP server in RouterOS™ is three objects: an address pool (the range),
 the server (bound to an interface) and a network entry (the gateway and
 DNS servers clients are told). `setupDhcp` creates all three. The DHCP
 client is the WAN side: it asks the ISP for the router's own address.

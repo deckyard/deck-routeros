@@ -13,7 +13,7 @@ subsystems:
   routing);
 - `change-mss` repairs TCP over small-MTU links (PPPoE, tunnels).
 
-`setupPacketMark` builds RouterOS's two-rule pattern: mark the
+`setupPacketMark` builds RouterOS™'s two-rule pattern: mark the
 connection once while it is new, then mark every packet of marked
 connections, which is cheaper than matching each packet. The matcher is
 a firewall-builder `FirewallRule` ([firewall.md](firewall.md)): its

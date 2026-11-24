@@ -13,7 +13,7 @@ down and an e-mail alert would not arrive; trigger it from
 [netwatch.md](netwatch.md) or the [scheduler](scheduler.md).
 
 Reception is off by default and needs the modem port (`lteInterfaces`
-lists them, usually `lte1`). RouterOS can also run commands sent by SMS;
+lists them, usually `lte1`). RouterOS™ can also run commands sent by SMS;
 `restrictSms` sets the one sender it accepts them from.
 
 ## Examples

@@ -4,9 +4,9 @@
 [![Documentation](https://img.shields.io/badge/docs-github%20pages-blue)](https://deckyard.github.io/deck-routeros/)
 [![release](https://img.shields.io/github/v/release/deckyard/deck-routeros)](https://github.com/deckyard/deck-routeros/releases/latest)
 
-`@deckyard/routeros` configures MikroTik routers from
+`@deckyard/routeros` configures MikroTik™ routers from
 [Jennifer](https://jennifer-lang.dev/). It wraps the bundled `mikrotik` module
-(the RouterOS binary API: command paths, `=key=value` words, reply sentences) in
+(the RouterOS™ binary API: command paths, `=key=value` words, reply sentences) in
 typed verbs and structs for interfaces, bridges, VLANs, the firewall, DHCP, DNS,
 VPNs, queues, users, certificates, system maintenance and more. Input is
 validated before anything is sent; local validation failures throw
@@ -76,12 +76,20 @@ covers the menus behind the paths.
 
 ## Disclaimer
 
-MikroTik and RouterOS are trademarks of SIA Mikrotikls. This is an independent
-library, not affiliated with, endorsed or supported by SIA Mikrotikls. It
-changes the configuration of live network equipment: review what a call does
-before running it against production hardware. Use at your own risk; no
-warranty of any kind.
+The deck changes the configuration of live network equipment: review what a
+call does before running it against production hardware. Use at your own
+risk; no warranty of any kind.
 
 ## License
 
 LGPL-3.0-only, see [LICENSE](LICENSE). Copyright (C) 2026 mplx &lt;mplx@jennifer-lang.dev&gt;.
+
+## Trademarks
+
+MikroTik™, RouterOS™, RouterBOARD™, WinBox™ and WebFig™ are trademarks of
+SIA "Mikrotīkls". WireGuard™ is a trademark of Jason A. Donenfeld. OpenVPN™
+is a trademark of OpenVPN, Inc. Cisco™ is a trademark of Cisco Systems, Inc.
+CAPsMAN™, NetFlow™ and other product and company names may be trademarks of
+their respective owners. They are used only to identify the products this
+deck works with. This deck is an independent project, not affiliated with,
+sponsored, endorsed or supported by SIA "Mikrotīkls".

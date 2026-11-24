@@ -10,7 +10,7 @@ Reference: [cheatsheet](cheatsheet.md#firewall-filter-rules).
 Every filter rule sits in a chain:
 
 - `CHAIN_INPUT` (`"input"`): traffic to the router itself (its SSH, DNS,
-  WinBox).
+  WinBox™).
 - `CHAIN_FORWARD` (`"forward"`): traffic through the router.
 - `CHAIN_OUTPUT` (`"output"`): traffic the router originates.
 
@@ -42,7 +42,7 @@ set ([addresslist.md](addresslist.md)); `withInInterfaceList` /
 Checked before anything is sent: unknown actions and protocols (the
 error lists the allowed values), empty or spaced names and addresses,
 port specs with characters other than digits, `,` and `-`, and a port
-match without a protocol (RouterOS's own error for that is less
+match without a protocol (RouterOS™'s own error for that is less
 helpful). Address syntax itself is left to the router.
 
 ## Comments as handles

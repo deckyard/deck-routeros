@@ -68,5 +68,5 @@ mt.setVrrpPriority($c, "vrrplan", 200);  # with preemption on, the role returns
   between the peers. If a strict input chain drops it, both routers
   claim master (split brain). `vrrp` is in the firewall builder's
   protocol list ([firewall.md](firewall.md)).
-- Peers must run the same VRRP `version` (v3 is the RouterOS 7
+- Peers must run the same VRRP `version` (v3 is the RouterOS™ 7
   default); a mismatch also ends with two masters.

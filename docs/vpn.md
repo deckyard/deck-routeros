@@ -6,7 +6,7 @@
 Files: `src/topics/ppp.j` (the shared user database), `l2tp.j`,
 `sstp.j`, `ovpn.j`, and `setupIkev2Server` in `ipsec.j`. Reference:
 [L2TP](cheatsheet.md#l2tp), [SSTP](cheatsheet.md#sstp),
-[OpenVPN](cheatsheet.md#openvpn), [PPPoE and VPN users](cheatsheet.md#pppoe),
+[OpenVPN™](cheatsheet.md#openvpn), [PPPoE and VPN users](cheatsheet.md#pppoe),
 [IPsec](cheatsheet.md#ipsec).
 
 Site-to-site VPNs ([wireguard](wireguard.md), [ipsec](ipsec.md),
@@ -15,7 +15,7 @@ in. The choice depends mostly on the client:
 
 | Server | Client side | Needs |
 |---|---|---|
-| L2TP/IPsec | built into Windows, macOS, iOS, Android | a pre-shared key |
+| L2TP/IPsec | built into Windows™, macOS™, iOS™, Android™ | a pre-shared key |
 | SSTP | TLS on 443, passes hotel and captive firewalls | a TLS certificate |
 | OpenVPN | a client for every OS, plus a config file per device | a TLS certificate |
 | IKEv2 | native in iOS, macOS, Windows | a certificate and RADIUS users |
@@ -93,7 +93,7 @@ mt.setupIkev2Server($c, "roadwarriors", "router-le-cert",
 
 Users come from RADIUS ([radius.md](radius.md); User Manager is one).
 The client must trust the certificate chain. Test with a real device;
-between networks you control, WireGuard is simpler.
+between networks you control, WireGuard™ is simpler.
 
 ## Pitfalls
 

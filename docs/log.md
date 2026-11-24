@@ -46,7 +46,7 @@ mt.setupRemoteLogging($c, "192.168.88.40", 514, "info,warning,error,critical");
 
 - The memory buffer is small and a chatty topic pushes the interesting
   lines out; a reboot clears it. For history use `disk` or `remote`.
-- Disk logging writes flash on most MikroTik devices. On small devices
+- Disk logging writes flash on most MikroTik™ devices. On small devices
   send heavy topics to `remote` and keep `disk` for rare, important ones.
 - Topic filters match exact words: `"fire"` matches nothing, `"firewall"`
   does. Firewall rules log only when the rule's own log flag is set

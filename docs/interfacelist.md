@@ -10,7 +10,7 @@ File: `src/topics/interfacelist.j`. Paths: `/interface/list`
 Reference: [cheatsheet](cheatsheet.md#interface-lists).
 
 An interface list is a named group (`WAN`, `LAN`, `MGMT`) that rules match
-as a whole, as in the RouterOS v7 default configuration. Adding an uplink
+as a whole, as in the RouterOS™ v7 default configuration. Adding an uplink
 or moving a port changes the list, not the rules. The built-in lists
 `all`, `none` and `dynamic` always exist.
 

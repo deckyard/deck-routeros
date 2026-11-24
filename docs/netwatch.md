@@ -6,7 +6,7 @@ File: `src/topics/netwatch.j`. Path: `/tool/netwatch`
 `ping` ([tools.md](tools.md)) asks whether the router reaches a host now.
 Netwatch keeps asking: the router probes each watched host on an
 interval, records its state (`up`, `down`, `unknown`) and when it last
-changed, and can run a RouterOS script on each transition. Scripts fire
+changed, and can run a RouterOS™ script on each transition. Scripts fire
 once per transition, not once per probe, and keep working while your
 management host is off.
 

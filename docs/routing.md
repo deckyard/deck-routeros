@@ -8,7 +8,7 @@ Routes are matched most-specific first; the default route
 (`DEFAULT_ROUTE`, `"0.0.0.0/0"`) matches everything else. *Connected*
 routes come from interface addresses, *dynamic* ones from protocols,
 DHCP and PPPoE; this topic manages *static* routes. Static routes live
-under `/ip/route`; RouterOS's `/routing` menu holds OSPF, BGP and the
+under `/ip/route`; RouterOS™'s `/routing` menu holds OSPF, BGP and the
 policy rules. Between routes to the same destination the lower
 *distance* wins (static default 1).
 
@@ -83,5 +83,5 @@ for the source. Both are idempotent by source and table.
 - With two uplinks, replies to connections that arrived on the backup
   line must leave through it too: add a rule per uplink source, or use
   connection marks ([mangle.md](mangle.md)).
-- WireGuard allowed-address entries create routes as well
+- WireGuard™ allowed-address entries create routes as well
   ([wireguard.md](wireguard.md)).

@@ -9,7 +9,7 @@ File: `src/topics/trafficflow.j`. Paths: `/ip/traffic-flow`
 [cheatsheet](cheatsheet.md#traffic-flow-netflow--ipfix).
 
 Traffic flow exports a record per connection to a collector (ntopng,
-Elastiflow, SolarWinds, a commercial appliance) for bandwidth graphs,
+Elastiflow™, SolarWinds™, a commercial appliance) for bandwidth graphs,
 top talkers and per-application breakdowns. SNMP gives interface
 totals; flow records show individual connections.
 

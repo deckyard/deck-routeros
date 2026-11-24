@@ -50,7 +50,7 @@ mt.addSecureGreTunnel($c, "grebranch", "203.0.113.99", "a long random shared sec
 ## Pitfalls
 
 - GRE is unencrypted. On the open internet use the IPsec-coupled
-  variant, or [WireGuard](wireguard.md). GRE's advantages are
+  variant, or [WireGuard™](wireguard.md). GRE's advantages are
   multi-vendor interop and multicast (OSPF adjacencies work across it).
 - Keep the route to the remote's public address on the physical uplink.
   Routed through the tunnel itself, the tunnel flaps.

@@ -1,7 +1,7 @@
 # Core: connecting and the generic verbs
 
 File: `src/topics/core.j`. It holds the connection, the generic verbs that
-work on any RouterOS list path, and the validators every other topic uses.
+work on any RouterOS™ list path, and the validators every other topic uses.
 
 Reference: [cheatsheet](cheatsheet.md#core).
 

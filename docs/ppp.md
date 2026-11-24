@@ -52,7 +52,7 @@ mt.addVpnUser($c, "branch", "a password", "pppoe", "downstream router");
   not in bridge mode, or the ISP runs PPPoE on a VLAN (often VLAN 7).
   Then create the VLAN first, `mt.addVlan($c, "vlanisp", 7, "ether1")`,
   and dial over `"vlanisp"` ([vlans.md](vlans.md)).
-- PPPoE lowers the MTU, typically to 1492. The RouterOS default firewall
+- PPPoE lowers the MTU, typically to 1492. The RouterOS™ default firewall
   clamps the TCP MSS; on a hand-built one, call
   `mt.clampTcpMss($c, "pppoewan")` ([mangle.md](mangle.md)).
 - `setPppoeCredentials` makes the session reconnect.

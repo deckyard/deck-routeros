@@ -6,7 +6,7 @@
 File: `src/topics/disk.j`. Path: `/disk` (`DISK_PATH`).
 Reference: [cheatsheet](cheatsheet.md#disks).
 
-RouterOS v7 lists attached storage (USB, NVMe, SATA) under `/disk`.
+RouterOS™ v7 lists attached storage (USB, NVMe, SATA) under `/disk`.
 Container filesystems, backups, downloaded files and disk logging live
 there. `disks(c)` returns an empty list when the router has no storage,
 and also when the read fails for any reason, a dropped connection

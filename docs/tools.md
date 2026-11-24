@@ -9,7 +9,7 @@ File: `src/topics/tools.j`. Commands: `/ping` (`PING_COMMAND`),
 These run on the router, so they answer whether the router reaches a
 host, which is what matters when debugging an uplink, a VPN or a device
 the router serves. Ping, traceroute, bandwidth test and fetch are
-streaming commands in RouterOS that would run forever unbounded.
+streaming commands in RouterOS™ that would run forever unbounded.
 routeros always sends a bound (probe count, one probe per hop,
 duration), merges the progress rows and returns one typed result.
 
@@ -38,7 +38,7 @@ RTT strings such as `"1ms52us"` are kept as RouterOS formats them.
 
 ## Bandwidth test
 
-The far end must run a btest server: another MikroTik with
+The far end must run a btest server: another MikroTik™ with
 `/tool/bandwidth-server` enabled, or MikroTik's btest utility.
 
 ```jennifer

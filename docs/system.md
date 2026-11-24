@@ -7,7 +7,7 @@ Reference: [cheatsheet](cheatsheet.md#system).
 
 ## Two update tracks
 
-1. **RouterOS packages**, the operating system. `installUpdates` downloads,
+1. **RouterOS™ packages**, the operating system. `installUpdates` downloads,
    installs and reboots.
 2. **Routerboard firmware**, the boot loader. Every RouterOS update ships a
    matching firmware, flashed only on request (`upgradeRouterboard`) and

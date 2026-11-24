@@ -31,7 +31,7 @@ for (def f in $fs) {
 
 Restoring (`/system backup load`) is not wrapped: it reboots the router
 into the backup's identity (addresses, users, keys). Do it from the
-console or WinBox. Backups are bound to the model and a close RouterOS
+console or WinBox™. Backups are bound to the model and a close RouterOS™
 version; for a portable config use the console `/export`, which the API
 cannot reach.
 

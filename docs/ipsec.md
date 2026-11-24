@@ -5,12 +5,12 @@ File: `src/topics/ipsec.j`. Paths: `/ip/ipsec/peer`, `.../identity`,
 `IPSEC_IDENTITY_PATH`, `IPSEC_POLICY_PATH`, `IPSEC_ACTIVE_PATH`,
 `IPSEC_MODE_CONFIG_PATH`). Reference: [cheatsheet](cheatsheet.md#ipsec).
 
-Use IPsec (IKEv2) when the far end is another vendor: Cisco, pfSense, a
+Use IPsec (IKEv2) when the far end is another vendor: Cisco™, pfSense™, a
 cloud VPN gateway, a partner's router. Between two MikroTiks,
-[WireGuard](wireguard.md) is simpler. The IKEv2 remote-access server,
+[WireGuard™](wireguard.md) is simpler. The IKEv2 remote-access server,
 `setupIkev2Server`, is covered in [vpn.md](vpn.md).
 
-RouterOS splits a tunnel across three objects: the **peer** (whom to
+RouterOS™ splits a tunnel across three objects: the **peer** (whom to
 negotiate with), the **identity** (how to authenticate, here a
 pre-shared key) and the **policy** (which traffic to encrypt, local
 subnet to remote subnet, tunnel mode). Two more pieces decide whether

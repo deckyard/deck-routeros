@@ -9,7 +9,7 @@ matches as a whole. Keep one rule ("drop everything on `blocklist`")
 and maintain only the list; adding or removing members never touches
 the firewall.
 
-Entries are IPs, CIDR networks or DNS names (RouterOS resolves names
+Entries are IPs, CIDR networks or DNS names (RouterOS™ resolves names
 and follows their changes). An entry with a timeout removes itself.
 Dynamic entries are created by firewall rules with
 `add-src-to-address-list` (an action available through the generic
@@ -35,7 +35,7 @@ A 24-hour block that expires by itself:
 mt.addToAddressListTimed($c, "blocklist", "192.0.2.66", "1d", "brute force");
 ```
 
-WinBox (TCP 8291) only from the admin network: accept the list, then
+WinBox™ (TCP 8291) only from the admin network: accept the list, then
 drop the port. Rules are appended, so add them in this order:
 
 ```jennifer

@@ -38,5 +38,5 @@ covered in [vlans.md](vlans.md); hardware offload of ports
 - Bridging the WAN port into the LAN connects the ISP network to the LAN
   at layer 2.
 - An address on `ether2` stops working once `ether2` joins a bridge.
-- Removing a bridge does not fail on existing ports; RouterOS drops the
+- Removing a bridge does not fail on existing ports; RouterOS™ drops the
   memberships.

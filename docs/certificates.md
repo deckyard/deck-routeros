@@ -5,11 +5,11 @@ File: `src/topics/certificates.j`. Path: `/certificate`
 Reference: [cheatsheet](cheatsheet.md#certificates).
 
 The certificate store backs every TLS service on the router: the secure
-API (`api-ssl`), WebFig over HTTPS (`www-ssl`), SSTP and OpenVPN servers.
+API (`api-ssl`), WebFig™ over HTTPS (`www-ssl`), SSTP and OpenVPN™ servers.
 An SSL service without a certificate shows as `invalid` in
 [services.md](services.md). Three ways to get one:
 
-1. `enableLetsEncrypt`: RouterOS v7 obtains and renews a Let's Encrypt
+1. `enableLetsEncrypt`: RouterOS™ v7 obtains and renews a Let's Encrypt
    certificate itself (http-01). Port 80 must be reachable from the
    internet under the DNS name; [cloud.md](cloud.md) provides one.
 2. `importCertificatePem`: a certificate from your CA, or from the

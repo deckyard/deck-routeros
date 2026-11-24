@@ -7,7 +7,7 @@ File: `src/topics/ipv6.j`. Paths: `/ipv6/settings` (`IPV6_SETTINGS_PATH`),
 `/ipv6/address` (`IPV6_ADDRESS_PATH`), `/ipv6/nd` (`IPV6_ND_PATH`).
 Reference: [cheatsheet](cheatsheet.md#ipv6).
 
-IPv6 on RouterOS is a separate stack. The `/ip/firewall` rules of
+IPv6 on RouterOS™ is a separate stack. The `/ip/firewall` rules of
 [firewall.md](firewall.md) do not filter it, and there is no NAT: every
 host with a global v6 address is reachable from the internet. Either run
 IPv6 with `/ipv6/firewall` rules (generic verbs), or switch it off with

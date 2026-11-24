@@ -6,7 +6,7 @@
 File: `src/topics/radius.j`. Path: `/radius` (`RADIUS_PATH`).
 Reference: [cheatsheet](cheatsheet.md#radius).
 
-A RADIUS server (FreeRADIUS, Windows NPS, an appliance) holds the
+A RADIUS server (FreeRADIUS™, Windows™ NPS, an appliance) holds the
 credentials that would otherwise live in local `/user` accounts, PPP
 secrets or hotspot users on each router. A server entry is bound to the
 subsystems that use it: `login`, `ppp`, `hotspot`, `wireless`, `dhcp`,

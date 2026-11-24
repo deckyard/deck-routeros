@@ -23,7 +23,7 @@ if ($cpu != "") { io.printf("CPU is at %s C\n", $cpu); }
 
 - Sensor names and units vary by model; check `healthSensors` on the
   actual hardware before hard-coding a name.
-- Values are strings as reported. RouterOS 7 sends one row per sensor
+- Values are strings as reported. RouterOS™ 7 sends one row per sensor
   (`name`, `value`, `type`); older models pack several properties into
   one row, and each becomes a sensor with `kind` `""`.
 - Threshold logic is the caller's, or let a monitoring system poll the

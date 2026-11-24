@@ -5,7 +5,7 @@ Reference: [cheatsheet](cheatsheet.md#ip-addresses).
 
 An address carries a prefix length: `192.168.88.1/24` puts the
 interface in 192.168.88.0-255. `addIpAddress` rejects an address
-without one, because RouterOS would make it a /32 with no connected
+without one, because RouterOS™ would make it a /32 with no connected
 network. The CIDR is parsed with `ipnet`, and the interface must exist.
 
 Addresses are static (set by you) or dynamic (put there by a DHCP

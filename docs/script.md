@@ -8,7 +8,7 @@ Reference: [cheatsheet](cheatsheet.md#scripts-the-repository).
 
 `/system/script` stores named scripts. The [scheduler](scheduler.md),
 [netwatch](netwatch.md) and `runScript` run a stored script by name, so a
-long or reused script lives in one place. The source is RouterOS script,
+long or reused script lives in one place. The source is RouterOS™ script,
 not Jennifer.
 
 ## Examples

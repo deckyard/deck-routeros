@@ -8,7 +8,7 @@ File: `src/topics/container.j`. Paths: `/container` (`CONTAINER_PATH`),
 (`CONTAINER_MOUNTS_PATH`), `/container/config` (`CONTAINER_CONFIG_PATH`).
 Reference: [cheatsheet](cheatsheet.md#containers).
 
-RouterOS 7 runs OCI (Docker) images on ARM, ARM64 and x86 models with
+RouterOS™ 7 runs OCI (Docker™) images on ARM, ARM64 and x86 models with
 enough storage. Prerequisites, set up once before this topic is useful:
 the `container` package, container support enabled in the device mode
 (a deliberate console-side step that needs a reboot; this deck does not

@@ -11,7 +11,7 @@ login the deck uses needs the `api` policy; a `read` account can call
 every listing function.
 
 Passwords are write-only: set by `addUser` or `setUserPassword`, never
-read back. The deck rejects an empty password, although RouterOS allows
+read back. The deck rejects an empty password, although RouterOS™ allows
 one.
 
 ```jennifer

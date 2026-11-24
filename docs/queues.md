@@ -11,7 +11,7 @@ interface, or a comma-separated mix) sends and receives. **Upload** is
 traffic from the target, **download** is traffic to it. Interface names
 in a target are checked against the router.
 
-Rates are bits per second in RouterOS notation: `"10M"`, `"512k"`,
+Rates are bits per second in RouterOS™ notation: `"10M"`, `"512k"`,
 `"1G"`, plain `"2500000"`, and `"0"` for unlimited. They are validated
 and normalized locally: `" 10m "` becomes `"10M"`. `"10M"` is 10 Mbit/s,
 about 1.25 MByte/s.

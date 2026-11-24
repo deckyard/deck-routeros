@@ -4,7 +4,7 @@ File: `src/topics/snmp.j`. Paths: `/snmp` (`SNMP_PATH`),
 `/snmp/community` (`SNMP_COMMUNITY_PATH`).
 Reference: [cheatsheet](cheatsheet.md#snmp).
 
-Monitoring systems (Zabbix, LibreNMS, PRTG, Observium) read interface
+Monitoring systems (Zabbix™, LibreNMS™, PRTG™, Observium™) read interface
 counters, CPU, memory and temperatures over SNMP. Access is granted per
 *community*, a shared string that works as a password and, in v2c,
 crosses the wire in cleartext. `enableSnmp` therefore always creates a

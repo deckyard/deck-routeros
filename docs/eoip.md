@@ -3,10 +3,10 @@
 File: `src/topics/eoip.j`. Path: `/interface/eoip` (`EOIP_PATH`).
 Reference: [cheatsheet](cheatsheet.md#eoip-tunnels).
 
-EoIP carries ethernet frames inside IP packets between two MikroTik
+EoIP carries ethernet frames inside IP packets between two MikroTik™
 routers. Bridge the tunnel into the LAN on both ends and the sites share
 one layer-2 network: one broadcast domain, one subnet. A routed VPN such
-as WireGuard alone does not do that.
+as WireGuard™ alone does not do that.
 
 - **Both ends** create a tunnel with the other as `remote-address` and
   the **same tunnel id** (0-65535). Mismatched ids fail silently: the

@@ -3,9 +3,9 @@
 File: `src/topics/cloud.j`. Path: `/ip/cloud` (`CLOUD_PATH`).
 Reference: [cheatsheet](cheatsheet.md#cloud-ddns).
 
-With MikroTik Cloud DDNS the router registers `<serial>.sn.mynetname.net`
+With MikroTik™ Cloud DDNS the router registers `<serial>.sn.mynetname.net`
 with MikroTik and keeps it pointing at its current public address. On a
-WAN with a dynamic address, that name is what road-warrior WireGuard,
+WAN with a dynamic address, that name is what road-warrior WireGuard™,
 port forwards and Let's Encrypt use. A CNAME in your own zone can give it
 a nicer name.
 

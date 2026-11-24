@@ -4,11 +4,11 @@ File: `src/topics/wireguard.j`. Paths: `/interface/wireguard`
 (`WIREGUARD_PATH`), `/interface/wireguard/peers` (`WIREGUARD_PEER_PATH`).
 Reference: [cheatsheet](cheatsheet.md#wireguard-vpn-tunnels).
 
-Needs RouterOS v7. `wireguardInterfaces` and `wireguardPeers` return an
+Needs RouterOS™ v7. `wireguardInterfaces` and `wireguardPeers` return an
 empty list on any read error: on v6, but also on a dropped connection or
 a permission error, so an empty list does not prove there are no tunnels.
 
-The local end is a WireGuard **interface** (keypair, UDP listen port);
+The local end is a WireGuard™ **interface** (keypair, UDP listen port);
 each remote party is a **peer** on it.
 
 - The router generates the private key; this deck neither sets nor

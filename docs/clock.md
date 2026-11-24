@@ -4,7 +4,7 @@ File: `src/topics/clock.j`. Paths: `/system/clock` (`CLOCK_PATH`),
 `/system/ntp/client` (`NTP_CLIENT_PATH`).
 Reference: [cheatsheet](cheatsheet.md#clock--ntp).
 
-MikroTik routers have no battery-backed clock: every boot starts at the
+MikroTik™ routers have no battery-backed clock: every boot starts at the
 firmware's build date until something sets the time. A wrong clock breaks
 certificate validation ([certificates.md](certificates.md)), scheduler
 times ([scheduler.md](scheduler.md)) and log timestamps ([log.md](log.md)),
@@ -33,7 +33,7 @@ io.printf("router time: %s %s (%s)\n", $ck.date, $ck.time, $ck.timezone);
 
 - Servers given by DNS name need a working resolver ([dns.md](dns.md));
   on a fresh router set DNS first, or use IPs.
-- The deck writes the v7 NTP client (`servers` list). RouterOS v6 has
+- The deck writes the v7 NTP client (`servers` list). RouterOS™ v6 has
   `primary-ntp` / `secondary-ntp` (IPs only); drive it with the generic
   verbs.
 - An isolated network needs an internal NTP source. The router can serve

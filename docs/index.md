@@ -1,8 +1,8 @@
 # routeros
 
-`@deckyard/routeros` drives a MikroTik router over the RouterOS binary API.
+`@deckyard/routeros` drives a MikroTik™ router over the RouterOS™ binary API.
 Most guides cover one topic, and [Remote-access VPN](vpn.md) covers L2TP,
-SSTP and OpenVPN together; the [cheatsheet](cheatsheet.md) lists every
+SSTP and OpenVPN™ together; the [cheatsheet](cheatsheet.md) lists every
 function, constant and struct. MikroTik's
 [RouterOS documentation](https://help.mikrotik.com/docs/) describes the menus
 behind the paths.
@@ -64,7 +64,7 @@ Every topic has a read-only example in
 | [firewall.md](firewall.md) | filter rules: the builder, comment handles, shortcuts |
 | [nat.md](nat.md) | masquerade and port forwarding |
 | [upnp.md](upnp.md) | UPnP: LAN devices open their own port forwards |
-| [trafficflow.md](trafficflow.md) | NetFlow / IPFIX export to a collector |
+| [trafficflow.md](trafficflow.md) | NetFlow™ / IPFIX export to a collector |
 | [raw.md](raw.md) | firewall raw: pre-conntrack drop / notrack |
 | [addresslist.md](addresslist.md) | firewall address lists: one rule, living list |
 | [mangle.md](mangle.md) | packet marking: queue marks, policy routing, MSS clamp |
@@ -82,7 +82,7 @@ Every topic has a read-only example in
 | [queues.md](queues.md) | bandwidth limiting with simple queues |
 | [wireless.md](wireless.md) | WiFi: SSIDs, passwords, guest networks, clients (classic menu) |
 | [wifi.md](wifi.md) | modern WiFi (wifiwave2/ax, RouterOS v7) |
-| [wireguard.md](wireguard.md) | WireGuard VPN tunnels (RouterOS v7) |
+| [wireguard.md](wireguard.md) | WireGuard™ VPN tunnels (RouterOS v7) |
 | [eoip.md](eoip.md) | EoIP: one LAN across two sites |
 | [gre.md](gre.md) | GRE: routed site-to-site links, any vendor |
 | [ipsec.md](ipsec.md) | IPsec: standards-based site-to-site, multi-vendor |
@@ -103,14 +103,22 @@ Every topic has a read-only example in
 | [radius.md](radius.md) | RADIUS: central authentication for logins/VPN/hotspot |
 | [health.md](health.md) | system health: temperature, voltage, fans |
 | [container.md](container.md) | run OCI containers on the router (v7) |
-| [capsman.md](capsman.md) | CAPsMAN: central management of many access points |
+| [capsman.md](capsman.md) | CAPsMAN™: central management of many access points |
 | [log.md](log.md) | reading the router log, routing what gets logged |
 | [system.md](system.md) | packages, updates, firmware, reboot |
 
 ## Disclaimer
 
-MikroTik and RouterOS are trademarks of SIA Mikrotikls. routeros is an
-independent library, not affiliated with, endorsed or supported by SIA
-Mikrotikls. It changes the configuration of live network equipment. Use at
-your own risk; no warranty of any kind. Licensed LGPL-3.0-only, see
+The deck changes the configuration of live network equipment. Use at your
+own risk; no warranty of any kind. Licensed LGPL-3.0-only, see
 [LICENSE](https://github.com/deckyard/deck-routeros/blob/main/LICENSE).
+
+## Trademarks
+
+MikroTik™, RouterOS™, RouterBOARD™, WinBox™ and WebFig™ are trademarks of
+SIA "Mikrotīkls". WireGuard™ is a trademark of Jason A. Donenfeld. OpenVPN™
+is a trademark of OpenVPN, Inc. Cisco™ is a trademark of Cisco Systems, Inc.
+CAPsMAN™, NetFlow™ and other product and company names may be trademarks of
+their respective owners. They are used only to identify the products this
+deck works with. This deck is an independent project, not affiliated with,
+sponsored, endorsed or supported by SIA "Mikrotīkls".

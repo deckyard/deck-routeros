@@ -7,7 +7,7 @@ File: `src/topics/neighbor.j`. Path: `/ip/neighbor` (`NEIGHBOR_PATH`).
 Reference: [cheatsheet](cheatsheet.md#neighbor-discovery).
 
 The router collects the discovery announcements of directly connected
-devices: MNDP (MikroTik), CDP (Cisco) and LLDP (most vendors). The list
+devices: MNDP (MikroTik™), CDP (Cisco™) and LLDP (most vendors). The list
 shows the switch on ether2 or the upstream router without a scan. Devices
 behind another router never appear.
 

@@ -2,13 +2,13 @@
 
 File: `src/topics/wifi.j`. Paths: `/interface/wifi` (`WIFI_PATH`),
 `/interface/wifi/registration-table` (`WIFI_REGISTRATION_PATH`).
-RouterOS v7 on ax-generation hardware.
+RouterOS™ v7 on ax-generation hardware.
 
 Reference: [cheatsheet](cheatsheet.md#modern-wifi-wifiwave2--ax).
 
 ## Background
 
-MikroTik has two WiFi stacks. Older boards use the classic
+MikroTik™ has two WiFi stacks. Older boards use the classic
 `/interface/wireless` menu ([wireless.md](wireless.md)); ax hardware uses
 `/interface/wifi`, whose properties are dotted keys
 (`configuration.ssid`, `security.passphrase`) and which has no separate
@@ -65,5 +65,5 @@ for (def r in $regs) {
 - Dual-band boards have `wifi1` and `wifi2` (2.4 and 5 GHz). The same
   SSID and passphrase on both allows roaming; different ones steer
   devices.
-- CAPsMAN-managed radios ignore local settings; see
+- CAPsMAN™-managed radios ignore local settings; see
   [capsman.md](capsman.md).

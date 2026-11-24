@@ -5,13 +5,13 @@ Reference: [cheatsheet](cheatsheet.md#management-services).
 
 `/ip/service` is the fixed list of ways into the router: `api` and
 `api-ssl` (what the deck connects through), `ssh`, `winbox`, `www` and
-`www-ssl` (WebFig), and the cleartext `telnet` and `ftp`. Services are
+`www-ssl` (WebFig™), and the cleartext `telnet` and `ftp`. Services are
 enabled, disabled, moved and restricted, never added or removed. Names
 are checked against that list locally; a typo fails with the valid names
 in the message.
 
 Unrestricted services listen on every address, the WAN included: a fresh
-router answers WinBox from the internet. Restrict them here, block them
+router answers WinBox™ from the internet. Restrict them here, block them
 in the input chain ([firewall.md](firewall.md)), or both.
 
 ```jennifer

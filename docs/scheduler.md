@@ -3,7 +3,7 @@
 File: `src/topics/scheduler.j`. Path: `/system/scheduler`
 (`SCHEDULER_PATH`). Reference: [cheatsheet](cheatsheet.md#scheduler).
 
-The scheduler runs RouterOS script on the router itself, so a nightly
+The scheduler runs RouterOS™ script on the router itself, so a nightly
 backup or a watchdog keeps working while your management host is down.
 A task's `on-event` is either script source or the name of a stored
 `/system/script` (see [script.md](script.md)). routeros has one call per

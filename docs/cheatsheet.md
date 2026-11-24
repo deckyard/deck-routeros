@@ -11,7 +11,7 @@ def c as mt.Client init mt.connectTLS("192.168.88.1", "admin", "secret");
 Unless a row says otherwise, invalid input throws `Error{kind: "routeros"}`
 before anything is sent, a router refusal throws `Error{kind: "mikrotik"}`, and a
 router that cannot be reached throws `net.NetError` (kind `"net"`).
-The `*_PATH` constants are RouterOS menu paths for the generic verbs in
+The `*_PATH` constants are RouterOS™ menu paths for the generic verbs in
 [Core](#core).
 
 ## Core
@@ -476,7 +476,7 @@ One connected client on a modern WiFi interface.
 
 ## CAPsMAN
 
-Guide: [CAPsMAN](capsman.md).
+Guide: [CAPsMAN™](capsman.md).
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -1182,7 +1182,7 @@ Guide: [PPPoE](ppp.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `vpnUsers(c)` | `list of PppUser` | The PPP user database shared by L2TP, SSTP, OpenVPN, PPTP and PPPoE servers. See vpn.md. |
+| `vpnUsers(c)` | `list of PppUser` | The PPP user database shared by L2TP, SSTP, OpenVPN™, PPTP and PPPoE servers. See vpn.md. |
 | `addVpnUser(c, name, password, service, comment)` | `string` | Service "any", "l2tp", "sstp", "ovpn", "pptp" or "pppoe". Throws when the login exists. |
 | `removeVpnUser(c, name)` | | Throws when no such login exists. |
 | `enableVpnUser(c, name)` | | Throws when no such login exists. |
@@ -1510,7 +1510,7 @@ One VRRP instance: this router's share of a redundant gateway.
 
 ## WireGuard VPN tunnels
 
-Guide: [WireGuard VPN tunnels](wireguard.md).
+Guide: [WireGuard™ VPN tunnels](wireguard.md).
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -1591,7 +1591,7 @@ One EoIP tunnel: an ethernet link carried over any IP path.
 |---|---|
 | `id as string` | internal RouterOS id |
 | `name as string` | tunnel interface name (e.g. "eoipbranch") |
-| `remoteAddress as string` | other MikroTik's IP address |
+| `remoteAddress as string` | other MikroTik™'s IP address |
 | `localAddress as string` | source address, "" for automatic |
 | `tunnelId as int` | tunnel id, the same on both ends |
 | `mac as string` | tunnel MAC address |
@@ -1880,7 +1880,7 @@ One queue-tree node: a branch of the QoS hierarchy.
 
 ## Traffic flow (NetFlow / IPFIX)
 
-Guide: [Traffic flow (NetFlow / IPFIX)](trafficflow.md).
+Guide: [Traffic flow (NetFlow™ / IPFIX)](trafficflow.md).
 
 | Function | Returns | Notes |
 |---|---|---|

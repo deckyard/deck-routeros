@@ -12,11 +12,11 @@ Reference: [cheatsheet](cheatsheet.md#capsman).
 
 ## Background
 
-CAPsMAN makes one router the controller for many access points (CAPs),
+CAPsMAN™ makes one router the controller for many access points (CAPs),
 which download their SSID, security and channel plan from it. A change
 on the controller reaches every AP, and clients roam between them.
 
-RouterOS has two incompatible generations:
+RouterOS™ has two incompatible generations:
 
 - legacy `/caps-man`, for classic-wireless hardware
   ([wireless.md](wireless.md));

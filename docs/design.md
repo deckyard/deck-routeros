@@ -2,7 +2,7 @@
 
 ## Scope
 
-The deck is a full RouterOS abstraction layer for configuring MikroTik
+The deck is a full RouterOS™ abstraction layer for configuring MikroTik™
 routers over the RouterOS binary API (port 8728, or 8729 with TLS). It is a
 thick, typed layer over the thin protocol client `mikrotik`: one topic per
 RouterOS menu area (interfaces and L2, the firewall, addressing and
@@ -33,12 +33,12 @@ Out of scope:
   a router trap, and the verbs can be tested offline.
 - **Comments are the stable handle for ordered tables.** A firewall rule's
   `.id` changes when it is re-added; its comment does not. The `*ByComment`
-  verbs (firewall, NAT, raw, mangle, WireGuard peers and others) resolve
+  verbs (firewall, NAT, raw, mangle, WireGuard™ peers and others) resolve
   through the comment. Containers are also identified by the comment
   `addContainer` writes, because RouterOS reports the image tag as the
   read-only container name.
 - **Version differences are absorbed in the deck.** Booleans read as `true`
-  or `yes`; CAPsMAN status tries the v7 path, then v6; formatting a disk
+  or `yes`; CAPsMAN™ status tries the v7 path, then v6; formatting a disk
   falls back to the older command; a disk without a `name` (v7 USB storage)
   falls back to its slot; a container's `running` falls back to its status
   word.
@@ -58,7 +58,7 @@ Out of scope:
   to every verb; `setVerbose` returns a copy. `MT_VERBOSE` in the
   environment seeds the verbose flag at connect time.
 - **One topic, one guide, one example.** Each topic has a guide in
-  `docs/`, an example and a cheatsheet section (the L2TP, SSTP and OpenVPN
+  `docs/`, an example and a cheatsheet section (the L2TP, SSTP and OpenVPN™
   topics share the VPN guide). The guides import the deck as `mt`.
 
 ## Errors

@@ -49,7 +49,7 @@ for (def n in $nats) {
 ## Pitfalls
 
 - The firewall `forward` chain must accept the redirected traffic. The
-  RouterOS default config does (established/related and dstnat'ed
+  RouterOS™ default config does (established/related and dstnat'ed
   connections are accepted); a hardened one needs an accept rule
   ([firewall.md](firewall.md)).
 - Use `forwardPortOn` with the WAN interface. `forwardPort` matches any

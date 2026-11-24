@@ -5,9 +5,9 @@ File: `src/topics/interfaces.j`. Path: `/interface` (`INTERFACE_PATH`).
 Reference: [cheatsheet](cheatsheet.md#interfaces).
 
 `/interface` lists every interface: physical ports and the virtual ones
-other topics create (bridges, VLANs, PPPoE, WireGuard). Interfaces are not
+other topics create (bridges, VLANs, PPPoE, WireGuard™). Interfaces are not
 created here. `running` means link up; `disabled` means switched off by
-configuration. `kind` is RouterOS's `type` (`"ether"`, `"bridge"`,
+configuration. `kind` is RouterOS™'s `type` (`"ether"`, `"bridge"`,
 `"wlan"`, ...); `mac` is `""` for interfaces without one.
 
 ```jennifer
