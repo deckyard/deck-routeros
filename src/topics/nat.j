@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - firewall NAT: masquerade and port forwarding.
 # Spliced into routeros.j via include - not a standalone module.
@@ -107,9 +107,11 @@ export func addMasquerade(c as Client, outInterface as string, comment as string
 /**
  * Forward a port to a LAN host (dst-nat).
  *
- * Traffic arriving on `publicPort` from any interface is redirected to
- * `toAddress`:`toPort`. `forwardPortOn` limits it to the WAN interface,
- * which keeps the rule from catching LAN connections to the router too.
+ * Traffic to one of the router's own addresses (`dst-address-type=local`)
+ * on `publicPort` is redirected to `toAddress`:`toPort`, so LAN clients'
+ * connections to that port on internet hosts pass untouched. It also
+ * catches LAN connections to the router's addresses on that port;
+ * `forwardPortOn` limits the rule to the WAN interface instead.
  * The firewall forward chain must also let the traffic through. Not
  * idempotent: each call adds a rule.
  *
@@ -278,11 +280,12 @@ func findMasqueradeRow(rows as list of map of string to string, outInterface as 
 }
 
 /**
- * Validate and create a dst-nat port forward; empty inInterface omits
- * the interface match.
+ * Validate and create a dst-nat port forward; empty inInterface matches
+ * the router's own addresses instead of an interface.
  *
  * @param c {Client}           an open client
- * @param inInterface {string} interface match, "" for any
+ * @param inInterface {string} interface match, "" for the router's own
+ *        addresses
  * @param protocol {string}    "tcp" or "udp"
  * @param publicPort {int}  outside port
  * @param toAddress {string}   inside address
@@ -304,6 +307,36 @@ func natForward(
     ensurePort($publicPort);
     ensurePort($toPort);
     ensureIpAddress($toAddress);
+    return add(
+        $c,
+        NAT_PATH,
+        natForwardAttrs($inInterface, $protocol, $publicPort, $toAddress, $toPort, $comment));
+}
+
+/**
+ * The attributes of a dst-nat port forward.
+ *
+ * Without an interface the rule matches `dst-address-type=local`: a bare
+ * `dst-port` match would also redirect LAN clients' outgoing connections
+ * to that port on every internet host.
+ *
+ * @param inInterface {string} interface match, "" for the router's own
+ *        addresses
+ * @param protocol {string}    "tcp" or "udp"
+ * @param publicPort {int}     outside port
+ * @param toAddress {string}   inside address
+ * @param toPort {int}         inside port
+ * @param comment {string}     friendly handle, "" for none
+ * @return {map of string to string} the rule's attributes
+ * @internal
+ */
+func natForwardAttrs(
+    inInterface as string,
+    protocol as string,
+    publicPort as int,
+    toAddress as string,
+    toPort as int,
+    comment as string) {
     def attrs as map of string to string init {
         "chain": CHAIN_DSTNAT,
         "action": ACTION_DST_NAT,
@@ -314,11 +347,13 @@ func natForward(
     };
     if ($inInterface != "") {
         $attrs["in-interface"] = $inInterface;
+    } else {
+        $attrs["dst-address-type"] = "local";
     }
     if ($comment != "") {
         $attrs["comment"] = $comment;
     }
-    return add($c, NAT_PATH, $attrs);
+    return $attrs;
 }
 
 /**

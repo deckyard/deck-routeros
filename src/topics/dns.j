@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - DNS resolver settings, static entries, and the cache.
 # Spliced into routeros.j via include - not a standalone module.
@@ -138,8 +138,9 @@ export func dnsStaticEntries(c as Client) {
  */
 export func addDnsEntry(c as Client, name as string, address as string) {
     ensureName($name, "DNS entry");
-    ensureIpAddress($address);
-    return add($c, DNS_STATIC_PATH, {"name": $name, "address": $address});
+    def target as string init strings.trim($address);
+    ensureIpAddress($target);
+    return add($c, DNS_STATIC_PATH, {"name": $name, "address": $target});
 }
 
 /**
@@ -176,8 +177,8 @@ export func dnsCache(c as Client) {
  * List the cached records for one name, matched case-insensitively.
  *
  * Several records are normal (A and AAAA, or a CNAME chain). An empty
- * list means the router has not resolved the name recently. The whole
- * cache is read and filtered locally.
+ * list means the router has not resolved the name recently. The router
+ * filters on the name as given and in lower case.
  *
  * @param c {Client}    an open client
  * @param name {string} DNS name to look up
@@ -186,7 +187,7 @@ export func dnsCache(c as Client) {
  */
 export func dnsCacheFor(c as Client, name as string) {
     ensureName($name, "DNS");
-    def rows as list of map of string to string init getAll($c, DNS_CACHE_PATH);
+    def rows as list of map of string to string init cacheRowsFromRouter($c, $name);
     def hits as list of map of string to string init cacheRowsForName($rows, $name);
     def out as list of DnsCacheEntry init [];
     for (def row in $hits) {
@@ -209,7 +210,7 @@ export func dnsCacheFor(c as Client, name as string) {
  */
 export func resolvedAddresses(c as Client, name as string) {
     ensureName($name, "DNS");
-    def rows as list of map of string to string init getAll($c, DNS_CACHE_PATH);
+    def rows as list of map of string to string init cacheRowsFromRouter($c, $name);
     return addressesFromCacheRows($rows, $name);
 }
 
@@ -258,6 +259,27 @@ func dnsEntryFromRow(row as map of string to string) {
         disabled: rowBool($row, "disabled"),
         comment: rowValue($row, "comment")
     };
+}
+
+/**
+ * Read the cache rows for a name, filtered on the router.
+ *
+ * Asks for the name as given or in lower case (`?#|`); the caller still
+ * compares case-insensitively.
+ *
+ * @param c {Client}    an open client
+ * @param name {string} the DNS name
+ * @return {list of map of string to string} the candidate rows
+ * @internal
+ */
+func cacheRowsFromRouter(c as Client, name as string) {
+    def given as string init strings.trim($name);
+    def lower as string init strings.lower($given);
+    def queries as list of string init ["?name=" + $given];
+    if ($lower != $given) {
+        $queries = ["?name=" + $given, "?name=" + $lower, "?#|"];
+    }
+    return apiPrintWhere($c, DNS_CACHE_PATH, $queries);
 }
 
 /**
@@ -366,10 +388,14 @@ export func dnsAdlists(c as Client) {
  */
 export func addAdlist(c as Client, url as string) {
     def target as string init strings.trim($url);
-    if ($target == "" or not strings.startsWith($target, "http")) {
+    if (not strings.startsWith($target, "http://") and not strings.startsWith($target, "https://")) {
         raiseError("the adlist URL must be an http(s) URL");
     }
-    def rows as list of map of string to string init getAll($c, DNS_ADLIST_PATH);
+    ensureHost($target);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        DNS_ADLIST_PATH,
+        ["?url=" + $target]);
     def existing as map of string to string init findRowByField($rows, "url", $target);
     if (len($existing) > 0) {
         return rowValue($existing, ".id");
@@ -382,11 +408,18 @@ export func addAdlist(c as Client, url as string) {
  *
  * @param c {Client}   an open client
  * @param url {string} blocklist URL, as added
- * @throws {Error} kind "routeros" when no adlist has that URL
+ * @throws {Error} kind "routeros" on an empty URL or when no adlist has it
  */
 export func removeAdlist(c as Client, url as string) {
-    def rows as list of map of string to string init getAll($c, DNS_ADLIST_PATH);
-    def row as map of string to string init findRowByField($rows, "url", strings.trim($url));
+    def target as string init strings.trim($url);
+    if ($target == "") {
+        raiseError("the adlist URL must not be empty");
+    }
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        DNS_ADLIST_PATH,
+        ["?url=" + $target]);
+    def row as map of string to string init findRowByField($rows, "url", $target);
     if (len($row) == 0) {
         raiseError("no adlist with the URL \"" + $url + "\" was found");
     }

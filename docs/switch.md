@@ -57,9 +57,9 @@ mt.setBridgePortHardwareOffload($c, "ether2", false);
   features, some VLAN configs, ports on more than one chip). Offload is
   working when the ports have `hardwareOffload == true`, CPU load stays
   low under traffic, and `switchHosts` holds your LAN's MACs.
-- `switchChips` and `switchHosts` return an empty list on any read
-  error, so a dropped session looks the same as "no chip" or "empty
-  table".
+- `switchChips` and `switchHosts` return an empty list when the router
+  has no switch menu (a `!trap`); a dropped session or a timeout is
+  thrown, never read as "no chip".
 - Traffic between ports on different switch chips crosses the CPU.
   `switchChips` shows how many chips there are.
 - Turning `hw` off on an accelerated port moves its traffic to the CPU,

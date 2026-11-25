@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the dhcp topic.
 # Spliced into routeros_test.j via include - run with:
@@ -188,4 +188,74 @@ func failAddDhcpRelayBadServer() {
 
 func testAddDhcpRelayRejectsNonAddressServer() {
     testing.assertThrows("failAddDhcpRelayBadServer", "routeros");
+}
+
+func failSetupDhcpBackwardsRange() {
+    setupDhcp(
+        offlineClient(),
+        "dhcplan",
+        "brlan",
+        "192.168.77.0/24",
+        "192.168.77.1",
+        "192.168.77.199",
+        "192.168.77.10",
+        "192.168.77.1");
+}
+
+func testSetupDhcpRejectsBackwardsRange() {
+    testing.assertThrows("failSetupDhcpBackwardsRange", "routeros");
+}
+
+func failSetupDhcpIpv6() {
+    setupDhcp(
+        offlineClient(),
+        "dhcplan",
+        "brlan",
+        "2001:db8::/64",
+        "2001:db8::1",
+        "2001:db8::10",
+        "2001:db8::20",
+        "2001:db8::1");
+}
+
+func testSetupDhcpRejectsIpv6() {
+    testing.assertThrows("failSetupDhcpIpv6", "routeros");
+}
+
+func testSetupDhcpSendsTrimmedValues() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        INTERFACE_PATH,
+        [{".id": "*1", "name": "brlan"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    setupDhcp(
+        $c,
+        "dhcplan",
+        "brlan",
+        " 192.168.77.0/24",
+        " 192.168.77.1 ",
+        "192.168.77.10 ",
+        " 192.168.77.199",
+        "192.168.77.1");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/ip/pool/add =name=dhcplan =ranges=192.168.77.10-192.168.77.199"));
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/ip/dhcp-server/network/add =address=192.168.77.0/24 =gateway=192.168.77.1 "));
+}
+
+func testRemoveLeaseByMacFiltersOnTheRouter() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        DHCP_LEASE_PATH,
+        [{".id": "*9", "mac-address": "AA:BB:CC:DD:EE:FF", "address": "10.0.0.9"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    removeLeaseByMac($c, "aa:bb:cc:dd:ee:ff");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/ip/dhcp-server/lease/print ?mac-address=AA:BB:CC:DD:EE:FF"));
+    testing.assertTrue(fakeSaw($log, "/ip/dhcp-server/lease/remove =.id=*9"));
 }

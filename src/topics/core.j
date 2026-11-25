@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - connection, generic verbs, shared validation and row helpers.
 # Spliced into routeros.j via include - not a standalone module.
@@ -290,7 +290,7 @@ export func update(c as Client, path as string, id as string, attrs as map of st
  * Find the first item under a path whose "name" property matches.
  *
  * Filters on the router with a `?name=` query word, so only matching rows
- * travel.
+ * travel. An empty name matches nothing and sends nothing.
  *
  * @param c {Client}    an open client
  * @param path {string} RouterOS list path
@@ -298,15 +298,13 @@ export func update(c as Client, path as string, id as string, attrs as map of st
  * @return {map of string to string} the item's properties, empty when absent
  */
 export func findByName(c as Client, path as string, name as string) {
-    def rows as list of map of string to string init apiPrintWhere(
-        $c,
-        apiPath($path),
-        ["?name=" + $name]);
-    if (len($rows) == 0) {
-        def empty as map of string to string init {};
-        return $empty;
+    def p as string init apiPath($path);
+    def none as map of string to string init {};
+    if ($name == "") {
+        return $none;
     }
-    return $rows[0];
+    def rows as list of map of string to string init apiPrintWhere($c, $p, ["?name=" + $name]);
+    return findRowByField($rows, "name", $name);
 }
 
 /**
@@ -390,8 +388,8 @@ export func moveRule(c as Client, path as string, id as string, beforeId as stri
 /**
  * Move an item to the top of its ordered list.
  *
- * A no-op when the item is already first. Reads the list to find the
- * current first item.
+ * A no-op when the item is already first. Reads the ids of the list to
+ * find the current first item.
  *
  * @param c {Client}    an open client
  * @param path {string} ordered list path
@@ -402,7 +400,11 @@ export func moveRule(c as Client, path as string, id as string, beforeId as stri
  */
 export func moveRuleToTop(c as Client, path as string, id as string) {
     ensureId($id);
-    def rows as list of map of string to string init getAll($c, $path);
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        apiPath($path),
+        [".id"],
+        []);
     if (len($rows) == 0) {
         raiseError("the list " + apiPath($path) + " has no items to reorder");
     }
@@ -510,6 +512,10 @@ func rowBool(row as map of string to string, key as string) {
 /**
  * Find the first row whose property `key` equals `value`.
  *
+ * Only rows that carry the property match, and an empty `value` matches
+ * nothing: a row without a comment is never "the row whose comment is ''",
+ * so a verb handed an empty handle cannot pick an unrelated item.
+ *
  * @param rows {list of map of string to string} reply rows
  * @param key {string}   property name to compare
  * @param value {string} value to look for
@@ -517,12 +523,15 @@ func rowBool(row as map of string to string, key as string) {
  * @internal
  */
 func findRowByField(rows as list of map of string to string, key as string, value as string) {
+    def none as map of string to string init {};
+    if ($value == "") {
+        return $none;
+    }
     for (def row in $rows) {
-        if (rowValue($row, $key) == $value) {
+        if (maps.has($row, $key) and $row[$key] == $value) {
             return $row;
         }
     }
-    def none as map of string to string init {};
     return $none;
 }
 
@@ -560,6 +569,26 @@ func ensureName(name as string, what as string) {
     if (strings.contains($name, " ")) {
         raiseError("the " + $what + " name must not contain spaces");
     }
+    if (hasControlChar($name)) {
+        raiseError("the " + $what + " name must not contain control characters");
+    }
+}
+
+/**
+ * Whether a string holds a control character (below U+0020, or DEL).
+ *
+ * @param value {string} the candidate
+ * @return {bool} true when one is present
+ * @internal
+ */
+func hasControlChar(value as string) {
+    for (def ch in strings.chars($value)) {
+        def code as int init convert.toCodepoint($ch);
+        if ($code < 32 or $code == 127) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -589,22 +618,55 @@ func ensurePort(port as int) {
 }
 
 /**
- * Validate a port spec: digits plus "," (list) and "-" (range).
+ * Validate a port spec: a comma-separated list of ports ("80") and
+ * ranges ("8000-8100"), each port 1-65535, each range ascending.
  *
  * @param spec {string} the candidate spec
- * @throws {Error} kind "routeros" on an empty spec or a foreign character
+ * @throws {Error} kind "routeros" on an empty spec, a foreign character, an
+ *                 empty list entry, a port outside 1-65535 or a descending
+ *                 range
  * @internal
  */
 func ensurePortSpec(spec as string) {
     if ($spec == "") {
         raiseError("the port spec must not be empty");
     }
-    def parts as list of string init strings.chars($spec);
-    for (def ch in $parts) {
+    for (def ch in strings.chars($spec)) {
         if (not strings.contains(PORT_SPEC_CHARS, $ch)) {
             raiseError("the port spec \"" + $spec + "\" may only contain digits, \",\" and \"-\"");
         }
     }
+    for (def part in strings.split($spec, ",")) {
+        def ends as list of string init strings.split($part, "-");
+        if (len($ends) > 2) {
+            raiseError("the port spec \"" + $spec + "\" has a malformed range \"" + $part + "\"");
+        }
+        def low as int init specPort($spec, $ends[0]);
+        if (len($ends) == 2 and specPort($spec, $ends[1]) < $low) {
+            raiseError("the port range \"" + $part + "\" in \"" + $spec + "\" runs backwards");
+        }
+    }
+}
+
+/**
+ * Parse one port of a port spec.
+ *
+ * @param spec {string}   the whole spec, for the error message
+ * @param digits {string} the port's digits
+ * @return {int} the port
+ * @throws {Error} kind "routeros" on an empty entry or a port outside 1-65535
+ * @internal
+ */
+func specPort(spec as string, digits as string) {
+    if ($digits == "" or len($digits) > 5) {
+        raiseError("the port spec \"" + $spec + "\" has an empty or overlong entry");
+    }
+    def port as int init convert.toInt($digits);
+    if ($port < 1 or $port > 65535) {
+        raiseError("the port spec \"" + $spec + "\" holds " + $digits +
+            ", outside 1-65535");
+    }
+    return $port;
 }
 
 /**
@@ -658,6 +720,24 @@ func ensureIpAddress(address as string) {
         ipnet.parseAddress(strings.trim($address));
     } catch (e) {
         raiseError("\"" + $address + "\" is not a valid IP address");
+    }
+}
+
+/**
+ * Validate one plain IPv4 address, no prefix.
+ *
+ * For menus that only take IPv4 (`/ip/...`, EoIP, GRE); their IPv6
+ * counterparts live under other paths.
+ *
+ * @param address {string} the candidate (already trimmed)
+ * @param what {string}    noun for the error message (e.g. "gateway")
+ * @throws {Error} kind "routeros" when it does not parse or is IPv6
+ * @internal
+ */
+func ensureIpv4Address(address as string, what as string) {
+    ensureIpAddress($address);
+    if (ipnet.version(ipnet.parseAddress($address)) != 4) {
+        raiseError("the " + $what + " \"" + $address + "\" must be an IPv4 address here");
     }
 }
 
@@ -824,18 +904,28 @@ func ensureHost(host as string) {
  *
  * Comments are the deck's stable handle on the ordered tables (a rule's
  * id changes when it is re-added, its comment does not), so the
- * *ByComment verbs all funnel through here.
+ * *ByComment verbs all funnel through here. The router filters on the
+ * comment; an empty comment is refused.
  *
  * @param c {Client}       an open client
  * @param path {string}    the list path to search
  * @param comment {string} the comment to look for
  * @param what {string}    noun for the error message (e.g. "firewall rule")
  * @return {string} the item id
- * @throws {Error} kind "routeros" when nothing carries that comment
+ * @throws {Error} kind "routeros" on an empty comment or when nothing
+ *                 carries it
  * @internal
  */
 func requiredIdByComment(c as Client, path as string, comment as string, what as string) {
-    def rows as list of map of string to string init getAll($c, $path);
+    if ($comment == "") {
+        raiseError("the " + $what +
+            " comment must not be empty - it is the handle that picks the item");
+    }
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        apiPath($path),
+        [".id", "comment"],
+        ["?comment=" + $comment]);
     def row as map of string to string init findRowByField($rows, "comment", $comment);
     if (len($row) == 0) {
         raiseError("no " + $what + " with the comment \"" + $comment + "\" was found");
@@ -937,7 +1027,7 @@ func apiPrint(c as Client, path as string) {
  */
 func apiPrintWhere(c as Client, path as string, queries as list of string) {
     if ($c.verbose) {
-        io.printf("mt> %s/print%s\n", $path, formatQueries($queries));
+        io.printf("mt> %s/print%s\n", $path, formatQueriesFor($path, $queries));
     }
     def rows as list of map of string to string init mikrotik.printWhere(
         $c.session,
@@ -945,6 +1035,79 @@ func apiPrintWhere(c as Client, path as string, queries as list of string) {
         $queries);
     logRows($c, $rows);
     return $rows;
+}
+
+/**
+ * Read selected properties of the rows matching RouterOS query words,
+ * logging it first when the client is verbose.
+ *
+ * The router filters (`?` words) and trims the columns (`.proplist`), so a
+ * lookup in a large table (address lists, the connection table, files)
+ * moves only the rows and properties it needs.
+ *
+ * @param c {Client}       an open client
+ * @param path {string}    the normalized list path
+ * @param props {list of string} the properties to return, [] for all
+ * @param queries {list of string} the raw `?...` query words, [] for none
+ * @return {list of map of string to string} the matching rows
+ * @internal
+ */
+func apiPrintSelect(
+    c as Client,
+    path as string,
+    props as list of string,
+    queries as list of string) {
+    def attrs as map of string to string init {};
+    if (len($props) > 0) {
+        $attrs[".proplist"] = strings.join($props, ",");
+    }
+    if ($c.verbose) {
+        io.printf(
+            "mt> %s/print%s%s\n",
+            $path,
+            formatAttrsFor($path + "/print", $attrs),
+            formatQueriesFor($path, $queries));
+    }
+    def rows as list of map of string to string init mikrotik.talkQuery(
+        $c.session,
+        $path + "/print",
+        $attrs,
+        $queries);
+    logRows($c, $rows);
+    return $rows;
+}
+
+# Ids per `remove` command in removeMany, keeping each word short.
+def const REMOVE_BATCH as int init 100;
+
+/**
+ * Delete items by id, many per command (`=.id=*1,*2,...`).
+ *
+ * One round trip per REMOVE_BATCH ids instead of one per item.
+ *
+ * @param c {Client}    an open client
+ * @param path {string} RouterOS list path the items live under
+ * @param ids {list of string} the item ids
+ * @return {int} how many ids were sent
+ * @throws {Error} kind "mikrotik" when the router refuses a batch (an id
+ *                 already gone fails its whole batch)
+ * @internal
+ */
+func removeMany(c as Client, path as string, ids as list of string) {
+    def p as string init apiPath($path);
+    def batch as list of string init [];
+    for (def id in $ids) {
+        ensureId($id);
+        $batch[] = $id;
+        if (len($batch) == REMOVE_BATCH) {
+            apiRun($c, $p + "/remove", {".id": strings.join($batch, ",")});
+            $batch = [];
+        }
+    }
+    if (len($batch) > 0) {
+        apiRun($c, $p + "/remove", {".id": strings.join($batch, ",")});
+    }
+    return len($ids);
 }
 
 /**
@@ -957,7 +1120,7 @@ func apiPrintWhere(c as Client, path as string, queries as list of string) {
  */
 func logCommand(c as Client, command as string, attrs as map of string to string) {
     if ($c.verbose) {
-        io.printf("mt> %s%s\n", $command, formatAttrs($attrs));
+        io.printf("mt> %s%s\n", $command, formatAttrsFor($command, $attrs));
     }
 }
 
@@ -984,59 +1147,122 @@ func logRows(c as Client, rows as list of map of string to string) {
  * Insertion order is preserved, so the log shows the attributes in the
  * order they go on the wire.
  *
+ * @param command {string} the command path the attributes go with
  * @param attrs {map of string to string} the attributes
  * @return {string} the rendered suffix, "" when there are none
  * @internal
  */
-func formatAttrs(attrs as map of string to string) {
+func formatAttrsFor(command as string, attrs as map of string to string) {
     def out as string init "";
     def names as list of string init maps.keys($attrs);
     for (def key in $names) {
-        $out = $out + " " + $key + "=" + loggedValue($key, $attrs[$key]);
+        $out = $out + " " + $key + "=" + loggedValueFor($command, $key, $attrs[$key]);
     }
     return $out;
 }
 
 /**
- * Render RouterOS query words for the log.
+ * Render RouterOS query words for the log, secrets replaced.
  *
+ * A word that compares a secret property (`?name=` under
+ * `/snmp/community`, `?password=`, ...) shows `<redacted>` as its value.
+ *
+ * @param path {string}            the list path the query reads
  * @param queries {list of string} the raw `?...` words
  * @return {string} the rendered suffix, "" when there are none
  * @internal
  */
-func formatQueries(queries as list of string) {
+func formatQueriesFor(path as string, queries as list of string) {
     def out as string init "";
     for (def q in $queries) {
-        $out = $out + " " + $q;
+        $out = $out + " " + loggedQuery($path, $q);
     }
     return $out;
 }
 
 /**
- * The value to print for an attribute: the value itself, or a
- * placeholder when the key carries a secret.
+ * One query word as the log shows it.
  *
- * @param key {string}   the attribute name
- * @param value {string} the attribute value
+ * @param path {string} the list path the query reads
+ * @param q {string}    the raw word ("?name=x", "?>mtu=1500", "?#|", ...)
+ * @return {string} the word, its value replaced when the property is secret
+ * @internal
+ */
+func loggedQuery(path as string, q as string) {
+    def at as int init strings.indexOf($q, "=");
+    if ($at < 0) {
+        return $q;
+    }
+    def key as string init strings.trimLeftSet($q[..$at], "?=<>-");
+    if (isSecretFor($path + "/print", $key)) {
+        return $q[..$at + 1] + "<redacted>";
+    }
+    return $q;
+}
+
+/**
+ * The value to print for an attribute: the value itself, or a
+ * placeholder when it carries a secret.
+ *
+ * @param command {string} the command path ("/snmp/community/add")
+ * @param key {string}     the attribute name
+ * @param value {string}   the attribute value
  * @return {string} what the log should show
  * @internal
  */
-func loggedValue(key as string, value as string) {
-    if (isSecretKey($key)) {
+func loggedValueFor(command as string, key as string, value as string) {
+    if (isSecretFor($command, $key)) {
         return "<redacted>";
     }
     return $value;
 }
 
 /**
- * Whether an attribute name carries a credential.
+ * Whether an attribute of a command carries a secret.
+ *
+ * `isSecretKey` covers the names that are secret everywhere; this adds
+ * the ones secret only under one menu: a container env's `value`
+ * (passwords handed to the image) and an SNMP community's `name` (the
+ * community string is its name).
+ *
+ * @param command {string} the command path, or the list path plus "/print"
+ * @param key {string}     the attribute name
+ * @return {bool} true when the value must not be printed
+ * @internal
+ */
+func isSecretFor(command as string, key as string) {
+    if (isSecretKey($key)) {
+        return true;
+    }
+    if ($key == "value" and underPath($command, CONTAINER_ENVS_PATH)) {
+        return true;
+    }
+    return $key == "name" and underPath($command, SNMP_COMMUNITY_PATH);
+}
+
+/**
+ * Whether a command path lies under a list path.
+ *
+ * @param command {string} the command path ("/container/envs/add")
+ * @param path {string}    the list path ("/container/envs")
+ * @return {bool} true for the path itself or a command below it
+ * @internal
+ */
+func underPath(command as string, path as string) {
+    return $command == $path or strings.startsWith($command, $path + "/");
+}
+
+/**
+ * Whether an attribute name carries a credential wherever it appears.
  *
  * Verbose mode prints what goes on the wire, and what goes on the wire
- * includes SMTP passwords, WPA keys, IPsec and PPP secrets, and
- * WireGuard private keys - so those values are never printed. Matched
- * narrowly on purpose: `public-key` is public, `key-usage` is a
- * certificate flag, and `passive` / `passthrough` merely start with the
- * same letters, so none of them are redacted.
+ * includes SMTP passwords, WPA keys, IPsec and PPP secrets, WireGuard
+ * private and preshared keys, BGP MD5 keys, SIM PINs and file contents
+ * (`importCertificatePem` moves private keys as files) - so those values
+ * are never printed. Matched narrowly on purpose: `public-key` is public,
+ * `key-usage` is a certificate flag, a container env's `key` is a
+ * variable name, and `passive` / `passthrough` merely start with the same
+ * letters, so none of them are redacted.
  *
  * @param key {string} the attribute name
  * @return {bool} true when the value must not be printed
@@ -1046,7 +1272,11 @@ func isSecretKey(key as string) {
     if ($key == "password" or $key == "secret" or $key == "passphrase") {
         return true;
     }
-    if ($key == "private-key" or strings.endsWith($key, "-private-key")) {
+    if ($key == "pin" or $key == "contents") {
+        return true;
+    }
+    if (strings.endsWith($key, "-key") and $key != "public-key" and
+        not strings.endsWith($key, ".public-key")) {
         return true;
     }
     if (strings.endsWith($key, "-password") or strings.endsWith($key, "-secret")) {
@@ -1055,7 +1285,7 @@ func isSecretKey(key as string) {
     if (strings.endsWith($key, ".passphrase") or strings.endsWith($key, "-passphrase")) {
         return true;
     }
-    return strings.contains($key, "pre-shared-key");
+    return strings.contains($key, "pre-shared-key") or strings.contains($key, "preshared-key");
 }
 
 /**

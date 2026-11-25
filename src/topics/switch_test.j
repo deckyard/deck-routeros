@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the switch topic.
 # Spliced into routeros_test.j via include - run with:
@@ -41,13 +41,72 @@ func testSwitchHostFromSparseRow() {
 
 # Verbs: reads that fall back to an empty list
 
-# A pure-CPU board has no /interface/ethernet/switch menu and the read
-# fails; both readers turn a failed read into an empty list. The offline
-# client's read fails too, so it lands on the same branch.
-func testSwitchChipsEmptyWhenReadFails() {
-    testing.assertEqual(len(switchChips(offlineClient())), 0);
+# A never-connected client used to read as "no switch chip": the readers
+# swallowed every error. Only a router !trap (missing menu) is empty now.
+func failSwitchHostsOffline() {
+    switchHosts(offlineClient());
 }
 
-func testSwitchHostsEmptyWhenReadFails() {
-    testing.assertEqual(len(switchHosts(offlineClient())), 0);
+func failSwitchChipsOffline() {
+    switchChips(offlineClient());
+}
+
+func failLteInterfacesOffline() {
+    lteInterfaces(offlineClient());
+}
+
+func failWifiInterfacesOffline() {
+    wifiInterfaces(offlineClient());
+}
+
+func failWifiRegistrationsOffline() {
+    wifiRegistrations(offlineClient());
+}
+
+func failWireguardInterfacesOffline() {
+    wireguardInterfaces(offlineClient());
+}
+
+func failWireguardPeersOffline() {
+    wireguardPeers(offlineClient());
+}
+
+func failWirelessInterfacesOffline() {
+    wirelessInterfaces(offlineClient());
+}
+
+func failWifiClientsOffline() {
+    wifiClients(offlineClient());
+}
+
+func testOptionalMenuReadersRethrowClosed() {
+    testing.assertThrows("failSwitchHostsOffline", "closed");
+    testing.assertThrows("failSwitchChipsOffline", "closed");
+    testing.assertThrows("failLteInterfacesOffline", "closed");
+    testing.assertThrows("failWifiInterfacesOffline", "closed");
+    testing.assertThrows("failWifiRegistrationsOffline", "closed");
+    testing.assertThrows("failWireguardInterfacesOffline", "closed");
+    testing.assertThrows("failWireguardPeersOffline", "closed");
+    testing.assertThrows("failWirelessInterfacesOffline", "closed");
+    testing.assertThrows("failWifiClientsOffline", "closed");
+}
+
+func testIsMissingMenuOnlyForTrap() {
+    testing.assertTrue(isMissingMenu("mikrotik", "trap"));
+    testing.assertFalse(isMissingMenu("mikrotik", "fatal"));
+    testing.assertFalse(isMissingMenu("closed", ""));
+    testing.assertFalse(isMissingMenu("net", ""));
+    testing.assertFalse(isMissingMenu("timeout", ""));
+    testing.assertFalse(isMissingMenu("limit", ""));
+}
+
+func testOptionalMenuMissingReadsEmpty() {
+    def f as Fake init fakeStart(fakeWithTrap(
+        fakeRouter(),
+        WIREGUARD_PATH + "/print",
+        "0",
+        "no such command prefix"));
+    def c as Client init fakeClient($f);
+    testing.assertEqual(len(wireguardInterfaces($c)), 0);
+    fakeLog($c, $f);
 }

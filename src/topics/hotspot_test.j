@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the hotspot topic.
 # Spliced into routeros_test.j via include - run with:
@@ -142,4 +142,85 @@ func failAllowBeforeLoginEmptyHost() {
 
 func testAllowBeforeLoginRejectsEmptyHost() {
     testing.assertThrows("failAllowBeforeLoginEmptyHost", "routeros");
+}
+
+func testTeardownHotspotRethrowsTransportErrors() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        HOTSPOT_PATH,
+        [{".id": "*H", "name": "guests"}]);
+    $r = fakeWithClose($r, "/ip/dhcp-server/print");
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        teardownHotspot($c, "guests", "10.5.50.0/24");
+    } catch (e) {
+        $got = $e.kind;
+    }
+    fakeLog($c, $f);
+    testing.assertTrue($got != "");
+    testing.assertTrue($got != "routeros");
+}
+
+func testTeardownHotspotCountsDhcpPieces() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        DHCP_NETWORK_PATH,
+        [{".id": "*N", "address": "10.5.50.0/24"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    teardownHotspot($c, "guests", "10.5.50.0/24");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/ip/dhcp-server/network/remove =.id=*N"));
+}
+
+func bindingFake(kind as string) {
+    return fakeWithRows(
+        fakeRouter(),
+        HOTSPOT_BINDING_PATH,
+        [{".id": "*7", "mac-address": "AA:BB:CC:DD:EE:FF", "type": $kind}]);
+}
+
+func testBypassRefusesABlockedBinding() {
+    def f as Fake init fakeStart(bindingFake("blocked"));
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        bypassHotspotMac($c, "aa:bb:cc:dd:ee:ff", "printer");
+    } catch (e) {
+        $got = $e.kind;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($got, "routeros");
+    testing.assertFalse(fakeSaw($log, "/ip/hotspot/ip-binding/add"));
+}
+
+func testBypassReturnsAnExistingBypass() {
+    def f as Fake init fakeStart(bindingFake("bypassed"));
+    def c as Client init fakeClient($f);
+    testing.assertEqual(bypassHotspotMac($c, "aa:bb:cc:dd:ee:ff", "printer"), "*7");
+    fakeLog($c, $f);
+}
+
+func testRemoveBypassSparesABlockedBinding() {
+    def f as Fake init fakeStart(bindingFake("blocked"));
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        removeHotspotBypass($c, "aa:bb:cc:dd:ee:ff");
+    } catch (e) {
+        $got = $e.kind;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($got, "routeros");
+    testing.assertFalse(fakeSaw($log, "/ip/hotspot/ip-binding/remove"));
+}
+
+func failRemoveWalledGardenEmpty() {
+    removeWalledGardenEntry(offlineClient(), "  ");
+}
+
+func testRemoveWalledGardenRefusesEmptyHost() {
+    testing.assertThrows("failRemoveWalledGardenEmpty", "routeros");
 }

@@ -76,9 +76,12 @@ mt.addSstpClient($c, "sstpto-hq", "vpn.example.org", "branch", "password");
 mt.addOvpnClient($c, "ovpnto-hq", "vpn.example.org", "branch", "password");
 ```
 
-`addSstpClient` sets `verify-server-certificate=no`, so it does not
-authenticate the server; set it to `yes` with the generic `set` when the
-server's certificate chain is trusted on the router.
+`addSstpClient` and `addOvpnClient` set `verify-server-certificate=yes`:
+the server's certificate must chain to a CA in the router's store
+(`importCertificatePem`) and name the server, or the client does not
+connect. `addSstpClientWith` / `addOvpnClientWith` with
+`verifyServerCertificate` false skip the check; anyone on the path can
+then pose as the server and capture the login.
 
 ## IKEv2 road-warrior
 

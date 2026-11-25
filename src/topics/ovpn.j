@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - OpenVPN remote-access server and dial-out clients.
 # Spliced into routeros.j via include - not a standalone module.
@@ -65,7 +65,7 @@ export func ovpnServerStatus(c as Client) {
  * Clients exist for every OS, but each needs a config profile, so it is
  * less plug-and-play than L2TP. Needs a TLS certificate. Accepts the
  * port over TCP in the input chain. Add logins with `addVpnUser`.
- * Idempotent.
+ * Idempotent; a re-run with another port moves the input rule along.
  *
  * @param c {Client} an open client
  * @param certificate {string} name of the TLS certificate in the store
@@ -116,10 +116,14 @@ export func ovpnClients(c as Client) {
 }
 
 /**
- * Dial out to a remote OpenVPN server.
+ * Dial out to a remote OpenVPN server, verifying its certificate.
  *
- * When a client of that name exists, its id is returned and nothing is
- * changed.
+ * The client is created with `verify-server-certificate=yes`: the
+ * server's certificate must chain to a CA in this router's certificate
+ * store (`importCertificatePem`) and name `serverAddress`, otherwise the
+ * client does not connect. For a server you cannot verify, use
+ * `addOvpnClientWith` with `verifyServerCertificate` false. When a client of
+ * that name exists, its id is returned and nothing is changed.
  *
  * @param c {Client} an open client
  * @param name {string} client interface name
@@ -136,7 +140,35 @@ export func addOvpnClient(
     serverAddress as string,
     user as string,
     password as string) {
-    def none as map of string to string init {};
+    return addOvpnClientWith($c, $name, $serverAddress, $user, $password, true);
+}
+
+/**
+ * Dial out to a remote OpenVPN server, choosing whether to verify its
+ * certificate.
+ *
+ * Without verification anyone on the path can pose as the server and
+ * capture the login exchange; turn it off only on a link you trust. When
+ * a client of that name exists, its id is returned and nothing is
+ * changed.
+ *
+ * @param c {Client} an open client
+ * @param name {string} client interface name
+ * @param serverAddress {string} server address or DNS name
+ * @param user {string} login on the server
+ * @param password {string} password for that login
+ * @param verifyServerCertificate {bool} check the server's certificate
+ *        against the router's store
+ * @return {string} the RouterOS id of the new or existing client
+ * @throws {Error} kind "routeros" as `addOvpnClient`
+ */
+export func addOvpnClientWith(
+    c as Client,
+    name as string,
+    serverAddress as string,
+    user as string,
+    password as string,
+    verifyServerCertificate as bool) {
     return vpnClientAdd(
         $c,
         OVPN_CLIENT_PATH,
@@ -145,7 +177,7 @@ export func addOvpnClient(
         $serverAddress,
         $user,
         $password,
-        $none);
+        verifyServerExtra($verifyServerCertificate));
 }
 
 /**

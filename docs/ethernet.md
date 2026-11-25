@@ -30,6 +30,13 @@ mt.setEthernetMtu($c, "ether3", 9000);   # every device on the path must agree
 ```
 
 Forced speeds: `10Mbps`, `100Mbps`, `1Gbps`, `2.5Gbps`, `5Gbps`, `10Gbps`.
+RouterOS 7.12 replaced `speed` plus `full-duplex` with one link-mode word,
+so `100Mbps` full duplex is sent as `speed=100M-baseT-full` (twisted pair;
+`2.5Gbps` and up as `2.5G-baseT` and so on). When the router refuses that
+with a `!trap`, the pre-7.12 `speed=100Mbps full-duplex=yes` is tried; if
+that is refused too, the first error is thrown. For fibre or DAC pass the
+7.12+ word itself (`1G-baseX`, `10G-baseSR-LR`, `10G-baseCR`, ...); its
+duplex must agree with `fullDuplex`. Half duplex exists only up to 1G.
 The MTU must be 68-65535; the port's l2mtu caps it and the router refuses
 a larger value with a `mikrotik` error.
 

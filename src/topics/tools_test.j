@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the tools topic.
 # Spliced into routeros_test.j via include - run with:
@@ -306,4 +306,51 @@ func failSendEmailEmptyRecipient() {
 
 func testSendEmailRejectsEmptyRecipient() {
     testing.assertThrows("failSendEmailEmptyRecipient", "routeros");
+}
+
+func failFetchUrlHttpLookalike() {
+    fetchUrl(offlineClient(), "httpfoo://example.org/");
+}
+
+func failDownloadFileBareScheme() {
+    downloadFile(offlineClient(), "https://", "x.rsc");
+}
+
+# "http" as a bare prefix let "httpfoo://..." through.
+func testFetchUrlRejectsLookalikeScheme() {
+    testing.assertThrows("failFetchUrlHttpLookalike", "routeros");
+    testing.assertThrows("failDownloadFileBareScheme", "routeros");
+}
+
+# RouterOS skips the certificate check unless told otherwise.
+func testFetchAttrsCheckCertificate() {
+    def a as map of string to string init fetchAttrs(
+        " HTTPS://example.org/ip ",
+        {"output": "user"});
+    testing.assertEqual($a["url"], "HTTPS://example.org/ip");
+    testing.assertEqual($a["check-certificate"], "yes-without-crl");
+    testing.assertEqual($a["output"], "user");
+    testing.assertFalse(maps.has($a, "mode"));
+}
+
+# The API sends the hop table again on each update (.section 0, 1, ...);
+# collecting every row listed early hops several times.
+func testTracerouteHopsKeepsLastSection() {
+    def rows as list of map of string to string init [
+        {".section": "0", "address": "192.168.88.1"},
+        {".section": "1", "address": "192.168.88.1"},
+        {".section": "1", "address": "10.0.0.1"},
+        {".section": "2", "address": "192.168.88.1", "avg": "1ms"},
+        {".section": "2", "address": "10.0.0.1"},
+        {".section": "2", "address": "1.1.1.1", "status": ""}
+    ];
+    def hops as list of TracerouteHop init tracerouteHops($rows);
+    testing.assertEqual(len($hops), 3);
+    testing.assertEqual($hops[0].avgRtt, "1ms");
+    testing.assertEqual($hops[2].address, "1.1.1.1");
+}
+
+func testTracerouteHopsWithoutSections() {
+    def rows as list of map of string to string init [{"address": "a"}, {"address": "b"}];
+    testing.assertEqual(len(tracerouteHops($rows)), 2);
 }

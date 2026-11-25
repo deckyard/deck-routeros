@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the log topic.
 # Spliced into routeros_test.j via include - run with:
@@ -172,4 +172,21 @@ func failSetupRemoteLoggingPortZero() {
 
 func testSetupRemoteLoggingRejectsPortZero() {
     testing.assertThrows("failSetupRemoteLoggingPortZero", "routeros");
+}
+
+# The log read asks only for the four LogEntry properties (fewer words
+# per row against the reply cap) and still returns the tail.
+func testRecentLogEntriesRequestsOnlyEntryProps() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "time": "10:00:00", "topics": "system,info", "message": "a"},
+        {".id": "*2", "time": "10:00:01", "topics": "system,info", "message": "b"},
+        {".id": "*3", "time": "10:00:02", "topics": "dhcp,info", "message": "c"}
+    ];
+    def f as Fake init fakeStart(fakeWithRows(fakeRouter(), LOG_PATH, $rows));
+    def c as Client init fakeClient($f);
+    def last as list of LogEntry init recentLogEntries($c, 2);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual(len($last), 2);
+    testing.assertEqual($last[1].message, "c");
+    testing.assertTrue(fakeSaw($log, LOG_PATH + "/print =.proplist=.id,time,topics,message"));
 }

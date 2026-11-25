@@ -58,7 +58,8 @@ for (def cl in $clients) {
   SSID adds no capacity.
 - A guest SSID is only separated from the LAN by its own bridge and
   [firewall](firewall.md) rules; consider a [queue](queues.md) cap too.
-- `wirelessInterfaces` and `wifiClients` return an empty list on any
-  read error, so a dropped session looks like a router without radios.
+- `wirelessInterfaces` and `wifiClients` return an empty list when the
+  classic menu is missing (a `!trap`); a dropped session or a timeout is
+  thrown.
 - Signal strengths are strings as the router reports them. Around
   -50 dBm is excellent, -70 dBm usable, -85 dBm unusable.

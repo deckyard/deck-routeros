@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the disk topic.
 # Spliced into routeros_test.j via include - run with:
@@ -71,14 +71,75 @@ func testDiskRowMatchingMissIsEmpty() {
     testing.assertEqual(len(diskRowMatching($rows, "nvme1")), 0);
 }
 
-func testIsUnknownCommandRecognisesTheTrap() {
-    testing.assertTrue(isUnknownCommand("mikrotik", "!trap: no such command"));
-    testing.assertTrue(isUnknownCommand("mikrotik", "No such command or directory"));
+func diskFake() {
+    return fakeWithRows(fakeRouter(), DISK_PATH, [{".id": "*1", "slot": "usb1"}]);
 }
 
-func testIsUnknownCommandKeepsRealFailures() {
-    testing.assertFalse(isUnknownCommand("mikrotik", "!trap: device is busy"));
-    testing.assertFalse(isUnknownCommand("routeros", "no such command"));
+func testFormatDiskFallsBackOnAMissingCommand() {
+    def r as FakeRouter init fakeWithTrap(diskFake(), "/disk/format", "0", "no such command");
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    formatDisk($c, "usb1", "ext4", "");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/disk/format-drive =.id=*1 =file-system=ext4"));
+}
+
+func testFormatDiskKeepsARealFailure() {
+    def r as FakeRouter init fakeWithTrap(diskFake(), "/disk/format", "1", "no such command");
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        formatDisk($c, "usb1", "ext4", "");
+    } catch (e) {
+        $got = $e.kind;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($got, "mikrotik");
+    testing.assertFalse(fakeSaw($log, "/disk/format-drive"));
+}
+
+func testFormatDiskReportsTheCurrentCommandWhenBothAreMissing() {
+    def r as FakeRouter init fakeWithTrap(diskFake(), "/disk/format", "", "disk is busy");
+    $r = fakeWithTrap($r, "/disk/format-drive", "0", "no such command");
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        formatDisk($c, "usb1", "ext4", "");
+    } catch (e) {
+        $got = $e.routerMessage;
+    }
+    fakeLog($c, $f);
+    testing.assertEqual($got, "disk is busy");
+}
+
+func testMaybeUnknownCommandReadsFieldsOnly() {
+    testing.assertTrue(maybeUnknownCommand("mikrotik", "trap", "0"));
+    testing.assertTrue(maybeUnknownCommand("mikrotik", "trap", ""));
+    testing.assertFalse(maybeUnknownCommand("mikrotik", "trap", "1"));
+    testing.assertFalse(maybeUnknownCommand("mikrotik", "fatal", ""));
+    testing.assertFalse(maybeUnknownCommand("closed", "", ""));
+}
+
+func testDisksRethrowsADroppedConnection() {
+    def f as Fake init fakeStart(fakeWithClose(fakeRouter(), "/disk/print"));
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        disks($c);
+    } catch (e) {
+        $got = $e.kind;
+    }
+    fakeLog($c, $f);
+    testing.assertTrue($got != "");
+}
+
+func testDisksEmptyWhenMenuMissing() {
+    def f as Fake init fakeStart(fakeWithTrap(fakeRouter(), "/disk/print", "0", "no such command"));
+    def c as Client init fakeClient($f);
+    testing.assertEqual(len(disks($c)), 0);
+    fakeLog($c, $f);
 }
 
 # Verbs: local validation before any I/O
@@ -91,8 +152,3 @@ func testFormatDiskRejectsUnknownFilesystem() {
     testing.assertThrows("failFormatDiskNtfs", "routeros");
 }
 
-func testDisksEmptyWhenMenuUnreadable() {
-    # a router without the disk menu (or an unreadable one) has no disks
-    def ds as list of Disk init disks(offlineClient());
-    testing.assertEqual(len($ds), 0);
-}

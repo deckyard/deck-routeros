@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the wireless topic.
 # Spliced into routeros_test.j via include - run with:
@@ -169,10 +169,74 @@ func testAddVirtualApRejectsLongPassword() {
 # The readers treat a menu they cannot read as absent (a router without the
 # classic wireless package) and return an empty list instead of throwing.
 
-func testWirelessInterfacesEmptyWhenMenuUnreadable() {
-    testing.assertEqual(len(wirelessInterfaces(offlineClient())), 0);
+# A profile shared with another radio was rewritten (password, mode and
+# authentication types) for every radio on it.
+func testProfileIsShared() {
+    def rows as list of map of string to string init [
+        {"name": "wlan1", "security-profile": "corp"},
+        {"name": "wlan2", "security-profile": "corp"},
+        {"name": "wlan3", "security-profile": "solo"},
+        {"name": "wlan4", "security-profile": "default"}
+    ];
+    testing.assertTrue(profileIsShared($rows, "wlan1", "corp"));
+    testing.assertFalse(profileIsShared($rows, "wlan3", "solo"));
+    testing.assertTrue(profileIsShared($rows, "wlan4", "default"));
+    testing.assertTrue(profileIsShared($rows, "wlan4", ""));
 }
 
-func testWifiClientsEmptyWhenMenuUnreadable() {
-    testing.assertEqual(len(wifiClients(offlineClient())), 0);
+func testSetWifiPasswordMovesSharedProfileAside() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "name": "wlan1", "security-profile": "corp"},
+        {".id": "*2", "name": "wlan2", "security-profile": "corp"}
+    ];
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeWithRows(fakeRouter(), WIRELESS_PATH, $rows),
+        WIRELESS_SECURITY_PATH,
+        [{".id": "*5", "name": "corp", "mode": "dynamic-keys"}]));
+    def c as Client init fakeClient($f);
+    setWifiPassword($c, "wlan1", "new-secret-1");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertFalse(fakeSaw($log, WIRELESS_SECURITY_PATH + "/set =.id=*5"));
+    testing.assertTrue(fakeSaw($log, WIRELESS_SECURITY_PATH + "/add"));
+    testing.assertTrue(fakeSaw($log, WIRELESS_PATH + "/set"));
+}
+
+func testSetWifiPasswordOwnProfileOnlyKey() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "name": "wlan1", "security-profile": "corp"}
+    ];
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeWithRows(fakeRouter(), WIRELESS_PATH, $rows),
+        WIRELESS_SECURITY_PATH,
+        [{".id": "*5", "name": "corp", "mode": "dynamic-keys"}]));
+    def c as Client init fakeClient($f);
+    setWifiPassword($c, "wlan1", "new-secret-1");
+    def log as list of string init fakeLog($c, $f);
+    def sets as list of string init [];
+    for (def s in $log) {
+        if (strings.startsWith($s, WIRELESS_SECURITY_PATH + "/set")) {
+            $sets[] = $s;
+        }
+    }
+    testing.assertEqual(len($sets), 1);
+    testing.assertFalse(strings.contains($sets[0], "authentication-types"));
+    testing.assertFalse(strings.contains($sets[0], "=mode="));
+    testing.assertTrue(strings.contains($sets[0], "=wpa2-pre-shared-key=new-secret-1"));
+}
+
+func failSsidTooManyBytes() {
+    ensureSsid("ääääääääääääääääääää");
+}
+
+func failWifiPasswordNonAscii() {
+    ensureWifiPassword("passwört123");
+}
+
+# len counts characters: 20 umlauts (40 bytes) and a non-ASCII
+# passphrase passed and the router refused them.
+func testWifiValidatorsCountBytesAndAscii() {
+    testing.assertThrows("failSsidTooManyBytes", "routeros");
+    testing.assertThrows("failWifiPasswordNonAscii", "routeros");
+    ensureSsid("Café");
+    ensureWifiPassword("correct horse battery");
 }

@@ -50,10 +50,9 @@ for (def a in mt.ipv6Addresses($c)) {
   link, wrong for a LAN.
 - `removeIpv6Address` refuses dynamic addresses; remove what creates them
   (the DHCPv6 client, the received RA).
-- `removeIpv6Address` matches the address as text. `2001:db8:1::1/64`
-  does not match a row stored as `2001:0db8:1::1/64`; pass the address
-  exactly as `ipv6Addresses` reports it, or remove by id with
-  `mt.remove($c, mt.IPV6_ADDRESS_PATH, $id)`.
+- `removeIpv6Address` compares addresses by value: `2001:DB8:1::1/64`
+  finds a row stored as `2001:db8:1::1/64`. An EUI-64 address is also
+  found by the prefix it was added with.
 - An IPv4 CIDR passed to these calls is rejected with a message that
   says so.
 - `stopAdvertisingIpv6On` does not take addresses away: clients keep

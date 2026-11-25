@@ -40,3 +40,8 @@ covered in [vlans.md](vlans.md); hardware offload of ports
 - An address on `ether2` stops working once `ether2` joins a bridge.
 - Removing a bridge does not fail on existing ports; RouterOS™ drops the
   memberships.
+- With VLAN filtering on, RouterOS adds dynamic VLAN entries for PVIDs.
+  `addBridgeVlan` ignores them: it adds its own entry unless a configured
+  one already holds the id, alone, in a list (`"10,20"`) or a range
+  (`"10-20"`). `removeBridgeVlan` refuses an id that shares its entry
+  with other VLANs; change that entry's `vlan-ids` with `set`.

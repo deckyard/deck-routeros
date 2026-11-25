@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the wireguard topic.
 # Spliced into routeros_test.j via include - run with:
 #   jennifer test src/routeros_test.j
 
 func testEnsureWireguardKeyAcceptsValidKey() {
-    ensureWireguardKey("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq=");
+    ensureWireguardKey("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopo=");
     ensureWireguardKey("  hIe5R2FTPjvrIrVXfy41chvUJ4CyOTdBEI3pQGea0R0=  ");
     testing.assertTrue(true);
 }
@@ -149,13 +149,63 @@ func testSetupWireguardServerRejectsAddressWithoutPrefix() {
     testing.assertThrows("failSetupWireguardServerNoPrefix", "routeros");
 }
 
-func testWireguardInterfacesEmptyWhenMenuUnreadable() {
-    # RouterOS v6 has no /interface/wireguard; an unreadable menu means none
-    def ws as list of WireguardInterface init wireguardInterfaces(offlineClient());
-    testing.assertEqual(len($ws), 0);
+# A re-run with another port left the interface and the rule on the old
+# one; the address was skipped when it existed on any other interface.
+func testSetupWireguardServerMovesPortAndAddsOwnAddress() {
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeWithRows(
+            fakeWithRows(
+                fakeRouter(),
+                WIREGUARD_PATH,
+                [{".id": "*3", "name": "wgvpn", "listen-port": "13231"}]),
+            IP_ADDRESS_PATH,
+            [{".id": "*8", "address": "10.100.0.1/24", "interface": "ether9"}]),
+        FIREWALL_PATH,
+        [
+            {
+                ".id": "*9",
+                "chain": "input",
+                "action": "accept",
+                "protocol": "udp",
+                "dst-port": "13231",
+                "comment": "wireguard: wgvpn"
+            }
+        ]));
+    def c as Client init fakeClient($f);
+    setupWireguardServer($c, "wgvpn", 51820, "10.100.0.1/24");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, WIREGUARD_PATH + "/set =listen-port=51820 =.id=*3"));
+    testing.assertTrue(fakeSaw($log, IP_ADDRESS_PATH + "/add"));
+    testing.assertTrue(fakeSaw($log, FIREWALL_PATH + "/set"));
+    testing.assertFalse(fakeSaw($log, FIREWALL_PATH + "/add"));
 }
 
-func testWireguardPeersEmptyWhenMenuUnreadable() {
-    def ps as list of WireguardPeer init wireguardPeers(offlineClient());
-    testing.assertEqual(len($ps), 0);
+func testRemoveWireguardRemovesEveryStaticAddress() {
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeWithRows(fakeRouter(), WIREGUARD_PATH, [{".id": "*3", "name": "wgvpn"}]),
+        IP_ADDRESS_PATH,
+        [
+            {".id": "*1", "address": "10.100.0.1/24", "interface": "wgvpn"},
+            {".id": "*2", "address": "10.101.0.1/24", "interface": "wgvpn"},
+            {".id": "*4", "address": "10.102.0.1/24", "interface": "ether1"}
+        ]));
+    def c as Client init fakeClient($f);
+    removeWireguard($c, "wgvpn");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, IP_ADDRESS_PATH + "/remove =.id=*1,*2"));
+    testing.assertFalse(fakeSaw($log, IP_ADDRESS_PATH + "/remove =.id=*4"));
+}
+
+func failWireguardKeyAllPadding() {
+    ensureWireguardKey("============================================");
+}
+
+func failWireguardKeyInnerPadding() {
+    ensureWireguardKey("ABCDEFGHIJ=LMNOPQRSTUVWXYZabcdefghijklmnopq=");
+}
+
+# 44 "=" or a "=" inside passed the length and alphabet checks.
+func testEnsureWireguardKeyRejectsBadPadding() {
+    testing.assertThrows("failWireguardKeyAllPadding", "routeros");
+    testing.assertThrows("failWireguardKeyInnerPadding", "routeros");
 }

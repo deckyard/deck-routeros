@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - switch chip: hardware-offload inventory and host table.
 # Spliced into routeros.j via include - not a standalone module.
@@ -46,20 +46,15 @@ export def struct SwitchHost {
  * List the switch chips on the router.
  *
  * Empty on a board without a switch chip (pure CPU), which cannot
- * offload bridging to hardware. Any read error, a dropped connection
- * included, also yields an empty list.
+ * offload bridging to hardware, or without the menu. Any other failure
+ * (a dropped connection, a timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of SwitchChip} the switch chips
  */
 export func switchChips(c as Client) {
     def out as list of SwitchChip init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, ETHERNET_SWITCH_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, ETHERNET_SWITCH_PATH);
     for (def row in $rows) {
         $out[] = switchChipFromRow($row);
     }
@@ -71,20 +66,18 @@ export func switchChips(c as Client) {
  *
  * LAN MACs in this table mean the chip forwards their traffic. An empty
  * table on a busy LAN with high CPU load means offload is not engaging
- * and the bridge forwards in software. Any read error, a dropped
- * connection included, yields an empty list.
+ * and the bridge forwards in software. A router without the menu reads
+ * as empty; any other failure (a dropped connection, a timeout) is
+ * thrown.
  *
  * @param c {Client} an open client
  * @return {list of SwitchHost} the hardware MAC entries
  */
 export func switchHosts(c as Client) {
     def out as list of SwitchHost init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, ETHERNET_SWITCH_HOST_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows(
+        $c,
+        ETHERNET_SWITCH_HOST_PATH);
     for (def row in $rows) {
         $out[] = switchHostFromRow($row);
     }
@@ -120,4 +113,49 @@ func switchHostFromRow(row as map of string to string) {
         vlanId: rowInt($row, "vlan-id"),
         dynamic: rowBool($row, "dynamic")
     };
+}
+
+/**
+ * Read a list from a menu that may be missing on this router (an
+ * optional package, other hardware, RouterOS v6).
+ *
+ * A missing menu answers with a `!trap`, read as no rows. Every other
+ * failure is re-thrown unchanged, so a dropped connection ("closed",
+ * "net"), a timeout or a reached cap ("limit") is not mistaken for an
+ * empty list.
+ *
+ * @param c {Client}    an open client
+ * @param path {string} the menu path
+ * @return {list of map of string to string} the rows, empty when the
+ *         router has no such menu
+ * @throws {Error} any failure other than a router `!trap`
+ * @internal
+ */
+func optionalMenuRows(c as Client, path as string) {
+    try {
+        return getAll($c, $path);
+    } catch (e) {
+        def reply as string init "";
+        if ($e.kind == "mikrotik") {
+            $reply = $e.reply;
+        }
+        if (not isMissingMenu($e.kind, $reply)) {
+            throw $e;
+        }
+    }
+    def none as list of map of string to string init [];
+    return $none;
+}
+
+/**
+ * Whether a failed read means the menu does not exist: a router `!trap`.
+ *
+ * @param kind {string}  the error kind
+ * @param reply {string} a "mikrotik" error's reply ("trap" / "fatal"), ""
+ *        for another kind
+ * @return {bool} true only for a `!trap`
+ * @internal
+ */
+func isMissingMenu(kind as string, reply as string) {
+    return $kind == "mikrotik" and $reply == "trap";
 }

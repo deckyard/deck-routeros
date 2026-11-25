@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the ovpn topic.
 # Spliced into routeros_test.j via include - run with:
@@ -53,4 +53,56 @@ func failAddOvpnClientSpacedName() {
 
 func testAddOvpnClientRejectsSpacedName() {
     testing.assertThrows("failAddOvpnClientSpacedName", "routeros");
+}
+
+# OpenVPN clients took RouterOS's default, no certificate check.
+func testAddOvpnClientVerifiesByDefault() {
+    def f as Fake init fakeStart(fakeRouter());
+    def c as Client init fakeClient($f);
+    addOvpnClient($c, "ovpnout", "vpn.example.org", "bob", "pw12345678");
+    def log as list of string init fakeLog($c, $f);
+    def added as string init "";
+    for (def s in $log) {
+        if (strings.startsWith($s, OVPN_CLIENT_PATH + "/add")) {
+            $added = $s;
+        }
+    }
+    testing.assertTrue(strings.contains($added, "=verify-server-certificate=yes"));
+}
+
+func testAddOvpnClientWithOptOut() {
+    def f as Fake init fakeStart(fakeRouter());
+    def c as Client init fakeClient($f);
+    addOvpnClientWith($c, "ovpnout", "vpn.example.org", "bob", "pw12345678", false);
+    def log as list of string init fakeLog($c, $f);
+    def added as string init "";
+    for (def s in $log) {
+        if (strings.startsWith($s, OVPN_CLIENT_PATH + "/add")) {
+            $added = $s;
+        }
+    }
+    testing.assertTrue(strings.contains($added, "=verify-server-certificate=no"));
+}
+
+# Re-enabling on another port kept the input rule on the old port
+# (the rule was found by comment and left alone).
+func testEnableOvpnServerMovesFirewallPort() {
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeWithRows(fakeRouter(), CERTIFICATE_PATH, [{".id": "*1", "name": "vpncert"}]),
+        FIREWALL_PATH,
+        [
+            {
+                ".id": "*9",
+                "chain": "input",
+                "action": "accept",
+                "protocol": "tcp",
+                "dst-port": "443",
+                "comment": "ovpn: server"
+            }
+        ]));
+    def c as Client init fakeClient($f);
+    enableOvpnServer($c, "vpncert", 8443);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, FIREWALL_PATH + "/set =dst-port=8443"));
+    testing.assertFalse(fakeSaw($log, FIREWALL_PATH + "/add"));
 }

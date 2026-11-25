@@ -5,8 +5,9 @@ File: `src/topics/wireguard.j`. Paths: `/interface/wireguard`
 Reference: [cheatsheet](cheatsheet.md#wireguard-vpn-tunnels).
 
 Needs RouterOS™ v7. `wireguardInterfaces` and `wireguardPeers` return an
-empty list on any read error: on v6, but also on a dropped connection or
-a permission error, so an empty list does not prove there are no tunnels.
+empty list on v6, where the menu answers with a `!trap`. A dropped
+connection, a timeout or a reached cap is thrown. A permission error is a
+`!trap` too and also reads as empty.
 
 The local end is a WireGuard™ **interface** (keypair, UDP listen port);
 each remote party is a **peer** on it.
@@ -78,4 +79,3 @@ reports a wrong key nowhere else.
   sets 25 seconds.
 - Traffic between VPN and LAN passes the `forward` chain; permit it if
   peers should reach LAN devices ([firewall.md](firewall.md)).
-- `removeWireguard` removes only the first IP address on the interface.

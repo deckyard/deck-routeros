@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - files and backups.
 # Spliced into routeros.j via include - not a standalone module.
@@ -26,11 +26,18 @@ export def struct RouterFile {
 /**
  * List the files on the router.
  *
+ * Only the four listed properties travel, not the contents RouterOS
+ * attaches to small files.
+ *
  * @param c {Client} an open client
  * @return {list of RouterFile} all files and directories
  */
 export func files(c as Client) {
-    def rows as list of map of string to string init getAll($c, FILE_PATH);
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        FILE_PATH,
+        ["name", "type", "size", "creation-time"],
+        []);
     def out as list of RouterFile init [];
     for (def row in $rows) {
         $out[] = fileFromRow($row);
@@ -88,8 +95,7 @@ export func saveBackupWith(c as Client, name as string, password as string) {
  * @throws {Error} kind "routeros" when no such file exists
  */
 export func readFileText(c as Client, name as string) {
-    def rows as list of map of string to string init getAll($c, FILE_PATH);
-    def row as map of string to string init findRowByField($rows, "name", $name);
+    def row as map of string to string init fileRow($c, $name, []);
     if (len($row) == 0) {
         raiseError("the file \"" + $name + "\" was not found on the router");
     }
@@ -108,8 +114,7 @@ export func readFileText(c as Client, name as string) {
  */
 export func writeFileText(c as Client, name as string, contents as string) {
     ensureName($name, "file");
-    def rows as list of map of string to string init getAll($c, FILE_PATH);
-    def existing as map of string to string init findRowByField($rows, "name", $name);
+    def existing as map of string to string init fileRow($c, $name, [".id", "name"]);
     if (len($existing) > 0) {
         set($c, FILE_PATH, rowValue($existing, ".id"), {"contents": $contents});
     } else {
@@ -125,12 +130,48 @@ export func writeFileText(c as Client, name as string, contents as string) {
  * @throws {Error} kind "routeros" when no such file exists
  */
 export func removeFile(c as Client, name as string) {
-    def rows as list of map of string to string init getAll($c, FILE_PATH);
-    def row as map of string to string init findRowByField($rows, "name", $name);
-    if (len($row) == 0) {
+    if (not removeFileIfPresent($c, $name)) {
         raiseError("the file \"" + $name + "\" was not found on the router");
     }
+}
+
+/**
+ * Delete a file when it exists.
+ *
+ * @param c {Client}    an open client
+ * @param name {string} the file name (with extension)
+ * @return {bool} true when a file was removed
+ * @internal
+ */
+func removeFileIfPresent(c as Client, name as string) {
+    def row as map of string to string init fileRow($c, $name, [".id", "name"]);
+    if (len($row) == 0) {
+        return false;
+    }
     remove($c, FILE_PATH, rowValue($row, ".id"));
+    return true;
+}
+
+/**
+ * Read one file's row, filtered on the router by name.
+ *
+ * @param c {Client}    an open client
+ * @param name {string} the file name
+ * @param props {list of string} the properties to read, [] for all
+ * @return {map of string to string} the row, or an empty map
+ * @internal
+ */
+func fileRow(c as Client, name as string, props as list of string) {
+    def none as map of string to string init {};
+    if ($name == "") {
+        return $none;
+    }
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        FILE_PATH,
+        $props,
+        ["?name=" + $name]);
+    return findRowByField($rows, "name", $name);
 }
 
 /**
@@ -142,8 +183,7 @@ export func removeFile(c as Client, name as string) {
  * @internal
  */
 func ensureBackupExists(c as Client, name as string) {
-    def rows as list of map of string to string init getAll($c, FILE_PATH);
-    def row as map of string to string init findRowByField($rows, "name", $name + ".backup");
+    def row as map of string to string init fileRow($c, $name + ".backup", [".id", "name"]);
     if (len($row) == 0) {
         raiseError("the backup \"" + $name + ".backup\" did not appear - check free storage");
     }

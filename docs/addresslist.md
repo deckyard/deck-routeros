@@ -73,8 +73,16 @@ for (def n in $names) {
   see [firewall.md](firewall.md) for ordering and `moveRule`.
 - `addToAddressList` is idempotent (RouterOS itself traps on a
   duplicate); `addToAddressListTimed` and `dropAddressList` are not.
-- `clearAddressList` leaves dynamic entries alone and throws when the
-  list has no static entries.
+  Addresses are normalized the way RouterOS stores them before the
+  lookup: `"203.0.113.7/32"` becomes `"203.0.113.7"`, `"10.0.0.5/24"`
+  becomes `"10.0.0.0/24"`.
+- IPv6 entries live in `/ipv6/firewall/address-list`; the verbs here
+  refuse IPv6 addresses. Use the generic `add` on that path.
+- The verbs filter on the router (`?list=`), so a large blocklist costs
+  only its own rows. `addressLists` reads just the `list` column of every
+  entry.
+- `clearAddressList` leaves dynamic entries alone, removes up to 100
+  entries per command and throws when the list has no static entries.
 - DNS-name entries depend on the router's resolver
   ([dns.md](dns.md)) and change at the name's TTL; do not rely on
   them for hard security boundaries.

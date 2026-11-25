@@ -11,10 +11,11 @@ Reference: [cheatsheet](cheatsheet.md#lte--cellular).
 A cellular modem gives a backup WAN, or the only uplink at a site without
 a wired line. It needs the carrier's APN and enough signal.
 
-`lteInterfaces` returns an empty list on any read error: on a router
-without a modem, and also on a dropped connection. `lteStatus` runs
-`monitor once`; `registered` is true when the status contains
-`"registered"`. `setLteApn` creates or updates an APN profile named
+`lteInterfaces` returns an empty list on a router without a modem (the
+menu answers with a `!trap`); a dropped connection or a timeout is
+thrown. `lteStatus` runs
+`monitor once`; `registered` is true when the status is `"registered"`
+or `"roaming"`. `setLteApn` creates or updates an APN profile named
 `routeros-<interface>` and binds it to the interface.
 
 ```jennifer

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - wifi: the modern wifiwave2 / ax menu (RouterOS v7).
 # Spliced into routeros.j via include - not a standalone module.
@@ -60,20 +60,15 @@ export def struct WifiRegistration {
 /**
  * List the modern WiFi interfaces (radios and virtual APs).
  *
- * Empty on routers without the wifiwave2 menu and on any read error, a
- * dropped connection included.
+ * Empty on routers without the wifiwave2 menu; any other failure (a
+ * dropped connection, a timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of WifiInterface} all modern WiFi interfaces
  */
 export func wifiInterfaces(c as Client) {
     def out as list of WifiInterface init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, WIFI_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, WIFI_PATH);
     for (def row in $rows) {
         $out[] = wifiFromRow($row);
     }
@@ -187,19 +182,15 @@ export func removeVirtualWifi(c as Client, name as string) {
 /**
  * List the clients connected to the modern WiFi right now.
  *
- * Empty on routers without the wifiwave2 menu and on any read error.
+ * Empty on routers without the wifiwave2 menu; any other failure (a
+ * dropped connection, a timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of WifiRegistration} one entry per connected device
  */
 export func wifiRegistrations(c as Client) {
     def out as list of WifiRegistration init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, WIFI_REGISTRATION_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, WIFI_REGISTRATION_PATH);
     for (def row in $rows) {
         $out[] = wifiRegistrationFromRow($row);
     }

@@ -48,7 +48,8 @@ helpful). Address syntax itself is left to the router.
 ## Comments as handles
 
 RouterOS ids change when a rule is re-added; comments do not. Give every
-rule a distinct comment and manage it by that:
+rule a distinct comment and manage it by that (an empty comment is
+refused, it would pick an uncommented rule):
 
 ```jennifer
 mt.disableFirewallRuleByComment($c, "no smb forwarding");

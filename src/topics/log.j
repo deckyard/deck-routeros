@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - the router log: reading entries, routing what gets logged.
 # Spliced into routeros.j via include - not a standalone module.
@@ -16,6 +16,9 @@ export def const LOGGING_PATH as string init "/system/logging";
 
 /** RouterOS API path of the logging actions (memory, disk, echo, remote). */
 export def const LOGGING_ACTION_PATH as string init "/system/logging/action";
+
+# The properties a LogEntry holds: the log read asks for these only.
+def const LOG_PROPS as list of string init [".id", "time", "topics", "message"];
 
 /**
  * One log entry.
@@ -54,13 +57,17 @@ export def struct LoggingRule {
  * Read the in-memory log buffer, oldest first.
  *
  * The buffer holds 1000 entries by default and is cleared on reboot.
- * For history, log to disk or remote (`setupRemoteLogging`).
+ * For history, log to disk or remote (`setupRemoteLogging`). Only the
+ * four properties the struct holds are requested; a buffer raised to
+ * tens of thousands of lines (`memory-lines`) still exceeds the reply
+ * cap and fails with kind "limit".
  *
  * @param c {Client} an open client
  * @return {list of LogEntry} the buffered entries
+ * @throws {Error} kind "limit" when the buffer exceeds the reply cap
  */
 export func logEntries(c as Client) {
-    def rows as list of map of string to string init getAll($c, LOG_PATH);
+    def rows as list of map of string to string init apiPrintSelect($c, LOG_PATH, LOG_PROPS, []);
     def out as list of LogEntry init [];
     for (def row in $rows) {
         $out[] = logEntryFromRow($row);
@@ -71,10 +78,14 @@ export func logEntries(c as Client) {
 /**
  * Read the newest `count` log entries, oldest of them first.
  *
+ * The API has no tail read: the whole buffer is read (as `logEntries`)
+ * and cut here.
+ *
  * @param c {Client} an open client
  * @param count {int} number of entries from the end of the log, at least 1
  * @return {list of LogEntry} at most `count` entries
- * @throws {Error} kind "routeros" on a count below 1
+ * @throws {Error} kind "routeros" on a count below 1, kind "limit" as
+ *         `logEntries`
  */
 export func recentLogEntries(c as Client, count as int) {
     if ($count < 1) {

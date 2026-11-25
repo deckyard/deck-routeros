@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - neighbor discovery: what is on this segment (LLDP/CDP/MNDP).
 # Spliced into routeros.j via include - not a standalone module.
@@ -51,6 +51,9 @@ export func neighbors(c as Client) {
 /**
  * List the neighbors discovered on one interface.
  *
+ * RouterOS v7 lists a neighbor seen on a bridge port as
+ * "ether2,bridge"; such a neighbor counts for each interface in the list.
+ *
  * @param c {Client}             an open client
  * @param interfaceName {string} interface to filter on, exact name
  * @return {list of Neighbor} that interface's neighbors
@@ -59,11 +62,33 @@ export func neighborsOn(c as Client, interfaceName as string) {
     def all as list of Neighbor init neighbors($c);
     def out as list of Neighbor init [];
     for (def n in $all) {
-        if ($n.interfaceName == $interfaceName) {
+        if (neighborOnInterface($n.interfaceName, $interfaceName)) {
             $out[] = $n;
         }
     }
     return $out;
+}
+
+/**
+ * Whether a neighbor's interface field names an interface.
+ *
+ * @param field {string} the neighbor's "interface", one name or a comma
+ *        list ("ether2,bridge")
+ * @param interfaceName {string} the interface asked for
+ * @return {bool} true when one entry equals it
+ * @internal
+ */
+func neighborOnInterface(field as string, interfaceName as string) {
+    def wanted as string init strings.trim($interfaceName);
+    if ($wanted == "") {
+        return false;
+    }
+    for (def part in strings.split($field, ",")) {
+        if (strings.trim($part) == $wanted) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

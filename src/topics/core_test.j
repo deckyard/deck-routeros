@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the core topic.
 # Spliced into routeros_test.j via include - run with:
@@ -400,19 +400,19 @@ func testSetVerboseCanTurnItOffAgain() {
 
 func testFormatAttrsRendersPairsInOrder() {
     def attrs as map of string to string init {"chain": "forward", "action": "drop"};
-    testing.assertEqual(formatAttrs($attrs), " chain=forward action=drop");
+    testing.assertEqual(formatAttrsFor("/x/add", $attrs), " chain=forward action=drop");
 }
 
 func testFormatAttrsEmptyIsEmptyString() {
     def attrs as map of string to string init {};
-    testing.assertEqual(formatAttrs($attrs), "");
+    testing.assertEqual(formatAttrsFor("/x/add", $attrs), "");
 }
 
 func testFormatQueries() {
     def q as list of string init ["?name=ether1"];
-    testing.assertEqual(formatQueries($q), " ?name=ether1");
+    testing.assertEqual(formatQueriesFor("/interface", $q), " ?name=ether1");
     def none as list of string init [];
-    testing.assertEqual(formatQueries($none), "");
+    testing.assertEqual(formatQueriesFor("/interface", $none), "");
 }
 
 # verbose mode prints what goes on the wire, and that includes credentials
@@ -439,12 +439,14 @@ func testNonSecretKeysAreNotRedacted() {
 
 func testFormatAttrsRedactsTheValueNotTheKey() {
     def attrs as map of string to string init {"user": "router", "password": "hunter2"};
-    testing.assertEqual(formatAttrs($attrs), " user=router password=<redacted>");
+    testing.assertEqual(formatAttrsFor("/x/add", $attrs), " user=router password=<redacted>");
 }
 
 func testLoggedValuePassesThroughOrdinaryValues() {
-    testing.assertEqual(loggedValue("address", "192.168.88.1/24"), "192.168.88.1/24");
-    testing.assertEqual(loggedValue("password", "hunter2"), "<redacted>");
+    testing.assertEqual(
+        loggedValueFor("/ip/address/add", "address", "192.168.88.1/24"),
+        "192.168.88.1/24");
+    testing.assertEqual(loggedValueFor("/user/add", "password", "hunter2"), "<redacted>");
 }
 
 func testTruthyWordAcceptsAffirmatives() {
@@ -659,4 +661,173 @@ func failDialWithCA() {
 
 func testConnectWithCAReachesTheDial() {
     testing.assertThrows("failDialWithCA", "net");
+}
+
+func testFakeRouterRoundTrip() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        "/interface",
+        [{".id": "*1", "name": "ether1"}, {".id": "*2", "name": "ether2"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    testing.assertEqual(idByName($c, "/interface", "ether2"), "*2");
+    testing.assertEqual(add($c, "/interface/bridge", {"name": "br"}), "*F1");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/interface/print ?name=ether2"));
+    testing.assertTrue(fakeSaw($log, "/interface/bridge/add =name=br"));
+}
+
+func testFindRowByFieldNeverMatchesEmptyOrAbsent() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "chain": "input"},
+        {".id": "*2", "comment": ""},
+        {".id": "*3", "comment": "drop all"}
+    ];
+    testing.assertEqual(len(findRowByField($rows, "comment", "")), 0);
+    testing.assertEqual(rowValue(findRowByField($rows, "comment", "drop all"), ".id"), "*3");
+}
+
+func testRequiredIdByCommentRefusesEmptyBeforeIo() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        "/ip/firewall/filter",
+        [{".id": "*1", "chain": "input", "action": "accept"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        removeFirewallRuleByComment($c, "");
+    } catch (e) {
+        $got = $e.kind;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($got, "routeros");
+    testing.assertFalse(fakeSaw($log, "/ip/firewall/filter/remove"));
+}
+
+func testRequiredIdByCommentFiltersOnTheRouter() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        "/ip/firewall/filter",
+        [{".id": "*1", "chain": "input"}, {".id": "*2", "comment": "drop all"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    removeFirewallRuleByComment($c, "drop all");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/ip/firewall/filter/print =.proplist=.id,comment ?comment=drop all"));
+    testing.assertTrue(fakeSaw($log, "/ip/firewall/filter/remove =.id=*2"));
+}
+
+func testFindByNameEmptySendsNothing() {
+    def f as Fake init fakeStart(fakeRouter());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(idByName($c, "/interface", ""), "");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertFalse(fakeSaw($log, "/interface/print"));
+}
+
+func testRemoveManyBatchesIds() {
+    def ids as list of string init [];
+    for (def i in 1..251) {
+        $ids[] = "*" + convert.toString($i);
+    }
+    def f as Fake init fakeStart(fakeRouter());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(removeMany($c, "/ip/firewall/connection", $ids), 250);
+    def log as list of string init fakeLog($c, $f);
+    def removes as int init 0;
+    for (def s in $log) {
+        if (strings.startsWith($s, "/ip/firewall/connection/remove =.id=")) {
+            $removes = $removes + 1;
+        }
+    }
+    testing.assertEqual($removes, 3);
+    testing.assertTrue(fakeSaw($log, "/ip/firewall/connection/remove =.id=*1,*2,"));
+}
+
+func failEnsurePortSpecLoneDash() {
+    ensurePortSpec("-");
+}
+
+func failEnsurePortSpecEmptyEntry() {
+    ensurePortSpec("80,,443");
+}
+
+func failEnsurePortSpecTooHigh() {
+    ensurePortSpec("99999");
+}
+
+func failEnsurePortSpecZero() {
+    ensurePortSpec("0");
+}
+
+func failEnsurePortSpecBackwards() {
+    ensurePortSpec("9000-8000");
+}
+
+func testEnsurePortSpecRejectsMalformedEntries() {
+    testing.assertThrows("failEnsurePortSpecLoneDash", "routeros");
+    testing.assertThrows("failEnsurePortSpecEmptyEntry", "routeros");
+    testing.assertThrows("failEnsurePortSpecTooHigh", "routeros");
+    testing.assertThrows("failEnsurePortSpecZero", "routeros");
+    testing.assertThrows("failEnsurePortSpecBackwards", "routeros");
+    ensurePortSpec("1-65535,80");
+}
+
+func failEnsureNameNewline() {
+    ensureName("a\nb", "bridge");
+}
+
+func failEnsureNameTab() {
+    ensureName("a\tb", "bridge");
+}
+
+func testEnsureNameRejectsControlChars() {
+    testing.assertThrows("failEnsureNameNewline", "routeros");
+    testing.assertThrows("failEnsureNameTab", "routeros");
+}
+
+func failEnsureIpv4OnV6() {
+    ensureIpv4Address("2001:db8::1", "gateway");
+}
+
+func testEnsureIpv4AddressRejectsV6() {
+    testing.assertThrows("failEnsureIpv4OnV6", "routeros");
+    ensureIpv4Address("192.0.2.1", "gateway");
+}
+
+func testMoreSecretKeysAreRedacted() {
+    testing.assertTrue(isSecretKey("preshared-key"));
+    testing.assertTrue(isSecretKey("tcp-md5-key"));
+    testing.assertTrue(isSecretKey("pin"));
+    testing.assertTrue(isSecretKey("contents"));
+    testing.assertTrue(isSecretKey("authentication-key"));
+    testing.assertFalse(isSecretKey("public-key"));
+    testing.assertFalse(isSecretKey("key-usage"));
+    testing.assertFalse(isSecretKey("key"));
+}
+
+func testPathSecretsAreRedacted() {
+    testing.assertEqual(
+        formatAttrsFor("/container/envs/add", {"list": "db", "key": "PW", "value": "hunter2"}),
+        " list=db key=PW value=<redacted>");
+    testing.assertEqual(
+        formatAttrsFor("/ip/dhcp-server/option/add", {"value": "0x01"}),
+        " value=0x01");
+    testing.assertEqual(
+        formatAttrsFor("/snmp/community/add", {"name": "s3cret", "read-access": "yes"}),
+        " name=<redacted> read-access=yes");
+    testing.assertEqual(
+        loggedValueFor("/file/add", "contents", "-----BEGIN PRIVATE KEY-----"),
+        "<redacted>");
+}
+
+func testQueryWordsOnSecretsAreRedacted() {
+    testing.assertEqual(formatQueriesFor("/snmp/community", ["?name=s3cret"]), " ?name=<redacted>");
+    testing.assertEqual(
+        formatQueriesFor("/ppp/secret", ["?password=x", "?name=bob", "?#|"]),
+        " ?password=<redacted> ?name=bob ?#|");
+    testing.assertEqual(formatQueriesFor("/interface", ["?name=ether1"]), " ?name=ether1");
 }

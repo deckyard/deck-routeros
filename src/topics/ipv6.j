@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - IPv6: the stack switch, addresses, neighbor discovery.
 # Spliced into routeros.j via include - not a standalone module.
@@ -248,11 +248,13 @@ export func addIpv6AddressWith(
  * Remove a static IPv6 address.
  *
  * Dynamic addresses (link-local, SLAAC, DHCPv6-PD) are refused; remove
- * what creates them instead. The address is matched as text, so pass it
- * exactly as `ipv6Addresses` reports it.
+ * what creates them instead. The address is compared by value (letter
+ * case and zero compression do not matter). An EUI-64 address is also
+ * found by the prefix it was added with (`addIpv6AddressWith` with
+ * `eui64`), since the router stores the computed address.
  *
  * @param c {Client}    an open client
- * @param cidr {string} address in CIDR form, as RouterOS stores it
+ * @param cidr {string} address in CIDR form
  * @throws {Error} kind "routeros" when it is not IPv6 CIDR, not configured,
  *                 or dynamic
  * @example
@@ -262,7 +264,7 @@ export func removeIpv6Address(c as Client, cidr as string) {
     ensureIpv6Cidr($cidr);
     def target as string init strings.trim($cidr);
     def rows as list of map of string to string init getAll($c, IPV6_ADDRESS_PATH);
-    def row as map of string to string init findRowByField($rows, "address", $target);
+    def row as map of string to string init ipv6AddressRow($rows, $target);
     if (len($row) == 0) {
         raiseError("the IPv6 address " + $target + " is not configured on this router");
     }
@@ -375,6 +377,61 @@ func setIpv6NdEntry(c as Client, interfaceName as string, attrs as map of string
     def id as string init rowValue($row, ".id");
     set($c, IPV6_ND_PATH, $id, $attrs);
     return $id;
+}
+
+/**
+ * Find the address row for a CIDR: the same address and prefix by value,
+ * else an EUI-64 row inside that network.
+ *
+ * @param rows {list of map of string to string} "/ipv6/address" rows
+ * @param cidr {string} the address in CIDR form
+ * @return {map of string to string} the row, or an empty map
+ * @internal
+ */
+func ipv6AddressRow(rows as list of map of string to string, cidr as string) {
+    for (def row in $rows) {
+        if (sameInterfaceAddress(rowValue($row, "address"), $cidr)) {
+            return $row;
+        }
+    }
+    for (def row in $rows) {
+        if (rowBool($row, "eui-64") and sameNetwork(rowValue($row, "address"), $cidr)) {
+            return $row;
+        }
+    }
+    def none as map of string to string init {};
+    return $none;
+}
+
+/**
+ * The canonical text of an interface address: the address as `ipnet`
+ * prints it (IPv6 lower-case and compressed) plus the prefix length.
+ * Unlike `canonicalNetwork` the host bits are kept.
+ *
+ * @param cidr {string} "address/prefix"
+ * @return {string} the canonical form, "" when it does not parse
+ * @internal
+ */
+func canonicalInterfaceAddress(cidr as string) {
+    def parts as list of string init strings.split(strings.trim($cidr), "/");
+    if (len($parts) != 2 or canonicalNetwork($cidr) == "") {
+        return "";
+    }
+    return ipnet.toString(ipnet.parseAddress($parts[0])) + "/" +
+        convert.toString(convert.toInt($parts[1]));
+}
+
+/**
+ * Whether two interface addresses are the same address and prefix.
+ *
+ * @param a {string} one "address/prefix"
+ * @param b {string} the other
+ * @return {bool} true when both parse and are equal
+ * @internal
+ */
+func sameInterfaceAddress(a as string, b as string) {
+    def ca as string init canonicalInterfaceAddress($a);
+    return $ca != "" and $ca == canonicalInterfaceAddress($b);
 }
 
 /**

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the firewall topic.
 # Spliced into routeros_test.j via include - run with:
@@ -241,4 +241,71 @@ func failBlockAddressEmpty() {
 
 func testBlockAddressRejectsEmptyAddress() {
     testing.assertThrows("failBlockAddressEmpty", "routeros");
+}
+
+func testInputAcceptSweepSparesOtherChains() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        FIREWALL_PATH,
+        [
+            {".id": "*1", "chain": "input", "action": "accept", "comment": "sstp: server"},
+            {
+                ".id": "*2",
+                "chain": "forward",
+                "action": "drop",
+                "comment": "sstp: server clients may not reach LAN"
+            }
+        ]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    testing.assertEqual(removeInputAcceptsByPrefix($c, "sstp: server"), 1);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/ip/firewall/filter/remove =.id=*1"));
+    testing.assertFalse(fakeSaw($log, "/ip/firewall/filter/remove =.id=*1,*2"));
+    testing.assertFalse(fakeSaw($log, "/ip/firewall/filter/remove =.id=*2"));
+}
+
+func failInputAcceptSweepEmptyPrefix() {
+    removeInputAcceptsByPrefix(offlineClient(), "");
+}
+
+func testInputAcceptSweepRefusesEmptyPrefix() {
+    testing.assertThrows("failInputAcceptSweepEmptyPrefix", "routeros");
+}
+
+func testEnsureInputAcceptUpdatesAStalePort() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        FIREWALL_PATH,
+        [
+            {
+                ".id": "*1",
+                "chain": "input",
+                "action": "accept",
+                "protocol": "tcp",
+                "dst-port": "443",
+                "comment": "sstp: server"
+            }
+        ]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    ensureInputAccept($c, "sstp: server", {"protocol": "tcp", "dst-port": "8443"});
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/ip/firewall/filter/set =dst-port=8443 =.id=*1"));
+    testing.assertFalse(fakeSaw($log, "/ip/firewall/filter/add"));
+}
+
+func testEnsureInputAcceptLeavesAMatchingRule() {
+    def row as map of string to string init {
+        "chain": "input",
+        "action": "accept",
+        "protocol": "udp",
+        "dst-port": "1701"
+    };
+    testing.assertEqual(len(inputAcceptChanges($row, {"protocol": "udp", "dst-port": "1701"})), 0);
+    def moved as map of string to string init inputAcceptChanges(
+        $row,
+        {"protocol": "udp", "dst-port": "1702"});
+    testing.assertEqual($moved["dst-port"], "1702");
+    testing.assertEqual(len($moved), 1);
 }

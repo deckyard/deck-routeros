@@ -57,7 +57,8 @@ for (def r in $regs) {
 
 - On a classic-wireless board `setupWifi` fails with "WiFi interface
   not found". Probe with `wifiInterfaces` and `wirelessInterfaces` when
-  the hardware is unknown; both also return empty on a read error.
+  the hardware is unknown; only a missing menu reads as empty, a dropped
+  connection is thrown.
 - `setupWifi` enables WPA2/WPA3 mixed mode. For a legacy client that
   fails on WPA3 transition mode, set
   `security.authentication-types=wpa2-psk` with the generic `set`.

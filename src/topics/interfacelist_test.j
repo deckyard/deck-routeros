@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the interfacelist topic.
 # Spliced into routeros_test.j via include - run with:
@@ -48,4 +48,20 @@ func failAddToInterfaceListSpacedList() {
 
 func testAddToInterfaceListRejectsSpacedList() {
     testing.assertThrows("failAddToInterfaceListSpacedList", "routeros");
+}
+
+func testInterfaceListMembersFiltersOnTheRouter() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        INTERFACE_LIST_MEMBER_PATH,
+        [
+            {".id": "*1", "list": "WAN", "interface": "ether1"},
+            {".id": "*2", "list": "LAN", "interface": "brlan"}
+        ]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as list of string init interfaceListMembers($c, "WAN");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual(len($got), 1);
+    testing.assertTrue(fakeSaw($log, "/interface/list/member/print ?list=WAN"));
 }

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - diagnostics: ping, traceroute, bandwidth test, fetch, e-mail.
 # Spliced into routeros.j via include - not a standalone module.
@@ -341,9 +341,32 @@ export func traceroute(c as Client, host as string) {
         $c,
         TRACEROUTE_COMMAND,
         {"address": $target, "count": "1"});
+    return tracerouteHops($rows);
+}
+
+/**
+ * Fold traceroute reply rows into hops.
+ *
+ * The API repeats the whole hop table on every update, each copy tagged
+ * with a growing `.section`; only the last copy is the result. Rows
+ * without `.section` are taken as one table.
+ *
+ * @param rows {list of map of string to string} the reply rows, in order
+ * @return {list of TracerouteHop} the hops of the last section
+ * @internal
+ */
+func tracerouteHops(rows as list of map of string to string) {
+    def last as string init "";
+    for (def row in $rows) {
+        if (maps.has($row, ".section")) {
+            $last = $row[".section"];
+        }
+    }
     def out as list of TracerouteHop init [];
     for (def row in $rows) {
-        $out[] = tracerouteHopFromRow($row);
+        if (rowValue($row, ".section") == $last) {
+            $out[] = tracerouteHopFromRow($row);
+        }
     }
     return $out;
 }
@@ -355,47 +378,45 @@ export func traceroute(c as Client, host as string) {
  * webhook, a REST call, a "what is my IP" service. For a large download
  * to storage use `downloadFile`.
  *
+ * An https URL is fetched with `check-certificate=yes-without-crl`: the
+ * server's certificate must chain to a CA in the router's certificate
+ * store, or the fetch fails (RouterOS's own default skips the check).
+ *
  * @param c {Client} an open client
- * @param url {string} URL starting with "http"
+ * @param url {string} an "http://" or "https://" URL
  * @return {FetchResult} status and the response body
- * @throws {Error} kind "routeros" when the URL does not start with "http",
- *         kind "mikrotik" when the fetch fails
+ * @throws {Error} kind "routeros" on a URL without an http:// or https://
+ *         prefix or with spaces, kind "mikrotik" when the fetch fails
+ *         (an unverifiable certificate included)
  * @example
  *   def r as mt.FetchResult init mt.fetchUrl($c, "https://ifconfig.co/ip");
  *   if ($r.ok) { io.printf("public IP: %s\n", $r.data); }
  */
 export func fetchUrl(c as Client, url as string) {
-    def target as string init strings.trim($url);
-    if ($target == "" or not strings.startsWith($target, "http")) {
-        raiseError("the fetch URL must be an http(s) URL");
-    }
     def rows as list of map of string to string init apiTalk(
         $c,
         FETCH_COMMAND,
-        {"url": $target, "output": "user", "mode": "https"});
+        fetchAttrs($url, {"output": "user"}));
     return fetchResultFromRow(mergeRows($rows));
 }
 
 /**
  * Download a URL to a file on the router's storage.
  *
+ * The certificate of an https server is checked as for `fetchUrl`.
+ *
  * @param c {Client} an open client
- * @param url {string} URL starting with "http"
+ * @param url {string} an "http://" or "https://" URL
  * @param fileName {string} destination file name on the router, no spaces
  * @return {FetchResult} status and amount downloaded
  * @throws {Error} kind "routeros" on a bad URL or file name, kind
  *         "mikrotik" when the download fails
  */
 export func downloadFile(c as Client, url as string, fileName as string) {
-    def target as string init strings.trim($url);
-    if ($target == "" or not strings.startsWith($target, "http")) {
-        raiseError("the download URL must be an http(s) URL");
-    }
+    def attrs as map of string to string init fetchAttrs($url, {});
     ensureName($fileName, "file");
-    def rows as list of map of string to string init apiTalk(
-        $c,
-        FETCH_COMMAND,
-        {"url": $target, "dst-path": $fileName, "mode": "https"});
+    $attrs["dst-path"] = $fileName;
+    def rows as list of map of string to string init apiTalk($c, FETCH_COMMAND, $attrs);
     return fetchResultFromRow(mergeRows($rows));
 }
 
@@ -532,6 +553,45 @@ export func sendEmail(c as Client, recipient as string, subject as string, body 
         raiseError("the recipient must not be empty");
     }
     apiRun($c, EMAIL_PATH + "/send", {"to": $target, "subject": $subject, "body": $body});
+}
+
+/**
+ * Validate a fetch URL and build the `/tool/fetch` attributes.
+ *
+ * The scheme comes from the URL; `check-certificate=yes-without-crl`
+ * makes an https fetch fail on a certificate the router cannot verify
+ * (RouterOS defaults to no check).
+ *
+ * @param url {string} the URL, trimmed here
+ * @param extra {map of string to string} further attributes
+ * @return {map of string to string} `url`, `check-certificate` and `extra`
+ * @throws {Error} kind "routeros" without an http:// or https:// prefix,
+ *         with nothing after it, or with whitespace inside
+ * @internal
+ */
+func fetchAttrs(url as string, extra as map of string to string) {
+    def target as string init strings.trim($url);
+    def lower as string init strings.lower($target);
+    def rest as string init "";
+    if (strings.startsWith($lower, "https://")) {
+        $rest = $target[8..];
+    } elseif (strings.startsWith($lower, "http://")) {
+        $rest = $target[7..];
+    } else {
+        raiseError("the fetch URL must start with http:// or https://");
+    }
+    if ($rest == "" or strings.contains($target, " ") or strings.contains($target, "\t") or
+        strings.contains($target, "\n")) {
+        raiseError("the fetch URL \"" + $target + "\" has no host or contains whitespace");
+    }
+    def attrs as map of string to string init {
+        "url": $target,
+        "check-certificate": "yes-without-crl"
+    };
+    for (def k in maps.keys($extra)) {
+        $attrs[$k] = $extra[$k];
+    }
+    return $attrs;
 }
 
 /**

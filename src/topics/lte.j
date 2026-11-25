@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - LTE / cellular: a mobile-broadband uplink.
 # Spliced into routeros.j via include - not a standalone module.
@@ -32,7 +32,7 @@ export def struct LteInterface {
  * The measured state of an LTE modem.
  *
  * @field status {string}             registration status ("registered", ...)
- * @field registered {bool}           the status contains "registered"
+ * @field registered {bool}           registered at home or roaming
  * @field operator {string}           the mobile network operator
  * @field accessTechnology {string}   "lte" / "5g" / "hspa" / ... as reported
  * @field signalStrength {string}     RSSI as reported (dBm)
@@ -54,20 +54,15 @@ export def struct LteStatus {
 /**
  * List the LTE interfaces.
  *
- * Any read error gives an empty list, so a router without a modem reads
- * as empty - and so does a dropped connection.
+ * A router without the LTE menu (no modem package) reads as empty; any
+ * other failure (a dropped connection, a timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of LteInterface} all LTE interfaces
  */
 export func lteInterfaces(c as Client) {
     def out as list of LteInterface init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, LTE_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, LTE_PATH);
     for (def row in $rows) {
         $out[] = lteFromRow($row);
     }
@@ -168,9 +163,23 @@ func lteFromRow(row as map of string to string) {
 }
 
 /**
+ * Whether an LTE registration status means attached to a network: home
+ * ("registered") or roaming. "not registered", "searching" and
+ * "denied" are not.
+ *
+ * @param status {string} the monitor's `registration-status`
+ * @return {bool} true when registered at home or roaming
+ * @internal
+ */
+func lteRegistered(status as string) {
+    def v as string init strings.lower(strings.trim($status));
+    return $v == "registered" or $v == "roaming" or strings.startsWith($v, "registered ");
+}
+
+/**
  * Fold the merged monitor rows into an LteStatus.
  *
- * `registered` is computed here: the status contains "registered".
+ * `registered` is computed here: "registered" or "roaming" (`lteRegistered`).
  *
  * @param row {map of string to string} the merged monitor rows
  * @return {LteStatus} the typed live state
@@ -180,7 +189,7 @@ func lteStatusFromRow(row as map of string to string) {
     def status as string init rowValue($row, "registration-status");
     return LteStatus{
         status: $status,
-        registered: strings.contains($status, "registered"),
+        registered: lteRegistered($status),
         operator: rowValue($row, "current-operator"),
         accessTechnology: rowValue($row, "access-technology"),
         signalStrength: rowValue($row, "rssi"),

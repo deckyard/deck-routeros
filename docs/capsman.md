@@ -24,9 +24,9 @@ RouterOS™ has two incompatible generations:
   ([wifi.md](wifi.md)).
 
 This topic reports and toggles whichever the router has, trying v2
-first. `CapsmanStatus.version` is 2, 1, or 0 for neither. Read errors
-count as "menu absent", so a dropped connection also reads as version 0
-and an empty `managedAps`.
+first. `CapsmanStatus.version` is 2, 1, or 0 for neither. A menu the
+router answers with a `!trap` counts as absent; any other failure, such
+as a dropped connection, is thrown.
 
 ## Example
 

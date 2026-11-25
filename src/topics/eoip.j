@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - EoIP tunnels: a layer-2 wire between two MikroTiks.
 # Spliced into routeros.j via include - not a standalone module.
@@ -81,12 +81,13 @@ export func eoipTunnelByName(c as Client, name as string) {
  *
  * @param c {Client}             an open client
  * @param name {string}          tunnel interface name (e.g. "eoipbranch")
- * @param remoteAddress {string} other router's IP address
+ * @param remoteAddress {string} other router's IPv4 address
  * @param tunnelId {int}      shared id, 0-65535, equal on both ends
  * @return {string} the RouterOS id of the new tunnel
  * @throws {Error} kind "routeros" on an empty or spaced name, a remote that
- *                 is not an IP address, an id outside 0-65535, a taken
- *                 name, or an existing tunnel with the same remote and id
+ *                 is not an IPv4 address (EoIPv6 is another menu), an id
+ *                 outside 0-65535, a taken name, or an existing tunnel
+ *                 with the same remote and id
  * @example
  *   # site A (10.100.0.1 via WireGuard):
  *   mt.addEoipTunnel($c, "eoipbranch", "10.100.0.2", 7);
@@ -181,12 +182,15 @@ func eoipAdd(
     secret as string) {
     ensureName($name, "EoIP tunnel");
     def remote as string init strings.trim($remoteAddress);
-    ensureIpAddress($remote);
+    ensureIpv4Address($remote, "remote address");
     ensureTunnelId($tunnelId);
     if (idByName($c, EOIP_PATH, $name) != "") {
         raiseError("the EoIP tunnel \"" + $name + "\" already exists");
     }
-    def rows as list of map of string to string init getAll($c, EOIP_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        EOIP_PATH,
+        ["?remote-address=" + $remote]);
     def clash as map of string to string init findEoipRow($rows, $remote, $tunnelId);
     if (len($clash) > 0) {
         raiseError("tunnel id " + convert.toString($tunnelId) + " to " + $remote +

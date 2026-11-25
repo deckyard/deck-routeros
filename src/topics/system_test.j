@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the system topic.
 # Spliced into routeros_test.j via include - run with:
@@ -168,4 +168,53 @@ func failUpdateDeviceModeUnknown() {
 
 func testUpdateDeviceModeRejectsUnknownMode() {
     testing.assertThrows("failUpdateDeviceModeUnknown", "routeros");
+}
+
+func failRebootNeverConnected() {
+    reboot(offlineClient());
+}
+
+func failInstallUpdatesNeverConnected() {
+    installUpdates(offlineClient());
+}
+
+# A session that never connected sent nothing: the reboot must not be
+# reported as done (every transport error was swallowed before).
+func testRebootNeverConnectedThrows() {
+    testing.assertThrows("failRebootNeverConnected", "closed");
+    testing.assertThrows("failInstallUpdatesNeverConnected", "closed");
+}
+
+func testDroppedAfterSend() {
+    testing.assertTrue(droppedAfterSend("closed", "", false));
+    testing.assertTrue(droppedAfterSend("mikrotik", "fatal", false));
+    testing.assertTrue(droppedAfterSend("net", "", true));
+    testing.assertFalse(droppedAfterSend("net", "", false));
+    testing.assertFalse(droppedAfterSend("mikrotik", "trap", false));
+    testing.assertFalse(droppedAfterSend("timeout", "", false));
+    testing.assertFalse(droppedAfterSend("limit", "", false));
+}
+
+# The router dropping the connection after reading the reboot is success.
+func testRebootClosedByRouterIsSuccess() {
+    def f as Fake init fakeStart(fakeWithClose(fakeRouter(), "/system/reboot"));
+    def c as Client init fakeClient($f);
+    reboot($c);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/system/reboot"));
+}
+
+func failRebootRefused() {
+    def f as Fake init fakeStart(fakeWithTrap(
+        fakeRouter(),
+        "/system/reboot",
+        "",
+        "not enough permissions"));
+    def c as Client init fakeClient($f);
+    defer fakeLog($c, $f);
+    reboot($c);
+}
+
+func testRebootRefusedIsThrown() {
+    testing.assertThrows("failRebootRefused", "mikrotik");
 }

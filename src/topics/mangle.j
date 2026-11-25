@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - mangle: marking traffic for queues and policy routing.
 # Spliced into routeros.j via include - not a standalone module.
@@ -87,8 +87,9 @@ export func mangleRules(c as Client) {
  * matcher's chain is kept (CHAIN_PREROUTING suits queue marks); its
  * action and comment are replaced. The rules are commented
  * "mark: <markName> (connections)" and "mark: <markName> (packets)".
- * Idempotent by mark name: when the packet rule exists, its id is
- * returned and nothing is added.
+ * Idempotent by mark name, rule by rule: an existing rule (found by its
+ * comment) is kept unchanged and only a missing one is added, so a run
+ * that failed between the two is completed by calling it again.
  *
  * @param c {Client} an open client
  * @param markName {string} packet mark to create, e.g. "voip"
@@ -106,14 +107,16 @@ export func setupPacketMark(c as Client, markName as string, matcher as Firewall
     ensureName($markName, "packet mark");
     def pair as list of map of string to string init packetMarkRuleAttrs($matcher, $markName);
     def rows as list of map of string to string init getAll($c, MANGLE_PATH);
+    if (len(findRowByField($rows, "comment", $pair[0]["comment"])) == 0) {
+        add($c, MANGLE_PATH, $pair[0]);
+    }
     def existing as map of string to string init findRowByField(
         $rows,
         "comment",
-        "mark: " + $markName + " (packets)");
+        $pair[1]["comment"]);
     if (len($existing) > 0) {
         return rowValue($existing, ".id");
     }
-    add($c, MANGLE_PATH, $pair[0]);
     return add($c, MANGLE_PATH, $pair[1]);
 }
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the bonding topic.
 # Spliced into routeros_test.j via include - run with:
@@ -154,4 +154,18 @@ func failAddFailoverBondForeignPrimary() {
 
 func testAddFailoverBondRejectsForeignPrimary() {
     testing.assertThrows("failAddFailoverBondForeignPrimary", "routeros");
+}
+
+func testFailoverBondTrimsPrimary() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        INTERFACE_PATH,
+        [{".id": "*1", "name": "ether1"}, {".id": "*2", "name": "ether2"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    addFailoverBond($c, "bonduplink", "ether1,ether2", " ether1 ");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/interface/bonding/add =name=bonduplink =slaves=ether1,ether2 =mode=active-backup =primary=ether1"));
 }

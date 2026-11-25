@@ -31,15 +31,15 @@ Guide: [Core](core.md).
 | `remove(c, path, id)` | | delete by id (RouterOS has no separate delete) |
 | `set(c, path, id, attrs)` | | change properties of an item |
 | `update(c, path, id, attrs)` | | synonym of `set` |
-| `findByName(c, path, name)` | `map of string to string` | first item whose `name` matches, filtered on the router; empty map on a miss |
+| `findByName(c, path, name)` | `map of string to string` | first item whose `name` matches, filtered on the router; empty map on a miss or an empty name (nothing sent) |
 | `idByName(c, path, name)` | `string` | id of the item with that `name`, `""` on a miss |
 | `removeByName(c, path, name)` | | delete by `name`; `routeros` error when absent |
 | `enable(c, path, id)` | | set `disabled=no` |
 | `disable(c, path, id)` | | set `disabled=yes`; the item stays but has no effect |
 | `moveRule(c, path, id, beforeId)` | | move above `beforeId`; `""` = bottom; a self-move is rejected |
-| `moveRuleToTop(c, path, id)` | | reads the list; no-op when already first; `routeros` error on an empty list |
+| `moveRuleToTop(c, path, id)` | | reads the list's ids; no-op when already first; `routeros` error on an empty list |
 | `moveRuleToBottom(c, path, id)` | | same as `moveRule` with `""` |
-| `setVerbose(c, enabled)` | `Client` | returns a copy with command logging on/off: `$c = mt.setVerbose($c, true);` |
+| `setVerbose(c, enabled)` | `Client` | returns a copy with command logging on/off: `$c = mt.setVerbose($c, true);`; secrets (passwords, keys, PSKs, PINs, file contents, container env values, SNMP community names) print as `<redacted>`, in query words too |
 | `isVerbose(c)` | `bool` | whether the client logs commands |
 
 ### `Client`
@@ -121,7 +121,7 @@ Guide: [Ethernet ports](ethernet.md).
 | `ethernetPorts(c)` | `list of EthernetPort` | configuration of every port |
 | `ethernetPortByName(c, name)` | `EthernetPort` | `routeros` error when absent |
 | `linkStatus(c, name)` | `LinkStatus` | measured now (`monitor once`): up, rate, duplex |
-| `forceEthernetLink(c, name, speed, fullDuplex)` | | auto-negotiation off; speed `10Mbps` `100Mbps` `1Gbps` `2.5Gbps` `5Gbps` `10Gbps`; force both ends alike |
+| `forceEthernetLink(c, name, speed, fullDuplex)` | | auto-negotiation off; speed `10Mbps` `100Mbps` `1Gbps` `2.5Gbps` `5Gbps` `10Gbps` (sent as the 7.12+ link mode, e.g. `100M-baseT-full`, falling back to `speed` + `full-duplex` on a refusal) or a 7.12+ link mode like `1G-baseX`; half duplex up to 1G only; force both ends alike |
 | `autoNegotiateEthernet(c, name)` | | back to the default |
 | `setEthernetMtu(c, name, mtu)` | | 68-65535; the port l2mtu caps it (router error above) |
 | `setPoe(c, name, mode)` | | `auto-on`, `forced-on`, `off`; refuses ports without PoE |
@@ -167,7 +167,7 @@ Guide: [LTE / cellular](lte.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `lteInterfaces(c)` | `list of LteInterface` | empty on any read error: no modem, or a dropped connection |
+| `lteInterfaces(c)` | `list of LteInterface` | empty without a modem (the menu `!trap`s); other failures are thrown |
 | `lteStatus(c, name)` | `LteStatus` | measured now (`monitor once`): registration, operator, signal |
 | `setLteApn(c, interfaceName, apn)` | | creates/updates APN profile `routeros-<interface>` and binds it; APN must not be empty |
 | `enableLte(c, name)` | | |
@@ -197,7 +197,7 @@ The measured state of an LTE modem.
 | Field | Meaning |
 |---|---|
 | `status as string` | registration status ("registered", ...) |
-| `registered as bool` | the status contains "registered" |
+| `registered as bool` | the status is "registered" or "roaming" ("not registered" is false) |
 | `operator as string` | the mobile network operator |
 | `accessTechnology as string` | "lte" / "5g" / "hspa" / ... as reported |
 | `signalStrength as string` | RSSI as reported (dBm) |
@@ -261,9 +261,9 @@ Guide: [Bridges](bridges.md).
 | `bridgeVlans(c)` | `list of BridgeVlan` | the bridge VLAN table |
 | `enableVlanFiltering(c, bridge)` | | enable last: with an incomplete VLAN table it drops untagged traffic, your own session included |
 | `disableVlanFiltering(c, bridge)` | | |
-| `addBridgeVlan(c, bridge, vlanId, tagged, untagged)` | `string` | VLAN 1-4094; port lists comma-separated, `""` for none; idempotent by bridge and VLAN, an existing entry is not changed |
+| `addBridgeVlan(c, bridge, vlanId, tagged, untagged)` | `string` | VLAN 1-4094; port lists comma-separated, `""` for none; idempotent by bridge and VLAN: a configured entry holding the id (alone, in a list or a range) is returned unchanged; dynamic entries do not count |
 | `setPortPvid(c, bridge, port, pvid)` | | access-port VLAN, 1-4094; the port must be on the bridge |
-| `removeBridgeVlan(c, bridge, vlanId)` | | `routeros` error when no such entry |
+| `removeBridgeVlan(c, bridge, vlanId)` | | `routeros` error when no configured entry holds the id, or when its entry holds other VLANs too (edit `vlan-ids` with `set`) |
 
 | Constant | Value |
 |---|---|
@@ -315,8 +315,8 @@ Guide: [Switch chip (hardware offload)](switch.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `switchChips(c)` | `list of SwitchChip` | Empty on a board without a switch chip, and on any read error. |
-| `switchHosts(c)` | `list of SwitchHost` | The whole hardware MAC table. LAN MACs here mean the chip forwards their traffic. Empty on any read error. |
+| `switchChips(c)` | `list of SwitchChip` | Empty on a board without a switch chip or menu; other failures are thrown. |
+| `switchHosts(c)` | `list of SwitchHost` | The whole hardware MAC table. LAN MACs here mean the chip forwards their traffic. Empty without the menu; other failures are thrown. |
 
 | Constant | Value |
 |---|---|
@@ -382,15 +382,15 @@ Guide: [Wireless (WiFi)](wireless.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `wirelessInterfaces(c)` | `list of WirelessInterface` | Radios and virtual APs. Empty without the classic menu (wifiwave2 hardware) and on any read error. |
+| `wirelessInterfaces(c)` | `list of WirelessInterface` | Radios and virtual APs. Empty without the classic menu (wifiwave2 hardware); other failures are thrown. |
 | `setupWifiAccessPoint(c, interfaceName, ssid, password)` |  | SSID, mode ap-bridge, WPA2-PSK key in profile `routeros-<interface>` (never `default`), enable. Idempotent. |
-| `setWifiSsid(c, interfaceName, ssid)` |  | SSID 1-32 characters. Disconnects clients. |
-| `setWifiPassword(c, interfaceName, password)` |  | Passphrase 8-63 characters. Moves the interface off `default` to its own profile first. Disconnects clients. |
+| `setWifiSsid(c, interfaceName, ssid)` |  | SSID 1-32 bytes (UTF-8). Disconnects clients. |
+| `setWifiPassword(c, interfaceName, password)` |  | Passphrase 8-63 printable ASCII characters. An interface on `default`, none, or a profile shared with another interface moves to its own WPA2-PSK profile; a profile it uses alone keeps its settings, only `wpa2-pre-shared-key` changes. Disconnects clients. |
 | `addVirtualAp(c, masterInterface, name, ssid, password)` | `string` | Second SSID with its own profile on the same radio (guest WiFi). Returns the id. |
 | `removeVirtualAp(c, name)` |  | Refuses a physical radio. Keeps the security profile. |
 | `enableWifi(c, interfaceName)` |  | Throws when the interface is unknown. |
 | `disableWifi(c, interfaceName)` |  | The network disappears from the air. |
-| `wifiClients(c)` | `list of WifiClient` | Connected clients with signal and rates. Empty without the classic menu and on any read error. |
+| `wifiClients(c)` | `list of WifiClient` | Connected clients with signal and rates. Empty without the classic menu; other failures are thrown. |
 
 | Constant | Value |
 |---|---|
@@ -435,12 +435,12 @@ Guide: [Modern WiFi (wifiwave2 / ax)](wifi.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `wifiInterfaces(c)` | `list of WifiInterface` | Radios and virtual APs. Empty without `/interface/wifi` and on any read error. |
+| `wifiInterfaces(c)` | `list of WifiInterface` | Radios and virtual APs. Empty without `/interface/wifi`; other failures are thrown. |
 | `setupWifi(c, interfaceName, ssid, password)` |  | Mode ap, SSID, WPA2-PSK + WPA3-PSK passphrase on the interface, enable. Idempotent. |
-| `setWifiPassphrase(c, interfaceName, password)` |  | 8-63 characters. Disconnects clients. |
+| `setWifiPassphrase(c, interfaceName, password)` |  | 8-63 printable ASCII characters. Disconnects clients. |
 | `addVirtualWifi(c, masterInterface, name, ssid, password)` | `string` | Guest SSID on the same radio, WPA2/WPA3. Returns the id. |
 | `removeVirtualWifi(c, name)` |  | Refuses a physical radio. |
-| `wifiRegistrations(c)` | `list of WifiRegistration` | Connected clients. Empty without `/interface/wifi` and on any read error. |
+| `wifiRegistrations(c)` | `list of WifiRegistration` | Connected clients. Empty without `/interface/wifi`; other failures are thrown. |
 
 | Constant | Value |
 |---|---|
@@ -480,10 +480,10 @@ Guide: [CAPsMAN™](capsman.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `capsmanStatus(c)` | `CapsmanStatus` | Tries CAPsMANv2, then legacy. `version` 0 when neither answers (read errors included). |
+| `capsmanStatus(c)` | `CapsmanStatus` | Tries CAPsMANv2, then legacy. `version` 0 when neither menu exists (`!trap`); other failures are thrown. |
 | `enableCapsman(c)` |  | Manager switch only; configuration and provisioning stay with the generic verbs. Throws without a CAPsMAN menu. |
 | `disableCapsman(c)` |  | Throws without a CAPsMAN menu. |
-| `managedAps(c)` | `list of ManagedAp` | Registered APs; empty when none or no CAPsMAN. |
+| `managedAps(c)` | `list of ManagedAp` | Registered APs; empty when none or no CAPsMAN menu; other failures are thrown. |
 
 | Constant | Value |
 |---|---|
@@ -526,8 +526,8 @@ Guide: [Firewall (filter rules)](firewall.md).
 | `withProtocol(rule, protocol)` | `FirewallRule` | tcp, udp, icmp, gre, ipip, ospf, igmp, ipsec-esp, ipsec-ah, l2tp, sctp, vrrp. |
 | `withSrcAddress(rule, address)` | `FirewallRule` | Address or CIDR; only empty or spaced values are rejected locally. |
 | `withDstAddress(rule, address)` | `FirewallRule` | Address or CIDR; only empty or spaced values are rejected locally. |
-| `withSrcPort(rule, spec)` | `FirewallRule` | "80", "80,443" or "8000-8100". Needs a protocol by `addFirewallRule`. |
-| `withDstPort(rule, spec)` | `FirewallRule` | "80", "80,443" or "8000-8100". Needs a protocol by `addFirewallRule`. |
+| `withSrcPort(rule, spec)` | `FirewallRule` | "80", "80,443" or "8000-8100"; ports 1-65535, ranges ascending. Needs a protocol by `addFirewallRule`. |
+| `withDstPort(rule, spec)` | `FirewallRule` | "80", "80,443" or "8000-8100"; ports 1-65535, ranges ascending. Needs a protocol by `addFirewallRule`. |
 | `withInInterface(rule, name)` | `FirewallRule` | Copy matching the incoming interface. |
 | `withOutInterface(rule, name)` | `FirewallRule` | Copy matching the outgoing interface. |
 | `withInInterfaceList(rule, listName)` | `FirewallRule` | Copy matching an interface list, e.g. "WAN". |
@@ -537,9 +537,9 @@ Guide: [Firewall (filter rules)](firewall.md).
 | `firewallRules(c)` | `list of FirewallRule` | All filter rules, ids set. |
 | `addFirewallRule(c, rule)` | `string` | Appends to the chain. Rejects a port match without a protocol. Returns the id. |
 | `removeFirewallRule(c, id)` |  | By id. |
-| `removeFirewallRuleByComment(c, comment)` |  | Throws when no rule carries the comment. |
-| `enableFirewallRuleByComment(c, comment)` |  | Throws when no rule carries the comment. |
-| `disableFirewallRuleByComment(c, comment)` |  | Keeps the rule; throws when no rule carries the comment. |
+| `removeFirewallRuleByComment(c, comment)` |  | Throws on an empty comment or when no rule carries it. |
+| `enableFirewallRuleByComment(c, comment)` |  | Throws on an empty comment or when no rule carries it. |
+| `disableFirewallRuleByComment(c, comment)` |  | Keeps the rule; throws on an empty comment or when no rule carries it. |
 | `moveFirewallRule(c, id, beforeId)` |  | Place `id` directly above `beforeId`; "" for the bottom. Rejects a self-move. |
 | `moveFirewallRuleByComment(c, comment, beforeComment)` |  | `moveFirewallRule` by comments; "" for the bottom. |
 | `allowService(c, protocol, port, comment)` | `string` | Input-chain accept for one port (1-65535), appended. Returns the id. |
@@ -587,7 +587,7 @@ Guide: [NAT](nat.md).
 |---|---|---|
 | `natRules(c)` | `list of NatRule` | all NAT rules, table order |
 | `addMasquerade(c, outInterface, comment)` | `string` | srcnat masquerade out of `outInterface`; idempotent per interface (existing id returned, `comment` ignored); unknown interface rejected |
-| `forwardPort(c, protocol, publicPort, toAddress, toPort, comment)` | `string` | dst-nat from any interface; `protocol` tcp or udp only, ports 1-65535, `toAddress` an IP; not idempotent; the forward chain must also accept the traffic |
+| `forwardPort(c, protocol, publicPort, toAddress, toPort, comment)` | `string` | dst-nat to the router's own addresses (`dst-address-type=local`) from any interface; `protocol` tcp or udp only, ports 1-65535, `toAddress` an IP; not idempotent; the forward chain must also accept the traffic |
 | `forwardPortOn(c, inInterface, protocol, publicPort, toAddress, toPort, comment)` | `string` | as `forwardPort`, matching only `inInterface` (use the WAN); the interface is looked up first |
 | `removeNatRule(c, id)` |  | delete by id |
 | `removeNatRuleByComment(c, comment)` |  | delete by comment |
@@ -713,9 +713,9 @@ Guide: [Connection tracking](contrack.md).
 | Function | Returns | Notes |
 |---|---|---|
 | `conntrackSettings(c)` | `ConntrackSettings` | tracking switch, table fill and capacity |
-| `connections(c)` | `list of Connection` | whole table; thousands of rows on a busy router |
-| `connectionsFor(c, address)` | `list of Connection` | connections whose src or dst contains `address` as a substring (`10.0.0.1` also matches `10.0.0.10`-`19` and `.100`-`.199`) |
-| `dropConnectionsFor(c, address)` | `int` | removes the same substring matches, so it can hit other hosts; returns the count; does not block reconnects |
+| `connections(c)` | `list of Connection` | whole table, only the `Connection` properties; thousands of rows on a busy router, kind `limit` past one reply's cap |
+| `connectionsFor(c, address)` | `list of Connection` | connections whose src or dst host is exactly `address` (IPv4; the port is ignored) |
+| `dropConnectionsFor(c, address)` | `int` | removes the same exact-host matches, up to 100 per command; returns the count; does not block reconnects |
 
 | Constant | Value |
 |---|---|
@@ -752,12 +752,12 @@ Guide: [Firewall address lists](addresslist.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `addressLists(c)` | `list of string` | distinct list names, first-seen order |
-| `addressListEntries(c, listName)` | `list of AddressListEntry` | one list's entries; empty for an unknown list |
-| `addToAddressList(c, listName, address, comment)` | `string` | IP, CIDR or DNS name; creates the list; idempotent per list and address |
+| `addressLists(c)` | `list of string` | distinct list names, first-seen order; reads only the `list` column |
+| `addressListEntries(c, listName)` | `list of AddressListEntry` | one list's entries, filtered on the router; empty for an unknown list |
+| `addToAddressList(c, listName, address, comment)` | `string` | IPv4, CIDR or DNS name, normalized as RouterOS stores it (`/32` dropped, host bits cleared); IPv6 refused; creates the list; idempotent per list and address |
 | `addToAddressListTimed(c, listName, address, timeout, comment)` | `string` | entry that expires after `timeout` (`"30m"`, `"1d"`, `"1d12h"`, `"HH:MM:SS"`); not idempotent |
-| `removeFromAddressList(c, listName, address)` |  | address exactly as listed; throws when absent |
-| `clearAddressList(c, listName)` |  | removes static entries only; throws when there are none |
+| `removeFromAddressList(c, listName, address)` |  | address normalized like `addToAddressList`; throws when absent |
+| `clearAddressList(c, listName)` |  | removes static entries only, up to 100 per command; throws when there are none |
 | `dropAddressList(c, listName, chain, comment)` | `string` | appends one filter rule dropping the list's sources in `chain`; not idempotent |
 
 | Constant | Value |
@@ -814,11 +814,11 @@ Guide: [The ARP table](arp.md).
 |---|---|---|
 | `arpTable(c)` | `list of ArpEntry` | whole table, dynamic and static |
 | `arpTableOn(c, interfaceName)` | `list of ArpEntry` | one interface's entries |
-| `macForAddress(c, address)` | `string` | MAC for an IP; `""` on a miss |
+| `macForAddress(c, address)` | `string` | MAC for an IPv4 address; the first resolved entry; `""` on a miss |
 | `addressesForMac(c, mac)` | `list of string` | IPs a MAC holds, case-insensitive; possibly empty |
 | `addStaticArp(c, address, mac, interfaceName)` | `string` | pin a binding; MAC stored upper-case; refuses an existing static entry for the address on that interface |
-| `removeArpEntry(c, address)` |  | static or dynamic; clears a stale binding; throws when absent |
-| `flushArp(c, interfaceName)` | `int` | removes dynamic entries on the interface; returns the count |
+| `removeArpEntry(c, address)` |  | IPv4; static or dynamic; clears a stale binding; throws when absent |
+| `flushArp(c, interfaceName)` | `int` | removes dynamic entries on the interface, up to 100 per command; returns the count |
 
 | Constant | Value |
 |---|---|
@@ -847,10 +847,10 @@ Guide: [DHCP](dhcp.md).
 | Function | Returns | Notes |
 |---|---|---|
 | `dhcpServers(c)` | `list of DhcpServer` | All server instances. |
-| `setupDhcp(c, name, interfaceName, network, gateway, rangeFrom, rangeTo, dns)` | `string` | Creates pool, server and network entry; gateway and range must lie inside the network, DNS entries must be IPs, the interface must exist. Not idempotent. Returns the server id. |
+| `setupDhcp(c, name, interfaceName, network, gateway, rangeFrom, rangeTo, dns)` | `string` | Creates pool, server and network entry; IPv4 only; gateway and range must lie inside the network, the range must ascend, DNS entries must be IPs, the interface must exist. Not idempotent. Returns the server id. |
 | `teardownDhcp(c, name, network)` | | Removes whichever of the three pieces exist; network matched by exact CIDR string. Throws when none exists. |
 | `dhcpLeases(c)` | `list of DhcpLease` | Dynamic leases and static reservations. |
-| `addStaticLease(c, address, mac, comment)` | `string` | Reserve an address for a MAC (any case, sent uppercased). Not idempotent. |
+| `addStaticLease(c, address, mac, comment)` | `string` | Reserve an IPv4 address for a MAC (any case, sent uppercased). Not idempotent. |
 | `removeLeaseByMac(c, mac)` | | Throws on a malformed MAC or when no lease has it. |
 | `dhcpClients(c)` | `list of DhcpClient` | All DHCP clients with lease state. |
 | `setupWan(c, interfaceName)` | `string` | DHCP client on the WAN; adopts the ISP's route and DNS. Idempotent by interface: an existing client is returned untouched. |
@@ -947,12 +947,12 @@ Guide: [DNS](dns.md).
 | `addDnsEntry(c, name, address)` | `string` | Not idempotent. Returns the id. |
 | `removeDnsEntry(c, name)` | | Throws when no entry has that name. |
 | `dnsCache(c)` | `list of DnsCacheEntry` | Whole cache; large on a busy router. |
-| `dnsCacheFor(c, name)` | `list of DnsCacheEntry` | Case-insensitive; empty when not resolved recently. |
+| `dnsCacheFor(c, name)` | `list of DnsCacheEntry` | Filtered on the router (the name as given or lower-cased), compared case-insensitively; empty when not resolved recently. |
 | `resolvedAddresses(c, name)` | `list of string` | Data of the A and AAAA records only; CNAMEs not followed. |
 | `flushDnsCache(c)` | | Static entries survive. |
 | `dnsAdlists(c)` | `list of DnsAdlist` | RouterOS 7.15+. |
-| `addAdlist(c, url)` | `string` | Hosts-format list; URL must start with "http". Idempotent by URL. RouterOS 7.15+; costs RAM. |
-| `removeAdlist(c, url)` | | Throws when no adlist has that URL. |
+| `addAdlist(c, url)` | `string` | Hosts-format list; URL must start with "http://" or "https://". Idempotent by URL. RouterOS 7.15+; costs RAM. |
+| `removeAdlist(c, url)` | | Throws on an empty URL or when no adlist has it. |
 
 | Constant | Value |
 |---|---|
@@ -1024,7 +1024,7 @@ Guide: [IPv6](ipv6.md).
 | `ipv6AddressesOn(c, interfaceName)` | `list of Ipv6Address` | Filtered by exact interface name. |
 | `addIpv6Address(c, cidr, interfaceName)` | `string` | Advertised, no EUI-64. A LAN wants a /64. IPv4 CIDR rejected. |
 | `addIpv6AddressWith(c, cidr, interfaceName, advertise, eui64)` | `string` | Choose `advertise` (SLAAC on the LAN) and `eui64` (host part from the MAC). |
-| `removeIpv6Address(c, cidr)` | | Matched as text, as `ipv6Addresses` reports it; refuses dynamic addresses. |
+| `removeIpv6Address(c, cidr)` | | Matched by value (case, zero compression ignored), an EUI-64 row also by its prefix; refuses dynamic addresses. |
 | `ipv6Nd(c)` | `list of Ipv6Nd` | Neighbor-discovery (RA) entries. |
 | `advertiseIpv6On(c, interfaceName)` | `string` | Enables or creates the interface's RA entry. Idempotent. |
 | `stopAdvertisingIpv6On(c, interfaceName)` | `string` | Disables the entry; clients keep addresses until the lifetime runs out. |
@@ -1086,7 +1086,7 @@ Guide: [Neighbor discovery](neighbor.md).
 | Function | Returns | Notes |
 |---|---|---|
 | `neighbors(c)` | `list of Neighbor` | Heard via LLDP, CDP, MNDP; directly connected segments only. |
-| `neighborsOn(c, interfaceName)` | `list of Neighbor` | Same, filtered by exact interface name. |
+| `neighborsOn(c, interfaceName)` | `list of Neighbor` | Same, filtered by exact interface name; a v7 "ether2,bridge" entry counts for both. |
 
 | Constant | Value |
 |---|---|
@@ -1114,17 +1114,17 @@ Guide: [Hotspot](hotspot.md).
 |---|---|---|
 | `hotspotServers(c)` | `list of HotspotServer` | All portals. |
 | `setupHotspot(c, name, interfaceName, network, gateway, rangeFrom, rangeTo)` | `string` | DHCP stack (DNS = gateway), profile and server on a dedicated guest interface. Returns the existing id when a server of that name exists. |
-| `teardownHotspot(c, name, network)` | | Removes server, profile and DHCP stack; users, bindings and walled garden stay. Throws when nothing exists. |
+| `teardownHotspot(c, name, network)` | | Removes server, profile and DHCP stack; users, bindings and walled garden stay. Throws when nothing exists; a router or transport error midway is rethrown. |
 | `hotspotUsers(c)` | `list of HotspotUser` | All portal logins. |
 | `addHotspotUser(c, name, password, comment)` | `string` | Throws when the login exists or the password is empty. |
 | `addHotspotVoucher(c, name, password, uptimeLimit, comment)` | `string` | Connect-time limit: "4h", "1d", "1d12h" or "HH:MM:SS". Throws when the login exists. |
 | `removeHotspotUser(c, name)` | | Throws when no such login exists. |
 | `hotspotActive(c)` | `list of HotspotSession` | Logged-in guests with byte counters. |
 | `kickHotspotUser(c, user)` | | Throws when the login has no session. |
-| `bypassHotspotMac(c, mac, comment)` | `string` | Device skips the portal. Idempotent by MAC. |
-| `removeHotspotBypass(c, mac)` | | Throws when no bypass exists for the MAC. |
+| `bypassHotspotMac(c, mac, comment)` | `string` | Device skips the portal. Idempotent by MAC; refuses a MAC with a blocked or regular binding. |
+| `removeHotspotBypass(c, mac)` | | Removes only a `bypassed` binding; throws when none exists for the MAC. |
 | `allowBeforeLogin(c, dstHost, comment)` | `string` | Walled-garden host; wildcards like "*.example.org" work. Idempotent by host. |
-| `removeWalledGardenEntry(c, dstHost)` | | Throws when no entry exists for the host. |
+| `removeWalledGardenEntry(c, dstHost)` | | Throws on an empty host or when no entry exists for it. |
 
 | Constant | Value |
 |---|---|
@@ -1381,7 +1381,7 @@ Guide: [SNMP](snmp.md).
 |---|---|---|
 | `snmpSettings(c)` | `SnmpSettings` | Agent state, contact and location. |
 | `snmpCommunities(c)` | `list of SnmpCommunity` | All communities, including a default `public`. |
-| `enableSnmp(c, community, addresses)` | `string` | Creates or updates a read-only community (write always off) and switches the agent on. `addresses`: comma-separated IPs or CIDRs, `""` = any source. Idempotent. v2c is cleartext: treat the community as a password. |
+| `enableSnmp(c, community, addresses)` | `string` | Creates or updates a read-only community (write always off) and switches the agent on. `addresses`: comma-separated IPs or CIDRs, `""` = any source (sent as `0.0.0.0/0,::/0`). Idempotent. v2c is cleartext: treat the community as a password; the verbose log redacts it. |
 | `setSnmpInfo(c, contact, location)` | - | Strings shown by monitoring systems. |
 | `disableSnmp(c)` | - | Agent off. |
 
@@ -1419,11 +1419,11 @@ Guide: [Static routes](routing.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `routes(c)` | `list of Route` | Static, connected and dynamic routes; filter on `dynamic`. |
-| `addRoute(c, dstAddress, gateway, comment)` | `string` | Destination must be CIDR. Gateway: IP address, or the name of an interface on the router. |
+| `routes(c)` | `list of Route` | Static, connected and dynamic routes; filter on `dynamic`. The whole table in one reply: kind `"limit"` on a BGP-sized table. |
+| `addRoute(c, dstAddress, gateway, comment)` | `string` | Destination must be IPv4 CIDR. Gateway: IP address, or the name of an interface on the router. |
 | `addRouteWithDistance(c, dstAddress, gateway, distance, comment)` | `string` | Distance 1-255, lower wins (static default 1); a higher-distance twin is a backup. |
 | `addDefaultRoute(c, gateway, comment)` | `string` | Route to `DEFAULT_ROUTE`. |
-| `removeRoute(c, dstAddress)` | - | First static route whose destination matches exactly; dynamic routes are skipped. |
+| `removeRoute(c, dstAddress)` | - | First static route to that network (compared canonically, queried by destination); dynamic routes are skipped. |
 | `enableRoute(c, dstAddress)` | - | First static route to the destination. |
 | `disableRoute(c, dstAddress)` | - | First static route to the destination; kept but unused. |
 | `routingRules(c)` | `list of RoutingRule` | Policy rules in evaluation order (RouterOS v7). |
@@ -1514,15 +1514,15 @@ Guide: [WireGuard™ VPN tunnels](wireguard.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `wireguardInterfaces(c)` | `list of WireguardInterface` | RouterOS v7. Any read error gives an empty list (v6, but also a dead connection). |
+| `wireguardInterfaces(c)` | `list of WireguardInterface` | RouterOS v7. Empty on v6 (the menu `!trap`s); a dead connection is thrown. |
 | `addWireguard(c, name, listenPort)` | `string` | Router generates the keypair. Idempotent by name: an existing interface is returned unchanged. |
 | `wireguardPublicKey(c, name)` | `string` | Base64 public key for the other side. The private key is never read. |
-| `setupWireguardServer(c, name, listenPort, address)` | `string` | Interface, VPN address (CIDR) and an input accept rule for the UDP port, comment `"wireguard: <name>"`. Idempotent piece by piece. |
-| `wireguardPeers(c)` | `list of WireguardPeer` | Peers of all interfaces. A handshake within about 2 minutes means alive. Any read error gives an empty list. |
-| `addWireguardPeer(c, interfaceName, publicKey, allowedAddress, comment)` | `string` | Peer that dials in. Key: 44 base64 characters ending in `=`. Every allowed-address entry needs a prefix (`/32` for one device). |
+| `setupWireguardServer(c, name, listenPort, address)` | `string` | Interface, VPN address (CIDR) and an input accept rule for the UDP port, comment `"wireguard: <name>"`. Idempotent piece by piece; a re-run with another port moves the listen port and the rule. |
+| `wireguardPeers(c)` | `list of WireguardPeer` | Peers of all interfaces. A handshake within about 2 minutes means alive. Empty on v6; other failures are thrown. |
+| `addWireguardPeer(c, interfaceName, publicKey, allowedAddress, comment)` | `string` | Peer that dials in. Key: 44 base64 characters ending in `=`, decoding to 32 bytes. Every allowed-address entry needs a prefix (`/32` for one device). |
 | `connectWireguard(c, interfaceName, publicKey, endpointHost, endpointPort, allowedAddress, comment)` | `string` | Peer the router dials, with 25 s persistent keepalive. Host: IP or DNS name; port 1-65535. |
 | `removeWireguardPeerByComment(c, comment)` | - | Throws when no peer carries the comment. |
-| `removeWireguard(c, name)` | - | Removes the first IP address on the interface, the `"wireguard: <name>"` firewall rule, and the interface with its peers. |
+| `removeWireguard(c, name)` | - | Removes every static IP address on the interface, the `"wireguard: <name>"` firewall rule, and the interface with its peers. |
 | `enableWireguard(c, name)` | - | All tunnels of the interface up. |
 | `disableWireguard(c, name)` | - | All tunnels of the interface down. |
 
@@ -1573,7 +1573,7 @@ Guide: [EoIP tunnels](eoip.md).
 |---|---|---|
 | `eoipTunnels(c)` | `list of EoipTunnel` | All EoIP tunnels. |
 | `eoipTunnelByName(c, name)` | `EoipTunnel` | Throws when absent. |
-| `addEoipTunnel(c, name, remoteAddress, tunnelId)` | `string` | Unencrypted layer-2 tunnel. Remote must be an IP address; tunnel id 0-65535, equal on both ends. Rejects a taken name and an existing tunnel with the same remote and id. |
+| `addEoipTunnel(c, name, remoteAddress, tunnelId)` | `string` | Unencrypted layer-2 tunnel. Remote must be an IPv4 address; tunnel id 0-65535, equal on both ends. Rejects a taken name and an existing tunnel with the same remote and id. |
 | `addSecureEoipTunnel(c, name, remoteAddress, tunnelId, ipsecSecret)` | `string` | Same, wrapped in RouterOS coupled IPsec; non-empty secret, same on both ends, never read back. |
 | `removeEoipTunnel(c, name)` | - | Detach bridge ports first. |
 | `enableEoipTunnel(c, name)` | - | Tunnel up. |
@@ -1609,7 +1609,7 @@ Guide: [GRE tunnels](gre.md).
 |---|---|---|
 | `greTunnels(c)` | `list of GreTunnel` | All GRE tunnels. |
 | `greTunnelByName(c, name)` | `GreTunnel` | Throws when no tunnel has that name. |
-| `addGreTunnel(c, name, remoteAddress)` | `string` | Unencrypted. Remote must be an IP; refuses a taken name or a second tunnel to the same remote (names the owner). Mirror it on the far end. |
+| `addGreTunnel(c, name, remoteAddress)` | `string` | Unencrypted. Remote must be an IPv4 address; refuses a taken name or a second tunnel to the same remote (names the owner). Mirror it on the far end. |
 | `addSecureGreTunnel(c, name, remoteAddress, ipsecSecret)` | `string` | Same, with RouterOS coupled IPsec (`ipsec-secret`, write-only, same on both ends). Refuses an empty secret. |
 | `removeGreTunnel(c, name)` |  | Addresses on it go with it; routes through it become unreachable. |
 | `enableGreTunnel(c, name)` |  | Throws when no tunnel has that name (as do remove/disable). |
@@ -1644,8 +1644,8 @@ Guide: [IPsec](ipsec.md).
 | `ipsecPeers(c)` | `list of IpsecPeer` | Configured peers. |
 | `ipsecPolicies(c)` | `list of IpsecPolicy` | Per-policy `active` flag (live SA). |
 | `ipsecActive(c)` | `list of IpsecActivePeer` | Live negotiations; check `established`. |
-| `setupIpsecTunnel(c, name, peerAddress, psk, localSubnet, remoteSubnet)` | `string` | IKEv2 peer, PSK identity, tunnel policy, srcnat bypass above masquerade, input accepts for udp 500/4500 and ESP. Far end mirrors it (same PSK, subnets swapped). Existing peer name: returns its id, changes nothing. |
-| `teardownIpsecTunnel(c, name)` |  | Removes all of the above; throws when none of it exists. |
+| `setupIpsecTunnel(c, name, peerAddress, psk, localSubnet, remoteSubnet)` | `string` | IKEv2 peer, PSK identity, tunnel policy, srcnat bypass above masquerade, input accepts for udp 500/4500 and ESP. Far end mirrors it (same PSK, subnets swapped). Idempotent per part: existing parts are kept unchanged (PSK and subnets not updated), missing ones added; returns the peer id. |
+| `teardownIpsecTunnel(c, name)` |  | Removes all of the above; throws on an empty or spaced name, or when none of it exists. |
 | `setupIkev2Server(c, name, certificate, poolRange, dns)` | `string` | Road-warrior server: pool, mode-config, passive IKEv2 peer, `eap-radius` identity with the router certificate, input accepts. Users come from RADIUS. Throws on an existing peer name or missing certificate. See [vpn.md](vpn.md). |
 
 | Constant | Value |
@@ -1746,7 +1746,8 @@ Guide: [Remote-access VPN](vpn.md).
 | `enableSstpServer(c, certificate, port)` |  | TLS over TCP; 443 looks like HTTPS. Certificate must exist. Opens the port. Idempotent. |
 | `disableSstpServer(c)` |  | Also removes its firewall accept. |
 | `sstpClients(c)` | `list of SstpClient` | Dial-out tunnels. |
-| `addSstpClient(c, name, serverAddress, user, password)` | `string` | Throws on an empty or spaced name or user, empty password, or empty or spaced server. Existing name: returns its id. Sets `verify-server-certificate=no`. |
+| `addSstpClient(c, name, serverAddress, user, password)` | `string` | Throws on an empty or spaced name or user, empty password, or empty or spaced server. Existing name: returns its id. Sets `verify-server-certificate=yes` (the server's CA must be in the router's store). |
+| `addSstpClientWith(c, name, serverAddress, user, password, verifyServerCertificate)` | `string` | As `addSstpClient`; `false` skips the certificate check (MITM-able). |
 | `removeSstpClient(c, name)` |  | Throws when no client has that name. |
 
 | Constant | Value |
@@ -1789,7 +1790,8 @@ Guide: [Remote-access VPN](vpn.md).
 | `enableOvpnServer(c, certificate, port)` |  | Routed (`mode=ip`), TCP; 1194 is the usual port. Certificate must exist. Opens the port. Idempotent. |
 | `disableOvpnServer(c)` |  | Also removes its firewall accept. |
 | `ovpnClients(c)` | `list of OvpnClient` | Dial-out tunnels. |
-| `addOvpnClient(c, name, serverAddress, user, password)` | `string` | Throws on an empty or spaced name or user, empty password, or empty or spaced server. Existing name: returns its id. |
+| `addOvpnClient(c, name, serverAddress, user, password)` | `string` | Throws on an empty or spaced name or user, empty password, or empty or spaced server. Existing name: returns its id. Sets `verify-server-certificate=yes`. |
+| `addOvpnClientWith(c, name, serverAddress, user, password, verifyServerCertificate)` | `string` | As `addOvpnClient`; `false` skips the certificate check (MITM-able). |
 | `removeOvpnClient(c, name)` |  | Throws when no client has that name. |
 
 | Constant | Value |
@@ -1888,7 +1890,7 @@ Guide: [Traffic flow (NetFlow™ / IPFIX)](trafficflow.md).
 | `flowTargets(c)` | `list of FlowTarget` | The collectors. |
 | `enableTrafficFlow(c)` |  | All interfaces. Exports nothing until a target exists. |
 | `disableTrafficFlow(c)` |  | Targets are kept. |
-| `addFlowTarget(c, address, port, version)` | `string` | Collector must be an IP; version `"1"`, `"5"`, `"9"` or `"ipfix"`. Existing address and port: returns its id. |
+| `addFlowTarget(c, address, port, version)` | `string` | Collector must be an IP; version `"1"`, `"5"`, `"9"` or `"ipfix"` (any case, sent as `IPFIX`); sets `dst-address` and `port`. Existing address and port: returns its id. |
 | `removeFlowTarget(c, address)` |  | First target with that address; throws when none. |
 
 | Constant | Value |
@@ -1914,7 +1916,7 @@ One traffic-flow export target (a collector).
 | `id as string` | internal RouterOS id |
 | `address as string` | collector address |
 | `port as string` | collector UDP port |
-| `version as string` | export protocol version ("1", "5", "9", "ipfix") |
+| `version as string` | export protocol version as the router lists it ("1", "5", "9", "IPFIX") |
 | `disabled as bool` | true when switched off |
 
 ## Netwatch
@@ -2162,10 +2164,10 @@ Guide: [Certificates](certificates.md).
 |---|---|---|
 | `certificates(c)` | `list of Certificate` | the whole store |
 | `certificateByName(c, name)` | `Certificate` | unknown name rejected |
-| `expiringCertificates(c, withinDays)` | `list of Certificate` | expiry within `withinDays`; durations like "51w6d" parsed to whole days, unparseable ones skipped |
-| `generateSelfSigned(c, name, commonName, days)` | `string` | signed on the router (a few seconds); days 1-7300; name must be free; `commonName` also set as the SAN (`IP:` or `DNS:`); connect with `connectTLSWithCA` |
+| `expiringCertificates(c, withinDays)` | `list of Certificate` | expiry within `withinDays`, expired ones included; durations like "51w6d", "8w2d03:32:06" or "-3d" parsed to whole days, unparseable ones skipped |
+| `generateSelfSigned(c, name, commonName, days)` | `string` | signed on the router (a few seconds); days 1-7300; name must be free; `commonName` without spaces or commas; `commonName` also set as the SAN (`IP:` or `DNS:`); connect with `connectTLSWithCA` |
 | `enableLetsEncrypt(c, dnsName)` |  | RouterOS v7 built-in ACME (http-01); port 80 must be reachable under the name; blocks |
-| `importCertificatePem(c, name, certPem, keyPem)` |  | via temporary `<name>.crt` / `<name>.key` files, removed afterwards; PEMs checked for BEGIN CERTIFICATE / PRIVATE KEY |
+| `importCertificatePem(c, name, certPem, keyPem)` |  | via temporary `<name>.crt` / `<name>.key` files, removed afterwards, also when a write or the import fails; PEMs checked for BEGIN CERTIFICATE / PRIVATE KEY |
 | `assignServiceCertificate(c, serviceName, certName)` |  | "api-ssl" or "www-ssl" only; clears the `invalid` flag |
 | `removeCertificate(c, name)` |  | services using it go `invalid` |
 
@@ -2187,7 +2189,8 @@ One certificate in the router's store.
 | `invalidAfter as string` | the absolute expiry date as reported |
 | `hasPrivateKey as bool` | true when the router holds the key (usable for serving) |
 | `trusted as bool` | true when marked trusted |
-| `isCa as bool` | true for a CA certificate |
+| `isCa as bool` | true for a CA certificate (the `authority` flag) |
+| `expired as bool` | true when the router flags it expired |
 
 ## Files & backups
 
@@ -2195,7 +2198,7 @@ Guide: [Files & backups](files.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `files(c)` | `list of RouterFile` | files and directories on the router's storage |
+| `files(c)` | `list of RouterFile` | files and directories on the router's storage; contents are not read |
 | `saveBackup(c, name)` |  | writes `<name>.backup`, checks it appeared; unencrypted, holds secrets |
 | `saveBackupWith(c, name, password)` |  | encrypted; empty password rejected; checks the file appeared |
 | `readFileText(c, name)` | `string` | small files only (a few KB); "" when too large to expose |
@@ -2223,9 +2226,9 @@ Guide: [Disks](disk.md).
 
 | Function | Returns | Notes |
 |---|---|---|
-| `disks(c)` | `list of Disk` | empty when there is no storage or the read fails |
+| `disks(c)` | `list of Disk` | empty when there is no storage or no disk menu (`!trap`); other failures are thrown |
 | `diskByName(c, name)` | `Disk` | matches `name`, then `slot` |
-| `formatDisk(c, name, filesystem, label)` |  | erases the whole disk, no undo; ext4, fat32, exfat, btrfs, vfat; tries `/disk/format`, falls back to `/disk/format-drive` |
+| `formatDisk(c, name, filesystem, label)` |  | erases the whole disk, no undo; ext4, fat32, exfat, btrfs, vfat; tries `/disk/format`, falls back to `/disk/format-drive` on a `!trap` of category 0 or none; if both are refused that way the first error is thrown |
 | `ejectDisk(c, name)` |  | matches `name`, then `slot` |
 
 | Constant | Value |
@@ -2277,7 +2280,7 @@ Guide: [The router log](log.md).
 | Function | Returns | Notes |
 |---|---|---|
 | `logEntries(c)` | `list of LogEntry` | The memory buffer, oldest first; 1000 entries by default, cleared on reboot. |
-| `recentLogEntries(c, count)` | `list of LogEntry` | Newest `count` (at least 1), oldest of them first. |
+| `recentLogEntries(c, count)` | `list of LogEntry` | Newest `count` (at least 1), oldest of them first. Reads the whole buffer (no tail read in the API); a buffer of tens of thousands of lines fails with kind `"limit"`. |
 | `logEntriesWithTopic(c, topic)` | `list of LogEntry` | Exact topic word: "fire" does not match "firewall". |
 | `logErrors(c)` | `list of LogEntry` | Topic "error" or "critical". |
 | `loggingRules(c)` | `list of LoggingRule` | Which topics go to which action. |
@@ -2392,8 +2395,8 @@ Guide: [Tools](tools.md).
 | `bandwidthTest(c, host, seconds, direction)` | `BandwidthResult` | Against a btest server; 1-300 s; "receive", "transmit" or "both". Saturates the link. |
 | `bandwidthTestWith(c, host, seconds, direction, user, password)` | `BandwidthResult` | As `bandwidthTest`, with btest credentials ("" omits). |
 | `traceroute(c, host)` | `list of TracerouteHop` | One probe per hop. |
-| `fetchUrl(c, url)` | `FetchResult` | URL must start with "http"; body in `data`. |
-| `downloadFile(c, url, fileName)` | `FetchResult` | Saves to router storage; file name without spaces. |
+| `fetchUrl(c, url)` | `FetchResult` | URL must start with `http://` or `https://`; body in `data`; https checks the certificate (`check-certificate=yes-without-crl`). |
+| `downloadFile(c, url, fileName)` | `FetchResult` | Saves to router storage; file name without spaces; URL and certificate check as `fetchUrl`. |
 | `configureEmail(c, server, port, from, user, password)` |  | Leaves the TLS mode unchanged; empty user / password are not sent. |
 | `configureEmailWith(c, server, port, from, user, password, tls)` |  | `tls` is an `EMAIL_TLS_*` value or "" to keep it. Writes the pre-7.12 or 7.12+ property names, whichever the router has. |
 | `emailSettings(c)` | `EmailSettings` | No password: RouterOS stores it write-only. |
@@ -2481,15 +2484,15 @@ Guide: [Containers](container.md).
 |---|---|---|
 | `containers(c)` | `list of Container` | Every container; `name` is the comment `addContainer` set. |
 | `addContainer(c, name, remoteImage, interfaceName, rootDir)` | `string` | Returns the id. Needs the container package, device-mode enable, an existing veth and storage. `name` is stored as the comment. |
-| `startContainer(c, name)` |  | By comment or image tag. |
-| `stopContainer(c, name)` |  | By comment or image tag. |
-| `removeContainer(c, name)` |  | Also deletes its extracted filesystem. |
+| `startContainer(c, name)` |  | By comment, else image tag; empty name refused. |
+| `stopContainer(c, name)` |  | By comment, else image tag; empty name refused. |
+| `removeContainer(c, name)` |  | Also deletes its extracted filesystem. By comment, else image tag; empty name refused. |
 | `containerEnvs(c)` | `list of ContainerEnv` | Variables of every env list. |
 | `addContainerEnv(c, listName, key, value)` | `string` | Returns the id. Always adds; clear the list first on a re-run. |
-| `removeContainerEnvList(c, listName)` | `int` | Deletes every variable in the list; returns the count. |
+| `removeContainerEnvList(c, listName)` | `int` | Deletes every variable in the list, up to 100 per command; returns the count. |
 | `containerMounts(c)` | `list of ContainerMount` | Mounts of every mount list. |
 | `addContainerMount(c, listName, src, dst)` | `string` | Returns the id. `src` on the router (created if missing), `dst` in the container. |
-| `removeContainerMountList(c, listName)` | `int` | Deletes every mount in the list; returns the count. |
+| `removeContainerMountList(c, listName)` | `int` | Deletes every mount in the list, up to 100 per command; returns the count. |
 | `setContainerEnvLists(c, name, listNames)` |  | Replaces the attached lists; `[]` detaches all. Takes effect at the next start. |
 | `setContainerMountLists(c, name, listNames)` |  | Replaces the attached lists; `[]` detaches all. Set before the first start. |
 

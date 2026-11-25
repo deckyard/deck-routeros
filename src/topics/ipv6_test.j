@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the ipv6 topic.
 # Spliced into routeros_test.j via include - run with:
@@ -169,4 +169,24 @@ func failSetIpv6NdFlagsEmptyInterface() {
 
 func testSetIpv6NdFlagsRejectsEmptyInterface() {
     testing.assertThrows("failSetIpv6NdFlagsEmptyInterface", "routeros");
+}
+
+# The router stores IPv6 lower-case and compressed; a text match missed
+# "2001:DB8:1::1/64" and the prefix an EUI-64 address was added with.
+func testIpv6AddressRowMatchesByValue() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "address": "2001:db8:1::1/64"},
+        {".id": "*2", "address": "2001:db8:2::21a:2bff:fe3c:4d5e/64", "eui-64": "true"}
+    ];
+    testing.assertEqual(rowValue(ipv6AddressRow($rows, "2001:DB8:1:0::1/64"), ".id"), "*1");
+    testing.assertEqual(rowValue(ipv6AddressRow($rows, "2001:db8:2::/64"), ".id"), "*2");
+    testing.assertEqual(len(ipv6AddressRow($rows, "2001:db8:1::2/64")), 0);
+    testing.assertEqual(len(ipv6AddressRow($rows, "2001:db8:1::1/48")), 0);
+}
+
+func testSameInterfaceAddress() {
+    testing.assertTrue(sameInterfaceAddress("2001:DB8::1/64", "2001:db8:0::1/64"));
+    testing.assertFalse(sameInterfaceAddress("2001:db8::1/64", "2001:db8::2/64"));
+    testing.assertFalse(sameInterfaceAddress("garbage", "garbage"));
+    testing.assertEqual(canonicalInterfaceAddress("10.0.0.1/24"), "10.0.0.1/24");
 }

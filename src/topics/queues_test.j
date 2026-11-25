@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the queues topic.
 # Spliced into routeros_test.j via include - run with:
@@ -219,6 +219,33 @@ func testTreeQueueFamilyUnknownNameIsEmpty() {
     testing.assertEqual(len(treeQueueFamily($rows, "nosuch")), 0);
 }
 
+# "global" and an interface are parents, never nodes: naming one used to
+# sweep every queue hanging off it.
+func testTreeQueueFamilyGlobalIsNotANode() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "name": "down", "parent": "global"},
+        {".id": "*2", "name": "voip", "parent": "down"},
+        {".id": "*3", "name": "up", "parent": "ether1"}
+    ];
+    testing.assertEqual(len(treeQueueFamily($rows, "global")), 0);
+    testing.assertEqual(len(treeQueueFamily($rows, "ether1")), 0);
+    testing.assertEqual(len(treeQueueFamily($rows, "")), 0);
+}
+
+# A deep tree is one indexed pass, not a scan per level.
+func testTreeQueueFamilyDeepChain() {
+    def rows as list of map of string to string init [
+        {".id": "*0", "name": "q0", "parent": "global"}
+    ];
+    for (def i as int init 1; $i < 3000; $i = $i + 1) {
+        $rows[] = {".id": "*{$i}", "name": "q{$i}", "parent": "q{$i - 1}"};
+    }
+    def ids as list of string init treeQueueFamily($rows, "q0");
+    testing.assertEqual(len($ids), 3000);
+    testing.assertEqual($ids[0], "*2999");
+    testing.assertEqual($ids[2999], "*0");
+}
+
 # Verbs: local validation before any I/O
 
 func failLimitBandwidthSpacedName() {
@@ -259,4 +286,35 @@ func failAddQueueTreeChildEmptyMark() {
 
 func testAddQueueTreeChildRejectsEmptyMark() {
     testing.assertThrows("failAddQueueTreeChildEmptyMark", "routeros");
+}
+
+func failRemoveTreeQueueGlobal() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "name": "down", "parent": "global"},
+        {".id": "*2", "name": "voip", "parent": "down"}
+    ];
+    def f as Fake init fakeStart(fakeWithRows(fakeRouter(), QUEUE_TREE_PATH, $rows));
+    def c as Client init fakeClient($f);
+    defer fakeLog($c, $f);
+    removeTreeQueue($c, "global");
+}
+
+# "global" removed every root queue and its subtree.
+func testRemoveTreeQueueRefusesGlobal() {
+    testing.assertThrows("failRemoveTreeQueueGlobal", "routeros");
+}
+
+func testRemoveTreeQueueRemovesSubtreeChildrenFirst() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "name": "down", "parent": "global"},
+        {".id": "*2", "name": "voip", "parent": "down"},
+        {".id": "*3", "name": "other", "parent": "global"}
+    ];
+    def f as Fake init fakeStart(fakeWithRows(fakeRouter(), QUEUE_TREE_PATH, $rows));
+    def c as Client init fakeClient($f);
+    removeTreeQueue($c, "down");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, QUEUE_TREE_PATH + "/remove =.id=*2"));
+    testing.assertTrue(fakeSaw($log, QUEUE_TREE_PATH + "/remove =.id=*1"));
+    testing.assertFalse(fakeSaw($log, QUEUE_TREE_PATH + "/remove =.id=*3"));
 }

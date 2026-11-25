@@ -8,9 +8,9 @@ Reference: [cheatsheet](cheatsheet.md#disks).
 
 RouterOS™ v7 lists attached storage (USB, NVMe, SATA) under `/disk`.
 Container filesystems, backups, downloaded files and disk logging live
-there. `disks(c)` returns an empty list when the router has no storage,
-and also when the read fails for any reason, a dropped connection
-included.
+there. `disks(c)` returns an empty list when the router has no storage
+or no disk menu (the router answers the read with a `!trap`); any other
+failure, such as a dropped connection, is thrown.
 
 ```jennifer
 def ds as list of mt.Disk init mt.disks($c);

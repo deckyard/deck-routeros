@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the routing topic.
 # Spliced into routeros_test.j via include - run with:
@@ -195,4 +195,64 @@ func failUseRoutingTableOnlySpacedTable() {
 
 func testUseRoutingTableOnlyRejectsSpacedTable() {
     testing.assertThrows("failUseRoutingTableOnlySpacedTable", "routeros");
+}
+
+# The router lists a destination canonically: host bits cleared, IPv6
+# lower-case and compressed. An exact string match missed those.
+func testStaticRouteRowMatchesCanonicalNetwork() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "dst-address": "10.20.0.0/16", "dynamic": "false"},
+        {".id": "*2", "dst-address": "2001:db8::/32", "dynamic": "false"}
+    ];
+    testing.assertEqual(rowValue(staticRouteRow($rows, "10.20.1.0/16"), ".id"), "*1");
+    testing.assertEqual(rowValue(staticRouteRow($rows, "2001:DB8:0::/32"), ".id"), "*2");
+    testing.assertEqual(len(staticRouteRow($rows, "10.20.0.0/24")), 0);
+}
+
+func testCanonicalNetwork() {
+    testing.assertEqual(canonicalNetwork(" 10.1.2.3/8 "), "10.0.0.0/8");
+    testing.assertEqual(canonicalNetwork("2001:DB8::1/64"), "2001:db8::/64");
+    testing.assertEqual(canonicalNetwork("nonsense"), "");
+    testing.assertFalse(sameNetwork("nonsense", "nonsense"));
+}
+
+# A plain source address is the same rule as its /32.
+func testFindRoutingRuleRowPlainAddressMatchesHostPrefix() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "src-address": "192.168.88.5/32", "table": "vpn"}
+    ];
+    testing.assertEqual(rowValue(findRoutingRuleRow($rows, "192.168.88.5", "vpn"), ".id"), "*1");
+    testing.assertTrue(sameSource("2001:db8::5", "2001:DB8::5/128"));
+    testing.assertFalse(sameSource("192.168.88.5", "192.168.88.0/24"));
+}
+
+func failRemoveRouteNotCidr() {
+    removeRoute(offlineClient(), "10.20.0.0");
+}
+
+# The lookup now queries one destination, so it validates first.
+func testRemoveRouteRejectsNonCidr() {
+    testing.assertThrows("failRemoveRouteNotCidr", "routeros");
+}
+
+func failAddRouteIpv6() {
+    addRoute(offlineClient(), "2001:db8::/32", "192.168.88.1", "");
+}
+
+func testAddRouteRejectsIpv6Destination() {
+    testing.assertThrows("failAddRouteIpv6", "routeros");
+}
+
+# The lookup asks for the one destination instead of reading the table.
+func testRemoveRouteQueriesDestinationOnly() {
+    def rows as list of map of string to string init [
+        {".id": "*1", "dst-address": "10.20.0.0/16", "dynamic": "false"},
+        {".id": "*2", "dst-address": "10.30.0.0/16", "dynamic": "false"}
+    ];
+    def f as Fake init fakeStart(fakeWithRows(fakeRouter(), ROUTE_PATH, $rows));
+    def c as Client init fakeClient($f);
+    removeRoute($c, "10.20.1.0/16");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, ROUTE_PATH + "/print ?dst-address=10.20.0.0/16"));
+    testing.assertTrue(fakeSaw($log, ROUTE_PATH + "/remove =.id=*1"));
 }

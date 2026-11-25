@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the dns topic.
 # Spliced into routeros_test.j via include - run with:
@@ -161,4 +161,41 @@ func failAddAdlistNotHttp() {
 
 func testAddAdlistRejectsNonHttpUrl() {
     testing.assertThrows("failAddAdlistNotHttp", "routeros");
+}
+
+func failRemoveAdlistEmpty() {
+    removeAdlist(offlineClient(), " ");
+}
+
+func testRemoveAdlistRejectsEmptyUrl() {
+    testing.assertThrows("failRemoveAdlistEmpty", "routeros");
+}
+
+func testRemoveAdlistSparesALocalFileList() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        DNS_ADLIST_PATH,
+        [{".id": "*1", "file": "blocked.txt"}, {".id": "*2", "url": "https://example.org/hosts"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    removeAdlist($c, "https://example.org/hosts");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/ip/dns/adlist/remove =.id=*2"));
+    testing.assertFalse(fakeSaw($log, "/ip/dns/adlist/remove =.id=*1"));
+}
+
+func testDnsCacheForFiltersOnTheRouter() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        DNS_CACHE_PATH,
+        [
+            {".id": "*1", "name": "example.org", "type": "A", "data": "93.184.216.34"},
+            {".id": "*2", "name": "other.org", "type": "A", "data": "192.0.2.1"}
+        ]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as list of string init resolvedAddresses($c, "Example.ORG");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual(len($got), 1);
+    testing.assertTrue(fakeSaw($log, "/ip/dns/cache/print ?name=Example.ORG ?name=example.org ?#|"));
 }

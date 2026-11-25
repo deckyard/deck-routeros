@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - ethernet ports: speed, duplex, MTU, PoE, link state.
 # Spliced into routeros.j via include - not a standalone module.
@@ -15,6 +15,29 @@ def const ETHERNET_SPEEDS as list of string init [
     "2.5Gbps",
     "5Gbps",
     "10Gbps"
+];
+
+# The RouterOS 7.12+ `speed` values: rate, medium and duplex in one word.
+def const ETHERNET_LINK_MODES as list of string init [
+    "10M-baseT-half",
+    "10M-baseT-full",
+    "100M-baseT-half",
+    "100M-baseT-full",
+    "1G-baseT-half",
+    "1G-baseT-full",
+    "1G-baseX",
+    "2.5G-baseT",
+    "2.5G-baseX",
+    "5G-baseT",
+    "10G-baseT",
+    "10G-baseSR-LR",
+    "10G-baseCR",
+    "25G-baseSR-LR",
+    "25G-baseCR",
+    "40G-baseSR4-LR4",
+    "40G-baseCR4",
+    "100G-baseSR4-LR4",
+    "100G-baseCR4"
 ];
 
 def const POE_MODES as list of string init ["auto-on", "forced-on", "off"];
@@ -134,20 +157,85 @@ export func linkStatus(c as Client, name as string) {
  * one side against an auto-negotiating peer gives a duplex mismatch, a
  * link that comes up and then loses packets under load.
  *
+ * RouterOS 7.12 replaced `speed` + `full-duplex` with one word per link
+ * mode ("100M-baseT-full"). A rate like "100Mbps" is sent in that form
+ * (twisted pair, `fullDuplex` choosing -full or -half); when the router
+ * refuses it with a `!trap`, the pre-7.12 `speed=100Mbps full-duplex=...`
+ * is tried, and if that is refused too the first error is thrown. A
+ * 7.12+ link-mode word ("10G-baseSR-LR") is sent as given; its duplex is
+ * part of the word and must agree with `fullDuplex`.
+ *
  * @param c {Client}          an open client
  * @param name {string}       the ethernet port
  * @param speed {string}      "10Mbps", "100Mbps", "1Gbps", "2.5Gbps",
- *                            "5Gbps" or "10Gbps"; the hardware may refuse
- * @param fullDuplex {bool}   full duplex
- * @throws {Error} kind "routeros" on an unknown port or speed
+ *                            "5Gbps", "10Gbps", or a RouterOS 7.12+ link
+ *                            mode such as "1G-baseX"; the hardware may refuse
+ * @param fullDuplex {bool}   full duplex; half duplex exists only up to 1G
+ * @throws {Error} kind "routeros" on an unknown port or speed, half duplex
+ *                 above 1G, or a link mode whose duplex disagrees
  */
 export func forceEthernetLink(c as Client, name as string, speed as string, fullDuplex as bool) {
+    def mode as string init ethernetLinkMode($speed, $fullDuplex);
+    def id as string init requiredId($c, ETHERNET_PATH, $name, "ethernet port");
+    try {
+        set($c, ETHERNET_PATH, $id, {"auto-negotiation": "no", "speed": $mode});
+    } catch (e) {
+        def reply as string init "";
+        if ($e.kind == "mikrotik") {
+            $reply = $e.reply;
+        }
+        if ($reply != "trap" or not lists.contains(ETHERNET_SPEEDS, $speed)) {
+            throw $e;
+        }
+        try {
+            set(
+                $c,
+                ETHERNET_PATH,
+                $id,
+                {"auto-negotiation": "no", "speed": $speed, "full-duplex": boolWord($fullDuplex)});
+        } catch (legacy) {
+            def legacyReply as string init "";
+            if ($legacy.kind == "mikrotik") {
+                $legacyReply = $legacy.reply;
+            }
+            if ($legacyReply == "trap") {
+                throw $e;
+            }
+            throw $legacy;
+        }
+    }
+}
+
+/**
+ * The RouterOS 7.12+ link-mode word for a speed and duplex.
+ *
+ * @param speed {string}    a rate ("1Gbps") or a link mode ("1G-baseX")
+ * @param fullDuplex {bool} full duplex
+ * @return {string} the link mode, e.g. "1G-baseT-full"
+ * @throws {Error} kind "routeros" on an unknown speed, half duplex above
+ *                 1G, or a link mode whose duplex disagrees
+ * @internal
+ */
+func ethernetLinkMode(speed as string, fullDuplex as bool) {
+    if (lists.contains(ETHERNET_LINK_MODES, $speed)) {
+        if (strings.endsWith($speed, "-half") == $fullDuplex) {
+            raiseError("the link mode \"" + $speed + "\" does not match fullDuplex " +
+                boolWord($fullDuplex));
+        }
+        return $speed;
+    }
     ensureEthernetSpeed($speed);
-    set(
-        $c,
-        ETHERNET_PATH,
-        requiredId($c, ETHERNET_PATH, $name, "ethernet port"),
-        {"auto-negotiation": "no", "speed": $speed, "full-duplex": boolWord($fullDuplex)});
+    def rate as string init $speed[..len($speed) - 3];
+    if ($rate == "10M" or $rate == "100M" or $rate == "1G") {
+        if ($fullDuplex) {
+            return $rate + "-baseT-full";
+        }
+        return $rate + "-baseT-half";
+    }
+    if (not $fullDuplex) {
+        raiseError("half duplex exists only up to 1Gbps, not at " + $speed);
+    }
+    return $rate + "-baseT";
 }
 
 /**
@@ -224,7 +312,7 @@ export func setPoe(c as Client, name as string, mode as string) {
 func ensureEthernetSpeed(speed as string) {
     if (not lists.contains(ETHERNET_SPEEDS, $speed)) {
         raiseError("unknown speed \"" + $speed + "\" - use one of: " +
-            strings.join(ETHERNET_SPEEDS, ", "));
+            strings.join(ETHERNET_SPEEDS, ", ") + ", or a RouterOS 7.12+ link mode like 1G-baseX");
     }
 }
 

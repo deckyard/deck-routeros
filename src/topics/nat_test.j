@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the nat topic.
 # Spliced into routeros_test.j via include - run with:
@@ -135,4 +135,34 @@ func failMoveNatRuleEmptyId() {
 
 func testMoveNatRuleRejectsEmptyId() {
     testing.assertThrows("failMoveNatRuleEmptyId", "routeros");
+}
+
+# Without an interface a bare dst-port match redirected LAN clients'
+# outgoing connections to that port on any internet host.
+func testNatForwardAttrsWithoutInterfaceMatchesLocal() {
+    def a as map of string to string init natForwardAttrs(
+        "",
+        "tcp",
+        443,
+        "192.168.88.10",
+        443,
+        "web");
+    testing.assertEqual($a["dst-address-type"], "local");
+    testing.assertFalse(maps.has($a, "in-interface"));
+    testing.assertEqual($a["dst-port"], "443");
+    testing.assertEqual($a["to-addresses"], "192.168.88.10");
+    testing.assertEqual($a["comment"], "web");
+}
+
+func testNatForwardAttrsWithInterface() {
+    def a as map of string to string init natForwardAttrs(
+        "ether1",
+        "udp",
+        51820,
+        "192.168.88.2",
+        51820,
+        "");
+    testing.assertEqual($a["in-interface"], "ether1");
+    testing.assertFalse(maps.has($a, "dst-address-type"));
+    testing.assertFalse(maps.has($a, "comment"));
 }

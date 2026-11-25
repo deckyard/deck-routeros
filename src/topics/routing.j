@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - static routes.
 # Spliced into routeros.j via include - not a standalone module.
@@ -80,10 +80,15 @@ export def struct Route {
 /**
  * List every route: static, connected and dynamic.
  *
- * Filter on `dynamic` to keep only the static ones.
+ * Filter on `dynamic` to keep only the static ones. Reads the whole
+ * table in one reply, so on a router with a BGP feed (tens of thousands
+ * of routes or more) it fails with kind "limit" from the reply cap;
+ * `removeRoute`, `enableRoute` and `disableRoute` query only the one
+ * destination and keep working there.
  *
  * @param c {Client} an open client
  * @return {list of Route} all routes
+ * @throws {Error} kind "limit" when the table exceeds the reply cap
  */
 export func routes(c as Client) {
     def rows as list of map of string to string init getAll($c, ROUTE_PATH);
@@ -164,8 +169,10 @@ export func addDefaultRoute(c as Client, gateway as string, comment as string) {
  * `remove`.
  *
  * @param c {Client}          an open client
- * @param dstAddress {string} destination network, exactly as the router lists it
- * @throws {Error} kind "routeros" when no static route to it exists
+ * @param dstAddress {string} destination network in CIDR; host bits and
+ *        letter case do not matter ("10.20.1.0/16" finds "10.20.0.0/16")
+ * @throws {Error} kind "routeros" on a destination that is not CIDR, or
+ *         when no static route to it exists
  */
 export func removeRoute(c as Client, dstAddress as string) {
     remove($c, ROUTE_PATH, requiredStaticRouteId($c, $dstAddress));
@@ -175,8 +182,9 @@ export func removeRoute(c as Client, dstAddress as string) {
  * Switch the first static route to a destination on.
  *
  * @param c {Client}          an open client
- * @param dstAddress {string} destination network, exactly as the router lists it
- * @throws {Error} kind "routeros" when no static route to it exists
+ * @param dstAddress {string} destination network in CIDR, as for `removeRoute`
+ * @throws {Error} kind "routeros" on a destination that is not CIDR, or
+ *         when no static route to it exists
  */
 export func enableRoute(c as Client, dstAddress as string) {
     enable($c, ROUTE_PATH, requiredStaticRouteId($c, $dstAddress));
@@ -187,8 +195,9 @@ export func enableRoute(c as Client, dstAddress as string) {
  * unused until enabled again.
  *
  * @param c {Client}          an open client
- * @param dstAddress {string} destination network, exactly as the router lists it
- * @throws {Error} kind "routeros" when no static route to it exists
+ * @param dstAddress {string} destination network in CIDR, as for `removeRoute`
+ * @throws {Error} kind "routeros" on a destination that is not CIDR, or
+ *         when no static route to it exists
  */
 export func disableRoute(c as Client, dstAddress as string) {
     disable($c, ROUTE_PATH, requiredStaticRouteId($c, $dstAddress));
@@ -229,6 +238,10 @@ func routeAdd(
     distance as int,
     comment as string) {
     ensureCidr($dstAddress);
+    def dst as string init strings.trim($dstAddress);
+    if (ipnet.version(ipnet.parse($dst).addr) != 4) {
+        raiseError("\"" + $dst + "\" is an IPv6 network - /ip/route holds IPv4 routes only");
+    }
     def gw as string init strings.trim($gateway);
     if ($gw == "") {
         raiseError("the gateway must not be empty");
@@ -236,7 +249,7 @@ func routeAdd(
     if (not isIpAddress($gw)) {
         requiredId($c, INTERFACE_PATH, $gw, "gateway interface");
     }
-    def attrs as map of string to string init {"dst-address": $dstAddress, "gateway": $gw};
+    def attrs as map of string to string init {"dst-address": $dst, "gateway": $gw};
     if ($distance > 0) {
         $attrs["distance"] = convert.toString($distance);
     }
@@ -250,13 +263,15 @@ func routeAdd(
  * Find the first static (non-dynamic) route row to a destination.
  *
  * @param rows {list of map of string to string} "/ip/route/print" rows
- * @param dstAddress {string} the destination network to look for
+ * @param dstAddress {string} the destination network to look for,
+ *        compared as a network (host bits and case ignored)
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
 func staticRouteRow(rows as list of map of string to string, dstAddress as string) {
     for (def row in $rows) {
-        if (rowValue($row, "dst-address") == $dstAddress and not rowBool($row, "dynamic")) {
+        if (sameNetwork(rowValue($row, "dst-address"), $dstAddress) and
+            not rowBool($row, "dynamic")) {
             return $row;
         }
     }
@@ -270,16 +285,90 @@ func staticRouteRow(rows as list of map of string to string, dstAddress as strin
  * @param c {Client}          an open client
  * @param dstAddress {string} the destination network
  * @return {string} the route id
- * @throws {Error} kind "routeros" when no static route matches
+ * @throws {Error} kind "routeros" on a destination that is not CIDR, or
+ *         when no static route matches
  * @internal
  */
 func requiredStaticRouteId(c as Client, dstAddress as string) {
-    def rows as list of map of string to string init getAll($c, ROUTE_PATH);
+    ensureCidr($dstAddress);
+    # Ask the router for this destination only: a full table (a BGP feed)
+    # does not fit one reply.
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        ROUTE_PATH,
+        ["?dst-address=" + canonicalNetwork($dstAddress)]);
     def row as map of string to string init staticRouteRow($rows, $dstAddress);
     if (len($row) == 0) {
         raiseError("no static route to \"" + $dstAddress + "\" was found");
     }
     return rowValue($row, ".id");
+}
+
+/**
+ * The canonical text of a network: host bits cleared, IPv6 lower-case and
+ * compressed, as the router lists it.
+ *
+ * @param cidr {string} the network in CIDR form
+ * @return {string} the canonical "address/prefix", or "" when it does not
+ *         parse
+ * @internal
+ */
+func canonicalNetwork(cidr as string) {
+    try {
+        return ipnet.networkString(ipnet.parse(strings.trim($cidr)));
+    } catch (e) {
+        return "";
+    }
+}
+
+/**
+ * Whether two CIDR strings name the same network.
+ *
+ * @param a {string} one network
+ * @param b {string} the other
+ * @return {bool} true when both parse and are equal; false otherwise
+ * @internal
+ */
+func sameNetwork(a as string, b as string) {
+    def ca as string init canonicalNetwork($a);
+    return $ca != "" and $ca == canonicalNetwork($b);
+}
+
+/**
+ * The network a rule source stands for: a plain address is its /32
+ * (IPv4) or /128 (IPv6).
+ *
+ * @param src {string} an address or a network
+ * @return {string} the canonical network, "" when it does not parse
+ * @internal
+ */
+func sourceNetwork(src as string) {
+    def s as string init strings.trim($src);
+    if (strings.contains($s, "/")) {
+        return canonicalNetwork($s);
+    }
+    try {
+        def addr as ipnet.Address init ipnet.parseAddress($s);
+        if (ipnet.version($addr) == 4) {
+            return canonicalNetwork($s + "/32");
+        }
+        return canonicalNetwork($s + "/128");
+    } catch (e) {
+        return "";
+    }
+}
+
+/**
+ * Whether two rule sources (address or network) are the same.
+ *
+ * @param a {string} one source
+ * @param b {string} the other
+ * @return {bool} true when both parse to the same network
+ * @internal
+ */
+func sameSource(a as string, b as string) {
+    def ca as string init sourceNetwork($a);
+    return $ca != "" and $ca == sourceNetwork($b);
 }
 
 /**
@@ -452,14 +541,15 @@ func ensureRoutingTable(c as Client, table as string) {
  * Find the rule matching a source and a table.
  *
  * @param rows {list of map of string to string} "/routing/rule/print" rows
- * @param src {string}   the source address/network
+ * @param src {string}   the source address/network; a plain address
+ *        equals its /32 (or /128), host bits and case are ignored
  * @param table {string} the table name
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
 func findRoutingRuleRow(rows as list of map of string to string, src as string, table as string) {
     for (def row in $rows) {
-        if (rowValue($row, "src-address") == $src and rowValue($row, "table") == $table) {
+        if (sameSource(rowValue($row, "src-address"), $src) and rowValue($row, "table") == $table) {
             return $row;
         }
     }

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - interface lists: named groups of interfaces (WAN/LAN/...).
 # Spliced into routeros.j via include - not a standalone module.
@@ -97,8 +97,14 @@ export func removeInterfaceList(c as Client, name as string) {
  * @return {list of string} member interface names, in router order
  */
 export func interfaceListMembers(c as Client, listName as string) {
-    def rows as list of map of string to string init getAll($c, INTERFACE_LIST_MEMBER_PATH);
     def out as list of string init [];
+    if ($listName == "") {
+        return $out;
+    }
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        INTERFACE_LIST_MEMBER_PATH,
+        ["?list=" + $listName]);
     for (def row in $rows) {
         if (rowValue($row, "list") == $listName) {
             $out[] = rowValue($row, "interface");
@@ -125,7 +131,10 @@ export func addToInterfaceList(c as Client, listName as string, interfaceName as
     if (idByName($c, INTERFACE_LIST_PATH, $listName) == "") {
         add($c, INTERFACE_LIST_PATH, {"name": $listName});
     }
-    def rows as list of map of string to string init getAll($c, INTERFACE_LIST_MEMBER_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        INTERFACE_LIST_MEMBER_PATH,
+        ["?list=" + $listName, "?interface=" + $interfaceName]);
     def existing as map of string to string init memberRow($rows, $listName, $interfaceName);
     if (len($existing) > 0) {
         return rowValue($existing, ".id");
@@ -139,10 +148,16 @@ export func addToInterfaceList(c as Client, listName as string, interfaceName as
  * @param c {Client}             an open client
  * @param listName {string}      the list
  * @param interfaceName {string} the member interface
- * @throws {Error} kind "routeros" when the interface is not in the list
+ * @throws {Error} kind "routeros" on an empty or spaced name, or when the
+ *                 interface is not in the list
  */
 export func removeFromInterfaceList(c as Client, listName as string, interfaceName as string) {
-    def rows as list of map of string to string init getAll($c, INTERFACE_LIST_MEMBER_PATH);
+    ensureName($listName, "interface list");
+    ensureName($interfaceName, "interface");
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        INTERFACE_LIST_MEMBER_PATH,
+        ["?list=" + $listName, "?interface=" + $interfaceName]);
     def row as map of string to string init memberRow($rows, $listName, $interfaceName);
     if (len($row) == 0) {
         raiseError("\"" + $interfaceName + "\" is not a member of the interface list \"" +

@@ -83,9 +83,15 @@ that CA's PEM.
 
 ## Expiry
 
-`expiringCertificates` reads `expiresAfter` (`"51w6d"`, `"4w2d13h"`),
-rounds down to whole days and skips certificates whose expiry is missing
-or does not parse.
+`expiringCertificates` reads `expiresAfter` (`"51w6d"`, `"4w2d13h"`,
+`"8w2d03:32:06"`), rounds down to whole days and includes certificates
+already expired: flagged `expired`, or with a negative time left
+(`"-3d"`). Certificates whose expiry is missing or does not parse are
+skipped.
+
+`importCertificatePem` removes its temporary `.crt` and `.key` files also
+when a write or the import fails, then throws the failure, so the
+private key does not stay on flash.
 
 ## Behind NAT: the Jennifer `acme` module
 

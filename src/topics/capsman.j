@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - CAPsMAN: central management of many access points.
 # Spliced into routeros.j via include - not a standalone module.
@@ -53,8 +53,9 @@ export def struct ManagedAp {
  *
  * RouterOS has two incompatible generations: legacy `/caps-man`
  * (classic wireless hardware) and CAPsMANv2 under `/interface/wifi`
- * (wifiwave2/ax). `version` says which one answered. Read errors count
- * as "menu absent", so a dropped connection also reports version 0.
+ * (wifiwave2/ax). `version` says which one answered. A menu that answers
+ * with a `!trap` counts as absent; any other failure (a dropped
+ * connection, a timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {CapsmanStatus} the controller state, version 0 when neither exists
@@ -157,7 +158,8 @@ func tryFirstRow(c as Client, path as string) {
 }
 
 /**
- * getAll that returns an empty list instead of throwing on an absent path.
+ * getAll that returns an empty list instead of throwing on an absent path
+ * (a `!trap`); any other failure is thrown (see `optionalMenuRows`).
  *
  * @param c {Client} an open client
  * @param path {string} list path
@@ -165,14 +167,7 @@ func tryFirstRow(c as Client, path as string) {
  * @internal
  */
 func tryGetAll(c as Client, path as string) {
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, $path);
-    } catch (e) { # lint-disable: L103
-        # Deliberate: a CAPsMAN path is absent on a router with no CAPsMAN
-        # package, and the documented result for that is an empty list.
-    }
-    return $rows;
+    return optionalMenuRows($c, $path);
 }
 
 /**

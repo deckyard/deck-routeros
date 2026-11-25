@@ -5,7 +5,7 @@
 [![release](https://img.shields.io/github/v/release/deckyard/deck-routeros)](https://github.com/deckyard/deck-routeros/releases/latest)
 
 `@deckyard/routeros` configures MikroTik™ routers from
-[Jennifer](https://jennifer-lang.dev/). It wraps the bundled `mikrotik` module
+[Jennifer](https://jennifer-lang.dev/). It wraps the `@deckyard/mikrotik` deck
 (the RouterOS™ binary API: command paths, `=key=value` words, reply sentences) in
 typed verbs and structs for interfaces, bridges, VLANs, the firewall, DHCP, DNS,
 VPNs, queues, users, certificates, system maintenance and more. Input is
@@ -28,11 +28,13 @@ applies what the script says and does not detect drift.
 jvc add @deckyard/routeros
 ```
 
-jvc vendors the deck's `src/` to `vendor/deckyard/routeros/`. Without jvc,
-unpack the `src/` subtree of a release archive
-(`deckyard-routeros-<version>.tar.gz`) there.
+jvc vendors the deck's `src/` to `vendor/deckyard/routeros/`, and its
+dependency `@deckyard/mikrotik` to `vendor/deckyard/mikrotik/`. Without jvc,
+unpack the `src/` subtree of each release archive
+(`deckyard-routeros-<version>.tar.gz`, `deckyard-mikrotik-<version>.tar.gz`)
+there.
 
-Requires Jennifer 0.27.0 or newer, the default `jennifer` binary (the transport
+Requires Jennifer 0.28.0 or newer, the default `jennifer` binary (the transport
 needs `net`; `jennifer-tiny` stubs it) and a router with the `api-ssl` (8729)
 or `api` (8728) service enabled. Login works on RouterOS 6.43+ and v7; the
 transport falls back to MD5 challenge-response for older routers.

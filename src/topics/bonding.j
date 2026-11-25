@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - bonding: several ethernet links acting as one.
 # Spliced into routeros.j via include - not a standalone module.
@@ -149,12 +149,13 @@ export func addLacpBond(c as Client, name as string, slaves as string) {
 export func addFailoverBond(c as Client, name as string, slaves as string, primary as string) {
     ensureName($name, "bond");
     def members as string init normalizedSlaves($slaves);
-    ensurePrimaryInSlaves($members, $primary);
+    def preferred as string init strings.trim($primary);
+    ensurePrimaryInSlaves($members, $preferred);
     ensureSlavesFree($c, $members, "");
     return add(
         $c,
         BONDING_PATH,
-        {"name": $name, "slaves": $members, "mode": BOND_ACTIVE_BACKUP, "primary": $primary});
+        {"name": $name, "slaves": $members, "mode": BOND_ACTIVE_BACKUP, "primary": $preferred});
 }
 
 /**

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - connection tracking: the live connection table.
 # Spliced into routeros.j via include - not a standalone module.
@@ -56,17 +56,33 @@ export func conntrackSettings(c as Client) {
     return conntrackFromRow(singleRow($c, CONNTRACK_SETTINGS_PATH));
 }
 
+# The connection properties `Connection` folds; reads ask for these only.
+def const CONNECTION_PROPS as list of string init [
+    ".id",
+    "protocol",
+    "src-address",
+    "dst-address",
+    "tcp-state",
+    "timeout",
+    "connection-mark"
+];
+
 /**
  * Read the live connection table.
  *
- * Thousands of rows on a busy router; `connectionsFor` filters to one
- * host. NAT'd connections appear in translated form.
+ * Thousands of rows on a busy router; only the properties `Connection`
+ * holds travel. A table too large for one reply throws kind "limit";
+ * `connectionsFor` filters to one host.
  *
  * @param c {Client} an open client
  * @return {list of Connection} every tracked connection
  */
 export func connections(c as Client) {
-    def rows as list of map of string to string init getAll($c, CONNECTION_PATH);
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        CONNECTION_PATH,
+        CONNECTION_PROPS,
+        []);
     def out as list of Connection init [];
     for (def row in $rows) {
         $out[] = connectionFromRow($row);
@@ -75,25 +91,28 @@ export func connections(c as Client) {
 }
 
 /**
- * List the connections whose source or destination contains an address.
+ * List the connections from or to one host.
  *
- * Warning: the match is a substring test on the "address:port" strings,
- * not an exact host match, so "10.0.0.1" also matches 10.0.0.10-19,
- * 10.0.0.100-199 and 110.0.0.1. Filter the result on `srcAddress` /
- * `dstAddress` when that matters.
+ * The host part of "address:port" must equal the address exactly, so
+ * "10.0.0.1" does not match 10.0.0.10. IPv4 only: IPv6 connections are
+ * tracked under "/ipv6/firewall/connection".
  *
  * @param c {Client} an open client
- * @param address {string} host IP to look for
+ * @param address {string} host IPv4 address to look for
  * @return {list of Connection} the matching connections
- * @throws {Error} kind "routeros" on a malformed address
+ * @throws {Error} kind "routeros" on a malformed or IPv6 address
  */
 export func connectionsFor(c as Client, address as string) {
-    ensureIpAddress($address);
-    def rows as list of map of string to string init getAll($c, CONNECTION_PATH);
+    def host as string init strings.trim($address);
+    ensureIpv4Address($host, "connection host");
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        CONNECTION_PATH,
+        CONNECTION_PROPS,
+        []);
     def out as list of Connection init [];
     for (def row in $rows) {
-        if (strings.contains(rowValue($row, "src-address"), $address) or
-            strings.contains(rowValue($row, "dst-address"), $address)) {
+        if (connectionTouches($row, $host)) {
             $out[] = connectionFromRow($row);
         }
     }
@@ -101,34 +120,67 @@ export func connectionsFor(c as Client, address as string) {
 }
 
 /**
- * Remove the tracked connections whose source or destination contains an
- * address, forcing them to re-establish.
+ * Remove the tracked connections from or to one host, forcing them to
+ * re-establish.
  *
  * Cuts a device's flows without a firewall rule, or resets flows stuck
  * after a routing change. The host can open new connections at once.
- *
- * Warning: the match is the same substring test as `connectionsFor`, so
- * "10.0.0.1" also drops the connections of 10.0.0.10-19, 10.0.0.100-199
- * and 110.0.0.1. For an exact match, filter `connections` yourself and
- * remove by id with the generic `remove`.
+ * Matches like `connectionsFor` (exact host); the connections go in
+ * batches of up to 100 per command. A connection that expires between
+ * the read and the remove fails its batch with kind "mikrotik".
  *
  * @param c {Client} an open client
- * @param address {string} host IP whose connections to drop
+ * @param address {string} host IPv4 address whose connections to drop
  * @return {int} number of connections removed
- * @throws {Error} kind "routeros" on a malformed address
+ * @throws {Error} kind "routeros" on a malformed or IPv6 address
  */
 export func dropConnectionsFor(c as Client, address as string) {
-    ensureIpAddress($address);
-    def rows as list of map of string to string init getAll($c, CONNECTION_PATH);
-    def dropped as int init 0;
+    def host as string init strings.trim($address);
+    ensureIpv4Address($host, "connection host");
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        CONNECTION_PATH,
+        [".id", "src-address", "dst-address"],
+        []);
+    def ids as list of string init [];
     for (def row in $rows) {
-        if (strings.contains(rowValue($row, "src-address"), $address) or
-            strings.contains(rowValue($row, "dst-address"), $address)) {
-            remove($c, CONNECTION_PATH, rowValue($row, ".id"));
-            $dropped = $dropped + 1;
+        if (connectionTouches($row, $host)) {
+            $ids[] = rowValue($row, ".id");
         }
     }
-    return $dropped;
+    if (len($ids) == 0) {
+        return 0;
+    }
+    return removeMany($c, CONNECTION_PATH, $ids);
+}
+
+/**
+ * Whether a connection's source or destination host is `host`.
+ *
+ * @param row {map of string to string} a connection row
+ * @param host {string} the IPv4 address
+ * @return {bool} true when either end's host part equals it
+ * @internal
+ */
+func connectionTouches(row as map of string to string, host as string) {
+    return endpointHost(rowValue($row, "src-address")) == $host or
+        endpointHost(rowValue($row, "dst-address")) == $host;
+}
+
+/**
+ * The host part of an IPv4 connection endpoint ("10.0.0.1:443" or a
+ * port-less "10.0.0.1").
+ *
+ * @param endpoint {string} the endpoint as reported
+ * @return {string} the address without its port
+ * @internal
+ */
+func endpointHost(endpoint as string) {
+    def at as int init strings.lastIndexOf($endpoint, ":");
+    if ($at < 0) {
+        return $endpoint;
+    }
+    return $endpoint[..$at];
 }
 
 /**

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - traffic flow: export NetFlow / IPFIX to a collector.
 # Spliced into routeros.j via include - not a standalone module.
@@ -100,7 +100,8 @@ export func disableTrafficFlow(c as Client) {
  * @param c {Client} an open client
  * @param address {string} collector IP address
  * @param port {int} collector UDP port (e.g. 2055 for NetFlow, 4739 for IPFIX)
- * @param version {string} "1", "5", "9" or "ipfix"
+ * @param version {string} "1", "5", "9" or "ipfix" (any case; sent as
+ *        RouterOS's "IPFIX")
  * @return {string} the RouterOS id of the new or existing target
  * @throws {Error} kind "routeros" on a bad address, port or version
  */
@@ -108,21 +109,59 @@ export func addFlowTarget(c as Client, address as string, port as int, version a
     def collector as string init strings.trim($address);
     ensureIpAddress($collector);
     ensurePort($port);
-    if (not lists.contains(FLOW_VERSIONS, $version)) {
-        raiseError("unknown NetFlow version \"" + $version + "\" - use one of: " +
-            strings.join(FLOW_VERSIONS, ", "));
-    }
+    def wire as string init flowVersionWord($version);
     def portStr as string init convert.toString($port);
     def rows as list of map of string to string init getAll($c, TRAFFIC_FLOW_TARGET_PATH);
     for (def row in $rows) {
-        if (rowValue($row, "address") == $collector and rowValue($row, "port") == $portStr) {
+        if (flowTargetAddress($row) == $collector and rowValue($row, "port") == $portStr) {
             return rowValue($row, ".id");
         }
     }
     return add(
         $c,
         TRAFFIC_FLOW_TARGET_PATH,
-        {"address": $collector, "port": $portStr, "version": $version});
+        {"dst-address": $collector, "port": $portStr, "version": $wire});
+}
+
+/**
+ * The `version` word RouterOS takes for a NetFlow version.
+ *
+ * @param version {string} "1", "5", "9" or "ipfix" in any case
+ * @return {string} the version, "IPFIX" in RouterOS's spelling
+ * @throws {Error} kind "routeros" on any other version
+ * @internal
+ */
+func flowVersionWord(version as string) {
+    def v as string init strings.lower(strings.trim($version));
+    if (not lists.contains(FLOW_VERSIONS, $v)) {
+        raiseError("unknown NetFlow version \"" + $version + "\" - use one of: " +
+            strings.join(FLOW_VERSIONS, ", "));
+    }
+    if ($v == "ipfix") {
+        return "IPFIX";
+    }
+    return $v;
+}
+
+/**
+ * A target row's collector address: `dst-address` (RouterOS v6.x and
+ * v7), else the pre-v6 `address` written "ip:port".
+ *
+ * @param row {map of string to string} a target row
+ * @return {string} the collector address, "" when absent
+ * @internal
+ */
+func flowTargetAddress(row as map of string to string) {
+    def a as string init rowValue($row, "dst-address");
+    if ($a != "") {
+        return $a;
+    }
+    def old as string init rowValue($row, "address");
+    def colon as int init strings.lastIndexOf($old, ":");
+    if ($colon > 0 and not strings.contains($old[..$colon], ":")) {
+        return $old[..$colon];
+    }
+    return $old;
 }
 
 /**
@@ -134,15 +173,15 @@ export func addFlowTarget(c as Client, address as string, port as int, version a
  * @throws {Error} kind "routeros" when no target has that address
  */
 export func removeFlowTarget(c as Client, address as string) {
+    def target as string init strings.trim($address);
     def rows as list of map of string to string init getAll($c, TRAFFIC_FLOW_TARGET_PATH);
-    def row as map of string to string init findRowByField(
-        $rows,
-        "address",
-        strings.trim($address));
-    if (len($row) == 0) {
-        raiseError("no traffic-flow target at \"" + $address + "\" was found");
+    for (def row in $rows) {
+        if ($target != "" and flowTargetAddress($row) == $target) {
+            remove($c, TRAFFIC_FLOW_TARGET_PATH, rowValue($row, ".id"));
+            return;
+        }
     }
-    remove($c, TRAFFIC_FLOW_TARGET_PATH, rowValue($row, ".id"));
+    raiseError("no traffic-flow target at \"" + $address + "\" was found");
 }
 
 /**
@@ -169,7 +208,7 @@ func trafficFlowFromRow(row as map of string to string) {
 func flowTargetFromRow(row as map of string to string) {
     return FlowTarget{
         id: rowValue($row, ".id"),
-        address: rowValue($row, "address"),
+        address: flowTargetAddress($row),
         port: rowValue($row, "port"),
         version: rowValue($row, "version"),
         disabled: rowBool($row, "disabled")

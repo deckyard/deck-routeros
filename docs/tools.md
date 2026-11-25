@@ -50,6 +50,9 @@ io.printf("rx %s bps / tx %s bps, lost %d\n", $bw.rxAverage, $bw.txAverage, $bw.
 
 The router makes the HTTP(S) request from its own network position.
 `fetchUrl` returns the body in `data`; `downloadFile` writes to storage.
+An https URL is fetched with `check-certificate=yes-without-crl`, so the
+server's CA must be in the router's certificate store; RouterOS's own
+default would accept any certificate.
 
 ```jennifer
 def ip as mt.FetchResult init mt.fetchUrl($c, "https://ifconfig.co/ip");

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - simple queues (bandwidth limits) and the queue tree (QoS).
 # Spliced into routeros.j via include - not a standalone module.
@@ -420,7 +420,8 @@ export func addQueueTreeChild(
  * Remove a tree node and every node below it, children first.
  *
  * @param c {Client} an open client
- * @param name {string} node name; the root removes the whole tree
+ * @param name {string} node name; the root removes the whole tree. An
+ *        interface name or "global" (a parent, not a node) is refused
  * @throws {Error} kind "routeros" when no tree node has that name
  */
 export func removeTreeQueue(c as Client, name as string) {
@@ -474,31 +475,54 @@ func ensureTreePriority(priority as int) {
  *
  * @param rows {list of map of string to string} "/queue/tree/print" rows
  * @param name {string} top node name
- * @return {list of string} ids in safe removal order; empty when the
- *         name matches nothing
+ * @return {list of string} ids in safe removal order; empty when no
+ *         row has that name (a parent interface or "global" included)
  * @internal
  */
 func treeQueueFamily(rows as list of map of string to string, name as string) {
-    def names as list of string init [$name];
-    def grew as bool init true;
-    while ($grew) {
-        $grew = false;
-        for (def row in $rows) {
-            def rowName as string init rowValue($row, "name");
-            if ($rowName != "" and lists.contains($names, rowValue($row, "parent")) and
-                not lists.contains($names, $rowName)) {
-                $names[] = $rowName;
-                $grew = true;
-            }
+    # Index the rows once: name -> id, parent -> child names. Interfaces and
+    # "global" are parents but never named rows, so a name with no row of
+    # its own matches nothing (else "global" would sweep every root).
+    def idOf as map of string to string init {};
+    def children as map of string to list of string init {};
+    for (def row in $rows) {
+        def rowName as string init rowValue($row, "name");
+        if ($rowName == "") {
+            continue;
         }
+        $idOf[$rowName] = rowValue($row, ".id");
+        def parent as string init rowValue($row, "parent");
+        if (not maps.has($children, $parent)) {
+            $children[$parent] = [];
+        }
+        $children[$parent][] = $rowName;
     }
     def ids as list of string init [];
-    for (def i as int init len($names) - 1; $i >= 0; $i = $i - 1) {
-        for (def row in $rows) {
-            if (rowValue($row, "name") == $names[$i]) {
-                $ids[] = rowValue($row, ".id");
-            }
+    if ($name == "" or not maps.has($idOf, $name)) {
+        return $ids;
+    }
+    # Breadth-first from the node; a name already seen (a parent loop) is
+    # not visited twice.
+    def order as list of string init [$name];
+    def seen as map of string to bool init {};
+    $seen[$name] = true;
+    def i as int init 0;
+    while ($i < len($order)) {
+        def current as string init $order[$i];
+        $i = $i + 1;
+        if (not maps.has($children, $current)) {
+            continue;
         }
+        for (def child in $children[$current]) {
+            if (maps.has($seen, $child)) {
+                continue;
+            }
+            $seen[$child] = true;
+            $order[] = $child;
+        }
+    }
+    for (def j as int init len($order) - 1; $j >= 0; $j = $j - 1) {
+        $ids[] = $idOf[$order[$j]];
     }
     return $ids;
 }

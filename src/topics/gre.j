@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - GRE tunnels: a routed point-to-point link over IP.
 # Spliced into routeros.j via include - not a standalone module.
@@ -75,7 +75,8 @@ export func greTunnelByName(c as Client, name as string) {
  *
  * @param c {Client} an open client
  * @param name {string} tunnel interface name (e.g. "grebranch")
- * @param remoteAddress {string} the other router's IP address
+ * @param remoteAddress {string} the other router's IPv4 address (GRE over
+ *        IPv6 is /interface/gre6)
  * @return {string} the RouterOS id of the new tunnel
  * @throws {Error} kind "routeros" on a bad name or address, a name
  *                 already taken, or an existing tunnel to that remote
@@ -165,11 +166,14 @@ export func disableGreTunnel(c as Client, name as string) {
 func greAdd(c as Client, name as string, remoteAddress as string, secret as string) {
     ensureName($name, "GRE tunnel");
     def remote as string init strings.trim($remoteAddress);
-    ensureIpAddress($remote);
+    ensureIpv4Address($remote, "remote address");
     if (idByName($c, GRE_PATH, $name) != "") {
         raiseError("the GRE tunnel \"" + $name + "\" already exists");
     }
-    def rows as list of map of string to string init getAll($c, GRE_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        GRE_PATH,
+        ["?remote-address=" + $remote]);
     def clash as map of string to string init findRowByField($rows, "remote-address", $remote);
     if (len($clash) > 0) {
         raiseError("a GRE tunnel to " + $remote + " already exists: \"" + rowValue($clash, "name") +

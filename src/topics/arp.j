@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - the ARP table: which IP belongs to which MAC.
 # Spliced into routeros.j via include - not a standalone module.
@@ -62,11 +62,17 @@ export func arpTable(c as Client) {
  * @return {list of ArpEntry} that interface's entries
  */
 export func arpTableOn(c as Client, interfaceName as string) {
-    def all as list of ArpEntry init arpTable($c);
     def out as list of ArpEntry init [];
-    for (def entry in $all) {
-        if ($entry.interfaceName == $interfaceName) {
-            $out[] = $entry;
+    if ($interfaceName == "") {
+        return $out;
+    }
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        ARP_PATH,
+        ["?interface=" + $interfaceName]);
+    for (def row in $rows) {
+        if (rowValue($row, "interface") == $interfaceName) {
+            $out[] = arpFromRow($row);
         }
     }
     return $out;
@@ -79,16 +85,24 @@ export func arpTableOn(c as Client, interfaceName as string) {
  * router), so it returns "" instead of throwing.
  *
  * @param c {Client} an open client
- * @param address {string} IP address to look up
- * @return {string} the MAC address, or "" when the table has no entry
- * @throws {Error} kind "routeros" on a malformed address
+ * @param address {string} IPv4 address to look up
+ * @return {string} the MAC address, or "" when the table has no resolved
+ *         entry
+ * @throws {Error} kind "routeros" on a malformed or IPv6 address
  */
 export func macForAddress(c as Client, address as string) {
     def target as string init strings.trim($address);
-    ensureIpAddress($target);
-    def rows as list of map of string to string init getAll($c, ARP_PATH);
-    def row as map of string to string init findRowByField($rows, "address", $target);
-    return rowValue($row, "mac-address");
+    ensureIpv4Address($target, "ARP address");
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        ARP_PATH,
+        ["?address=" + $target]);
+    for (def row in $rows) {
+        if (rowValue($row, "address") == $target and rowValue($row, "mac-address") != "") {
+            return rowValue($row, "mac-address");
+        }
+    }
+    return "";
 }
 
 /**
@@ -104,7 +118,10 @@ export func macForAddress(c as Client, address as string) {
  */
 export func addressesForMac(c as Client, mac as string) {
     ensureMac($mac);
-    def rows as list of map of string to string init getAll($c, ARP_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        ARP_PATH,
+        ["?mac-address=" + strings.upper(strings.trim($mac))]);
     return addressesForMacRows($rows, $mac);
 }
 
@@ -122,17 +139,21 @@ export func addressesForMac(c as Client, mac as string) {
  * @param mac {string} MAC it must resolve to
  * @param interfaceName {string} interface or bridge the binding lives on
  * @return {string} id of the new entry
- * @throws {Error} kind "routeros" on a malformed address or MAC, an
- *                unknown interface, or an existing static entry
+ * @throws {Error} kind "routeros" on a malformed or IPv6 address, a
+ *                malformed MAC, an unknown interface, or an existing static
+ *                entry
  * @example
  *   mt.addStaticArp($c, "192.168.88.50", "AA:BB:CC:DD:EE:FF", "brlan");
  */
 export func addStaticArp(c as Client, address as string, mac as string, interfaceName as string) {
     def target as string init strings.trim($address);
-    ensureIpAddress($target);
+    ensureIpv4Address($target, "ARP address");
     ensureMac($mac);
     requiredId($c, INTERFACE_PATH, $interfaceName, "interface");
-    def rows as list of map of string to string init getAll($c, ARP_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        ARP_PATH,
+        ["?address=" + $target]);
     def existing as map of string to string init findStaticArpRow($rows, $target, $interfaceName);
     if (len($existing) > 0) {
         raiseError("a static ARP entry for " + $target + " on \"" + $interfaceName +
@@ -153,12 +174,17 @@ export func addStaticArp(c as Client, address as string, mac as string, interfac
  * removed.
  *
  * @param c {Client} an open client
- * @param address {string} IP address whose entry goes
- * @throws {Error} kind "routeros" when the table has no entry for it
+ * @param address {string} IPv4 address whose entry goes
+ * @throws {Error} kind "routeros" on a malformed or IPv6 address, or when
+ *                 the table has no entry for it
  */
 export func removeArpEntry(c as Client, address as string) {
     def target as string init strings.trim($address);
-    def rows as list of map of string to string init getAll($c, ARP_PATH);
+    ensureIpv4Address($target, "ARP address");
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        ARP_PATH,
+        ["?address=" + $target]);
     def row as map of string to string init findRowByField($rows, "address", $target);
     if (len($row) == 0) {
         raiseError("the ARP table has no entry for \"" + $target + "\"");
@@ -170,22 +196,32 @@ export func removeArpEntry(c as Client, address as string) {
  * Remove every dynamic ARP entry on an interface.
  *
  * The router re-learns its neighbours from scratch. Static entries stay.
- * An interface with no dynamic entries is not an error.
+ * An interface with no dynamic entries is not an error. The entries go
+ * in batches of up to 100 per command; one that ages out in between fails
+ * its batch with kind "mikrotik".
  *
  * @param c {Client} an open client
  * @param interfaceName {string} interface to flush
  * @return {int} number of entries removed
+ * @throws {Error} kind "routeros" on an empty or spaced interface name
  */
 export func flushArp(c as Client, interfaceName as string) {
-    def rows as list of map of string to string init getAll($c, ARP_PATH);
-    def flushed as int init 0;
+    ensureName($interfaceName, "interface");
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        ARP_PATH,
+        [".id", "interface", "dynamic"],
+        ["?interface=" + $interfaceName]);
+    def ids as list of string init [];
     for (def row in $rows) {
         if (rowValue($row, "interface") == $interfaceName and rowBool($row, "dynamic")) {
-            remove($c, ARP_PATH, rowValue($row, ".id"));
-            $flushed = $flushed + 1;
+            $ids[] = rowValue($row, ".id");
         }
     }
-    return $flushed;
+    if (len($ids) == 0) {
+        return 0;
+    }
+    return removeMany($c, ARP_PATH, $ids);
 }
 
 /**

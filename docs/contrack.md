@@ -41,13 +41,17 @@ io.printf("dropped %d connections\n", $n);
 
 ## Pitfalls
 
-- `connectionsFor` and `dropConnectionsFor` match by substring on the
-  `address:port` strings, not by exact host. `"192.168.88.5"` also
-  matches 192.168.88.50-59, so `dropConnectionsFor` can drop other
-  hosts' connections.
-  For an exact match, filter `connections(c)` on `srcAddress` /
-  `dstAddress` and remove by id with the generic `remove`.
-- `connections(c)` returns thousands of rows on a busy router.
+- `connectionsFor` and `dropConnectionsFor` compare the host part of
+  each `address:port` with the address exactly: `"192.168.88.5"` does not
+  match 192.168.88.50. IPv4 only; IPv6 connections are under
+  `/ipv6/firewall/connection` (generic `getAll`).
+- `connections(c)` returns thousands of rows on a busy router. Only the
+  `Connection` properties travel, but a table past one reply's cap (about
+  30,000 rows) throws kind `"limit"`. `dropConnectionsFor` reads three
+  properties per row, so it reaches further.
+- `dropConnectionsFor` removes up to 100 connections per command. A
+  connection that times out between the read and the remove fails its
+  batch with a `mikrotik` error; call it again.
 - Dropping connections does not block: the host can reconnect at once.
   To keep it out, add a firewall rule ([firewall.md](firewall.md)) or
   an address-list drop ([addresslist.md](addresslist.md)), then drop

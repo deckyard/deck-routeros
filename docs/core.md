@@ -139,11 +139,15 @@ Logging covers every command the deck sends, reads included: all topics
 go through the same four transport functions.
 
 Credentials print as `<redacted>`. Redacted keys: `password`, `secret`,
-`passphrase`, `private-key`, keys ending in `-password`, `-secret`,
-`-passphrase`, `.passphrase` or `-private-key`, and keys containing
-`pre-shared-key`. `public-key`, `key-usage`, `passive` and `passthrough`
-are not redacted. An SNMP community travels as a plain `name` and does
-appear in the log (see [snmp.md](snmp.md)).
+`passphrase`, `pin`, `contents` (file contents, such as the private key
+`importCertificatePem` moves), keys ending in `-password`, `-secret`,
+`-passphrase`, `.passphrase` or `-key` (`private-key`, `preshared-key`,
+`tcp-md5-key`, ...), and keys containing `pre-shared-key`. Two keys are
+secret under one menu only: `value` under `/container/envs` (passwords
+handed to an image) and `name` under `/snmp/community` (the community
+string). `public-key`, `key-usage`, a container env's `key`, `passive` and
+`passthrough` are not redacted. A query word comparing a secret property
+(`?name=` under `/snmp/community`) prints its value as `<redacted>` too.
 
 ```
 mt> /tool/e-mail/set server=smtp.example.org user=router password=<redacted>

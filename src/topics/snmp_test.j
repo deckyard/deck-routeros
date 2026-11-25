@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the snmp topic.
 # Spliced into routeros_test.j via include - run with:
@@ -67,4 +67,22 @@ func failEnableSnmpBadAddress() {
 
 func testEnableSnmpRejectsBadAddress() {
     testing.assertThrows("failEnableSnmpBadAddress", "routeros");
+}
+
+# The community string is the secret: enableSnmp's lookup query and its
+# add/set attribute must not show it in the verbose log.
+func testSnmpCommunityRedactedInLog() {
+    def q as string init formatQueriesFor(SNMP_COMMUNITY_PATH, ["?name=s3cret"]);
+    testing.assertFalse(strings.contains($q, "s3cret"));
+    def a as string init formatAttrsFor(
+        SNMP_COMMUNITY_PATH + "/add",
+        {"name": "s3cret", "addresses": snmpAllowedAddresses("")});
+    testing.assertFalse(strings.contains($a, "s3cret"));
+    testing.assertTrue(strings.contains($a, "addresses=0.0.0.0/0,::/0"));
+}
+
+# An empty sources argument used to send addresses="".
+func testSnmpAllowedAddresses() {
+    testing.assertEqual(snmpAllowedAddresses(" "), "0.0.0.0/0,::/0");
+    testing.assertEqual(snmpAllowedAddresses("10.0.9.0/24, 10.0.8.1"), "10.0.9.0/24,10.0.8.1");
 }

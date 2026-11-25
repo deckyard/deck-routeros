@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - SSTP remote-access VPN server and dial-out clients.
 # Spliced into routeros.j via include - not a standalone module.
@@ -65,7 +65,7 @@ export func sstpServerStatus(c as Client) {
  * (Let's Encrypt) certificate built-in clients connect without
  * warnings; a self-signed one must be imported on each client. Accepts
  * the TCP port in the input chain. Add logins with `addVpnUser`.
- * Idempotent.
+ * Idempotent; a re-run with another port moves the input rule along.
  *
  * @param c {Client} an open client
  * @param certificate {string} name of the TLS certificate in the store
@@ -111,11 +111,14 @@ export func sstpClients(c as Client) {
 }
 
 /**
- * Dial out to a remote SSTP server.
+ * Dial out to a remote SSTP server, verifying its certificate.
  *
- * The client is created with `verify-server-certificate=no`: it does not
- * check the server's certificate. When a client of that name exists,
- * its id is returned and nothing is changed.
+ * The client is created with `verify-server-certificate=yes`: the
+ * server's certificate must chain to a CA in this router's certificate
+ * store (`importCertificatePem`) and name `serverAddress`, otherwise the
+ * client does not connect. For a server you cannot verify, use
+ * `addSstpClientWith` with `verifyServerCertificate` false. When a client of
+ * that name exists, its id is returned and nothing is changed.
  *
  * @param c {Client} an open client
  * @param name {string} client interface name
@@ -132,7 +135,35 @@ export func addSstpClient(
     serverAddress as string,
     user as string,
     password as string) {
-    def extra as map of string to string init {"verify-server-certificate": "no"};
+    return addSstpClientWith($c, $name, $serverAddress, $user, $password, true);
+}
+
+/**
+ * Dial out to a remote SSTP server, choosing whether to verify its
+ * certificate.
+ *
+ * Without verification anyone on the path can pose as the server and
+ * capture the login exchange; turn it off only on a link you trust. When
+ * a client of that name exists, its id is returned and nothing is
+ * changed.
+ *
+ * @param c {Client} an open client
+ * @param name {string} client interface name
+ * @param serverAddress {string} server address or DNS name
+ * @param user {string} login on the server
+ * @param password {string} password for that login
+ * @param verifyServerCertificate {bool} check the server's certificate
+ *        against the router's store
+ * @return {string} the RouterOS id of the new or existing client
+ * @throws {Error} kind "routeros" as `addSstpClient`
+ */
+export func addSstpClientWith(
+    c as Client,
+    name as string,
+    serverAddress as string,
+    user as string,
+    password as string,
+    verifyServerCertificate as bool) {
     return vpnClientAdd(
         $c,
         SSTP_CLIENT_PATH,
@@ -141,7 +172,7 @@ export func addSstpClient(
         $serverAddress,
         $user,
         $password,
-        $extra);
+        verifyServerExtra($verifyServerCertificate));
 }
 
 /**
@@ -153,6 +184,18 @@ export func addSstpClient(
  */
 export func removeSstpClient(c as Client, name as string) {
     remove($c, SSTP_CLIENT_PATH, requiredId($c, SSTP_CLIENT_PATH, $name, "SSTP client"));
+}
+
+/**
+ * The client attribute that turns server-certificate checking on or off
+ * (SSTP and OpenVPN clients share its name).
+ *
+ * @param verify {bool} check the server's certificate
+ * @return {map of string to string} `verify-server-certificate` as yes/no
+ * @internal
+ */
+func verifyServerExtra(verify as bool) {
+    return {"verify-server-certificate": boolWord($verify)};
 }
 
 /**

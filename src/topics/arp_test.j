@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the arp topic.
 # Spliced into routeros_test.j via include - run with:
@@ -120,4 +120,60 @@ func failAddStaticArpBadAddress() {
 
 func testAddStaticArpRejectsBadAddress() {
     testing.assertThrows("failAddStaticArpBadAddress", "routeros");
+}
+
+func arpFake() {
+    return fakeWithRows(
+        fakeRouter(),
+        ARP_PATH,
+        [
+            {".id": "*1", "address": "10.0.0.5", "interface": "brlan", "dynamic": "true"},
+            {
+                ".id": "*2",
+                "address": "10.0.0.6",
+                "mac-address": "AA:BB:CC:DD:EE:01",
+                "interface": "brlan",
+                "dynamic": "true"
+            },
+            {
+                ".id": "*3",
+                "address": "10.0.0.7",
+                "mac-address": "AA:BB:CC:DD:EE:02",
+                "interface": "brlan"
+            },
+            {
+                ".id": "*4",
+                "address": "10.0.0.5",
+                "mac-address": "AA:BB:CC:DD:EE:03",
+                "interface": "brguest",
+                "dynamic": "true"
+            }
+        ]);
+}
+
+func testFlushArpBatchesDynamicEntries() {
+    def f as Fake init fakeStart(arpFake());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(flushArp($c, "brlan"), 2);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/ip/arp/print =.proplist=.id,interface,dynamic ?interface=brlan"));
+    testing.assertTrue(fakeSaw($log, "/ip/arp/remove =.id=*1,*2"));
+}
+
+func testMacForAddressSkipsUnresolvedEntries() {
+    def f as Fake init fakeStart(arpFake());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(macForAddress($c, "10.0.0.5"), "AA:BB:CC:DD:EE:03");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/ip/arp/print ?address=10.0.0.5"));
+}
+
+func failRemoveArpEntryIpv6() {
+    removeArpEntry(offlineClient(), "2001:db8::1");
+}
+
+func testRemoveArpEntryRejectsIpv6() {
+    testing.assertThrows("failRemoveArpEntryIpv6", "routeros");
 }

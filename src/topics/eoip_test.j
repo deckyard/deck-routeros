@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the eoip topic.
 # Spliced into routeros_test.j via include - run with:
@@ -120,4 +120,12 @@ func failAddSecureEoipTunnelEmptySecret() {
 
 func testAddSecureEoipTunnelRejectsEmptySecret() {
     testing.assertThrows("failAddSecureEoipTunnelEmptySecret", "routeros");
+}
+
+func failEoipIpv6Remote() {
+    addEoipTunnel(offlineClient(), "eoipx", "2001:db8::2", 7);
+}
+
+func testAddEoipTunnelRejectsIpv6Remote() {
+    testing.assertThrows("failEoipIpv6Remote", "routeros");
 }

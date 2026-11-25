@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - WiFi: radios, security profiles, clients.
 # Spliced into routeros.j via include - not a standalone module.
@@ -71,20 +71,15 @@ export def struct WifiClient {
  * List every wireless interface: physical radios and virtual APs.
  *
  * Empty on routers without the classic wireless menu (wired-only models,
- * wifiwave2 hardware) and on any read error, a dropped connection
- * included.
+ * wifiwave2 hardware); any other failure (a dropped connection, a
+ * timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of WirelessInterface} all wireless interfaces
  */
 export func wirelessInterfaces(c as Client) {
     def out as list of WirelessInterface init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, WIRELESS_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, WIRELESS_PATH);
     for (def row in $rows) {
         $out[] = wirelessFromRow($row);
     }
@@ -145,9 +140,12 @@ export func setWifiSsid(c as Client, interfaceName as string, ssid as string) {
  * Change the WiFi password of a radio.
  *
  * The password lives in the interface's security profile. An interface
- * on the shared "default" profile (or none) is first moved to a
- * dedicated profile, so other radios keep their password. Connected
- * clients are dropped and must reconnect with the new password.
+ * on the "default" profile, on none, or on a profile another interface
+ * also uses is first moved to a dedicated WPA2-PSK profile, so other
+ * radios keep their password and settings. A profile this interface
+ * uses alone keeps its mode and authentication types; only its
+ * `wpa2-pre-shared-key` changes. Connected clients are dropped and must
+ * reconnect with the new password.
  *
  * @param c {Client} an open client
  * @param interfaceName {string} wireless interface
@@ -156,20 +154,52 @@ export func setWifiSsid(c as Client, interfaceName as string, ssid as string) {
  */
 export func setWifiPassword(c as Client, interfaceName as string, password as string) {
     ensureWifiPassword($password);
-    def row as map of string to string init findByName($c, WIRELESS_PATH, $interfaceName);
+    def rows as list of map of string to string init getAll($c, WIRELESS_PATH);
+    def row as map of string to string init findRowByField($rows, "name", $interfaceName);
     if (len($row) == 0) {
         raiseError("the wireless interface \"" + $interfaceName + "\" was not found on the router");
     }
     def profile as string init rowValue($row, "security-profile");
-    if ($profile == "" or $profile == "default") {
+    if (profileIsShared($rows, $interfaceName, $profile)) {
         def dedicated as string init ensureWifiProfile(
             $c,
             wifiProfileName($interfaceName),
             $password);
         set($c, WIRELESS_PATH, rowValue($row, ".id"), {"security-profile": $dedicated});
-    } else {
-        ensureWifiProfile($c, $profile, $password);
+        return;
     }
+    set(
+        $c,
+        WIRELESS_SECURITY_PATH,
+        requiredId($c, WIRELESS_SECURITY_PATH, $profile, "security profile"),
+        {"wpa2-pre-shared-key": $password});
+}
+
+/**
+ * Whether changing a profile would touch more than one interface: the
+ * built-in "default", no profile at all, or a profile another interface
+ * uses too.
+ *
+ * @param rows {list of map of string to string} "/interface/wireless" rows
+ * @param interfaceName {string} the interface being changed
+ * @param profile {string} its security profile
+ * @return {bool} true when the interface needs a dedicated profile
+ * @internal
+ */
+func profileIsShared(
+    rows as list of map of string to string,
+    interfaceName as string,
+    profile as string) {
+    if ($profile == "" or $profile == "default") {
+        return true;
+    }
+    for (def row in $rows) {
+        if (rowValue($row, "name") != $interfaceName and
+            rowValue($row, "security-profile") == $profile) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -258,20 +288,17 @@ export func disableWifi(c as Client, interfaceName as string) {
 /**
  * List the wireless clients connected right now.
  *
- * Empty on routers without the classic wireless menu and on any read
- * error, a dropped connection included.
+ * Empty on routers without the classic wireless menu; any other failure
+ * (a dropped connection, a timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of WifiClient} one entry per connected device
  */
 export func wifiClients(c as Client) {
     def out as list of WifiClient init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, WIRELESS_REGISTRATION_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows(
+        $c,
+        WIRELESS_REGISTRATION_PATH);
     for (def row in $rows) {
         $out[] = wifiClientFromRow($row);
     }
@@ -279,26 +306,27 @@ export func wifiClients(c as Client) {
 }
 
 /**
- * Validate an SSID: 1-32 characters, spaces allowed.
+ * Validate an SSID: 1-32 bytes (UTF-8), spaces allowed.
  *
  * @param ssid {string} the candidate network name
- * @throws {Error} kind "routeros" when empty or too long
+ * @throws {Error} kind "routeros" when empty or over 32 bytes
  * @internal
  */
 func ensureSsid(ssid as string) {
     if (strings.trim($ssid) == "") {
         raiseError("the SSID (network name) must not be empty");
     }
-    if (len($ssid) > 32) {
-        raiseError("the SSID must be at most 32 characters");
+    if (len(encoding.encode("utf-8", $ssid)) > 32) {
+        raiseError("the SSID must be at most 32 bytes (UTF-8): fewer characters outside ASCII");
     }
 }
 
 /**
- * Validate a WPA2 passphrase: 8 to 63 characters.
+ * Validate a WPA2 passphrase: 8 to 63 printable ASCII characters.
  *
  * @param password {string} the candidate passphrase
- * @throws {Error} kind "routeros" when outside 8-63 characters
+ * @throws {Error} kind "routeros" when outside 8-63 characters or holding
+ *         a character outside printable ASCII
  * @internal
  */
 func ensureWifiPassword(password as string) {
@@ -307,6 +335,15 @@ func ensureWifiPassword(password as string) {
     }
     if (len($password) > 63) {
         raiseError("the WiFi password must be at most 63 characters (WPA2 requirement)");
+    }
+    def raw as bytes init encoding.encode("utf-8", $password);
+    if (len($raw) != len($password)) {
+        raiseError("the WiFi password must be printable ASCII (WPA2 requirement)");
+    }
+    for (def i as int init 0; $i < len($raw); $i = $i + 1) {
+        if ($raw[$i] < 32 or $raw[$i] > 126) {
+            raiseError("the WiFi password must be printable ASCII (WPA2 requirement)");
+        }
     }
 }
 

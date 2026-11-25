@@ -1,6 +1,6 @@
 [package]
 name = "@deckyard/routeros"
-version = "0.5.0"
+version = "0.6.0"
 description = "A thick, friendly layer over the MikroTik RouterOS API"
 license = "LGPL-3.0-only"
 authors = ["mplx <mplx@jennifer-lang.dev>"]
@@ -17,4 +17,7 @@ manual = "https://deckyard.github.io/deck-routeros/"
 # Only the default binary. The deck talks to a router over a socket, which the
 # constrained build has no capability for.
 [engines]
-jennifer = ">=0.27.0"
+jennifer = ">=0.28.0"
+
+[decks]
+"@deckyard/mikrotik" = "^0.5.0"

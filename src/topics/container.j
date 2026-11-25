@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - containers: run OCI images on the router (RouterOS v7).
 # Spliced into routeros.j via include - not a standalone module.
@@ -155,7 +155,7 @@ export func addContainer(
  *
  * @param c {Client} an open client
  * @param name {string} container comment or image tag
- * @throws {Error} kind "routeros" when no such container exists
+ * @throws {Error} kind "routeros" on an empty name or when no such container exists
  */
 export func startContainer(c as Client, name as string) {
     apiRun($c, CONTAINER_PATH + "/start", {".id": requiredContainerId($c, $name)});
@@ -166,7 +166,7 @@ export func startContainer(c as Client, name as string) {
  *
  * @param c {Client} an open client
  * @param name {string} container comment or image tag
- * @throws {Error} kind "routeros" when no such container exists
+ * @throws {Error} kind "routeros" on an empty name or when no such container exists
  */
 export func stopContainer(c as Client, name as string) {
     apiRun($c, CONTAINER_PATH + "/stop", {".id": requiredContainerId($c, $name)});
@@ -177,7 +177,7 @@ export func stopContainer(c as Client, name as string) {
  *
  * @param c {Client} an open client
  * @param name {string} container comment or image tag
- * @throws {Error} kind "routeros" when no such container exists
+ * @throws {Error} kind "routeros" on an empty name or when no such container exists
  */
 export func removeContainer(c as Client, name as string) {
     remove($c, CONTAINER_PATH, requiredContainerId($c, $name));
@@ -348,15 +348,21 @@ export func setContainerMountLists(c as Client, name as string, listNames as lis
  */
 func removeListEntries(c as Client, path as string, listName as string, what as string) {
     ensureName($listName, $what);
-    def rows as list of map of string to string init getAll($c, $path);
-    def gone as int init 0;
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        $path,
+        [".id", "list"],
+        ["?list=" + $listName]);
+    def ids as list of string init [];
     for (def row in $rows) {
         if (rowValue($row, "list") == $listName) {
-            remove($c, $path, rowValue($row, ".id"));
-            $gone = $gone + 1;
+            $ids[] = rowValue($row, ".id");
         }
     }
-    return $gone;
+    if (len($ids) == 0) {
+        return 0;
+    }
+    return removeMany($c, $path, $ids);
 }
 
 /**
@@ -379,20 +385,31 @@ func joinListNames(listNames as list of string, what as string) {
 /**
  * Resolve a container to its id by comment or, failing that, image tag.
  *
+ * A comment match wins over a tag match anywhere in the table, so a
+ * container labelled "pihole:latest" is not mistaken for another one
+ * running that image.
+ *
  * @param c {Client} an open client
  * @param name {string} container comment or image tag
  * @return {string} the container id
- * @throws {Error} kind "routeros" when no such container exists
+ * @throws {Error} kind "routeros" on an empty or spaced name, or when no
+ *                 such container exists
  * @internal
  */
 func requiredContainerId(c as Client, name as string) {
+    ensureName($name, "container");
     def rows as list of map of string to string init getAll($c, CONTAINER_PATH);
-    for (def row in $rows) {
-        if (rowValue($row, "comment") == $name or rowValue($row, "name") == $name) {
-            return rowValue($row, ".id");
-        }
+    def row as map of string to string init findRowByField($rows, "comment", $name);
+    if (len($row) == 0) {
+        $row = findRowByField($rows, "name", $name);
     }
-    raiseError("no container named \"" + $name + "\" was found");
+    if (len($row) == 0) {
+        $row = findRowByField($rows, "tag", $name);
+    }
+    if (len($row) == 0) {
+        raiseError("no container named \"" + $name + "\" was found");
+    }
+    return rowValue($row, ".id");
 }
 
 /**

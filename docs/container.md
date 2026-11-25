@@ -69,6 +69,9 @@ for (def ct in $cts) { io.printf("%s (%s): %s\n", $ct.name, $ct.tag, $ct.status)
   container; anything else gets `!trap: unknown parameter`.
 - A container is software running on your router; treat its image and
   exposure like any other host.
+- The container verbs look a container up by its comment first, then by
+  image tag; an empty name is refused. Env values are secrets to the
+  verbose log (`<redacted>`).
 
 See also [dns.md](dns.md) (point DHCP clients at a DNS container) and
 [files.md](files.md).

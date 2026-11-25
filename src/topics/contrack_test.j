@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the contrack topic.
 # Spliced into routeros_test.j via include - run with:
@@ -60,4 +60,50 @@ func failDropConnectionsForNetwork() {
 
 func testDropConnectionsForRejectsNetwork() {
     testing.assertThrows("failDropConnectionsForNetwork", "routeros");
+}
+
+func connectionFake() {
+    return fakeWithRows(
+        fakeRouter(),
+        CONNECTION_PATH,
+        [
+            {".id": "*1", "src-address": "10.0.0.1:51000", "dst-address": "93.184.216.34:443"},
+            {".id": "*2", "src-address": "10.0.0.10:51001", "dst-address": "93.184.216.34:443"},
+            {".id": "*3", "src-address": "110.0.0.1:5000", "dst-address": "10.0.0.100:22"},
+            {".id": "*4", "src-address": "8.8.8.8", "dst-address": "10.0.0.1", "protocol": "icmp"}
+        ]);
+}
+
+func testDropConnectionsForMatchesTheHostExactly() {
+    def f as Fake init fakeStart(connectionFake());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(dropConnectionsFor($c, "10.0.0.1"), 2);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/ip/firewall/connection/print =.proplist=.id,src-address,dst-address"));
+    testing.assertTrue(fakeSaw($log, "/ip/firewall/connection/remove =.id=*1,*4"));
+    testing.assertFalse(fakeSaw($log, "/ip/firewall/connection/remove =.id=*1,*2"));
+}
+
+func testConnectionsForMatchesTheHostExactly() {
+    def f as Fake init fakeStart(connectionFake());
+    def c as Client init fakeClient($f);
+    def got as list of Connection init connectionsFor($c, "10.0.0.10");
+    fakeLog($c, $f);
+    testing.assertEqual(len($got), 1);
+    testing.assertEqual($got[0].id, "*2");
+}
+
+func failConnectionsForIpv6() {
+    connectionsFor(offlineClient(), "2001:db8::1");
+}
+
+func testConnectionsForRejectsIpv6() {
+    testing.assertThrows("failConnectionsForIpv6", "routeros");
+}
+
+func testEndpointHost() {
+    testing.assertEqual(endpointHost("10.0.0.1:443"), "10.0.0.1");
+    testing.assertEqual(endpointHost("10.0.0.1"), "10.0.0.1");
 }

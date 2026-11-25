@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the ipsec topic.
 # Spliced into routeros_test.j via include - run with:
@@ -133,4 +133,59 @@ func failSetupIkev2ServerSpacedName() {
 
 func testSetupIkev2ServerRejectsSpacedName() {
     testing.assertThrows("failSetupIkev2ServerSpacedName", "routeros");
+}
+
+func failTeardownIpsecTunnelEmptyName() {
+    teardownIpsecTunnel(offlineClient(), "");
+}
+
+# An empty name matched every policy without a peer (the default template
+# included) and removed them.
+func testTeardownIpsecTunnelRejectsEmptyName() {
+    testing.assertThrows("failTeardownIpsecTunnelEmptyName", "routeros");
+}
+
+func testHasPeerRowMatchesOnlyThatPeer() {
+    def rows as list of map of string to string init [
+        {".id": "*FFFFFE", "template": "true"},
+        {".id": "*2", "peer": "office"}
+    ];
+    testing.assertTrue(hasPeerRow($rows, "office"));
+    testing.assertFalse(hasPeerRow($rows, "branch"));
+    testing.assertFalse(hasPeerRow($rows, ""));
+}
+
+func testTeardownIpsecTunnelKeepsPeerlessPolicies() {
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeWithRows(fakeRouter(), IPSEC_PEER_PATH, [{".id": "*7", "name": "office"}]),
+        IPSEC_POLICY_PATH,
+        [{".id": "*FFFFFE", "template": "true"}, {".id": "*6", "peer": "office"}]));
+    def c as Client init fakeClient($f);
+    teardownIpsecTunnel($c, "office");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, IPSEC_POLICY_PATH + "/remove =.id=*6"));
+    testing.assertFalse(fakeSaw($log, IPSEC_POLICY_PATH + "/remove =.id=*FFFFFE"));
+    testing.assertTrue(fakeSaw($log, IPSEC_PEER_PATH + "/remove =.id=*7"));
+}
+
+# A run that stopped after the peer: calling again adds the identity and
+# the policy instead of returning the peer id with nothing else.
+func testSetupIpsecTunnelCompletesHalfBuiltTunnel() {
+    def f as Fake init fakeStart(fakeWithRows(
+        fakeRouter(),
+        IPSEC_PEER_PATH,
+        [{".id": "*7", "name": "office"}]));
+    def c as Client init fakeClient($f);
+    def id as string init setupIpsecTunnel(
+        $c,
+        "office",
+        "203.0.113.9",
+        "k3y",
+        "10.1.0.0/24",
+        "10.2.0.0/24");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($id, "*7");
+    testing.assertFalse(fakeSaw($log, IPSEC_PEER_PATH + "/add"));
+    testing.assertTrue(fakeSaw($log, IPSEC_IDENTITY_PATH + "/add"));
+    testing.assertTrue(fakeSaw($log, IPSEC_POLICY_PATH + "/add"));
 }

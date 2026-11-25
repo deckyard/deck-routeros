@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - hotspot: a captive guest portal.
 # Spliced into routeros.j via include - not a standalone module.
@@ -163,7 +163,8 @@ export func setupHotspot(
  * @param c {Client}       an open client
  * @param name {string}    the name given to `setupHotspot`
  * @param network {string} the CIDR string given to `setupHotspot`
- * @throws {Error} kind "routeros" when nothing of the portal exists
+ * @throws {Error} kind "routeros" when nothing of the portal exists; a
+ *                 router or transport error midway is rethrown as is
  */
 export func teardownHotspot(c as Client, name as string, network as string) {
     def found as int init 0;
@@ -177,14 +178,7 @@ export func teardownHotspot(c as Client, name as string, network as string) {
         remove($c, HOTSPOT_PROFILE_PATH, $profileId);
         $found = $found + 1;
     }
-    try {
-        teardownDhcp($c, $name, $network);
-        $found = $found + 1;
-    } catch (e) { # lint-disable: L103
-        # Deliberate: the DHCP half may already be gone, or never have been
-        # set up. That is not a failure to remove the hotspot - $found simply
-        # does not count it, and an entirely absent hotspot still raises below.
-    }
+    $found = $found + teardownDhcpPieces($c, $name, $network);
     if ($found == 0) {
         raiseError("no hotspot named \"" + $name + "\" was found");
     }
@@ -281,7 +275,10 @@ export func hotspotActive(c as Client) {
  * @throws {Error} kind "routeros" when that login has no active session
  */
 export func kickHotspotUser(c as Client, user as string) {
-    def rows as list of map of string to string init getAll($c, HOTSPOT_ACTIVE_PATH);
+    def rows as list of map of string to string init [];
+    if ($user != "") {
+        $rows = apiPrintWhere($c, HOTSPOT_ACTIVE_PATH, ["?user=" + $user]);
+    }
     def row as map of string to string init findRowByField($rows, "user", $user);
     if (len($row) == 0) {
         raiseError("\"" + $user + "\" has no active hotspot session");
@@ -293,21 +290,36 @@ export func kickHotspotUser(c as Client, user as string) {
  * Let a device through the portal without logging in (a bypass binding).
  *
  * For devices that cannot use a login page: printers, TVs, payment
- * terminals. Idempotent by MAC.
+ * terminals. Idempotent by MAC: an existing bypass binding's id is
+ * returned. A binding of another type for the MAC (blocked, regular) is
+ * refused rather than turned into a bypass; remove it first.
  *
  * @param c {Client}       an open client
  * @param mac {string}     device MAC, any case; sent uppercased
  * @param comment {string} free-text note (e.g. "lobby printer"), "" for none
  * @return {string} the RouterOS id of the binding
- * @throws {Error} kind "routeros" on a malformed MAC
+ * @throws {Error} kind "routeros" on a malformed MAC, or when the MAC has a
+ *                 binding of another type
  */
 export func bypassHotspotMac(c as Client, mac as string, comment as string) {
     ensureMac($mac);
     def wanted as string init strings.upper($mac);
-    def rows as list of map of string to string init getAll($c, HOTSPOT_BINDING_PATH);
-    def existing as map of string to string init findRowByField($rows, "mac-address", $wanted);
-    if (len($existing) > 0) {
-        return rowValue($existing, ".id");
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        HOTSPOT_BINDING_PATH,
+        ["?mac-address=" + $wanted]);
+    for (def row in $rows) {
+        if (rowValue($row, "mac-address") == $wanted) {
+            def kind as string init rowValue($row, "type");
+            if ($kind != "bypassed") {
+                if ($kind == "") {
+                    $kind = "regular";
+                }
+                raiseError("the MAC " + $wanted + " already has a " + $kind +
+                    " hotspot binding - remove it before bypassing");
+            }
+            return rowValue($row, ".id");
+        }
     }
     def attrs as map of string to string init {"mac-address": $wanted, "type": "bypassed"};
     if ($comment != "") {
@@ -319,6 +331,9 @@ export func bypassHotspotMac(c as Client, mac as string, comment as string) {
 /**
  * Remove a device's portal bypass, so it has to log in again.
  *
+ * Only a binding of type `bypassed` is removed; a blocked binding for the
+ * same MAC stays.
+ *
  * @param c {Client}   an open client
  * @param mac {string} device MAC, any case
  * @throws {Error} kind "routeros" on a malformed MAC or when no bypass
@@ -326,12 +341,13 @@ export func bypassHotspotMac(c as Client, mac as string, comment as string) {
  */
 export func removeHotspotBypass(c as Client, mac as string) {
     ensureMac($mac);
-    def rows as list of map of string to string init getAll($c, HOTSPOT_BINDING_PATH);
-    def row as map of string to string init findRowByField(
-        $rows,
-        "mac-address",
-        strings.upper($mac));
-    if (len($row) == 0) {
+    def wanted as string init strings.upper($mac);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        HOTSPOT_BINDING_PATH,
+        ["?mac-address=" + $wanted, "?type=bypassed"]);
+    def row as map of string to string init findRowByField($rows, "mac-address", $wanted);
+    if (rowValue($row, "type") != "bypassed") {
         raiseError("no hotspot bypass for MAC \"" + $mac + "\" was found");
     }
     remove($c, HOTSPOT_BINDING_PATH, rowValue($row, ".id"));
@@ -353,7 +369,10 @@ export func removeHotspotBypass(c as Client, mac as string) {
 export func allowBeforeLogin(c as Client, dstHost as string, comment as string) {
     def host as string init strings.trim($dstHost);
     ensureHost($host);
-    def rows as list of map of string to string init getAll($c, WALLED_GARDEN_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        WALLED_GARDEN_PATH,
+        ["?dst-host=" + $host]);
     def existing as map of string to string init findRowByField($rows, "dst-host", $host);
     if (len($existing) > 0) {
         return rowValue($existing, ".id");
@@ -370,14 +389,17 @@ export func allowBeforeLogin(c as Client, dstHost as string, comment as string) 
  *
  * @param c {Client}       an open client
  * @param dstHost {string} host the entry was created for
- * @throws {Error} kind "routeros" when no such entry exists
+ * @throws {Error} kind "routeros" on an empty or spaced host, or when no
+ *                 such entry exists
  */
 export func removeWalledGardenEntry(c as Client, dstHost as string) {
-    def rows as list of map of string to string init getAll($c, WALLED_GARDEN_PATH);
-    def row as map of string to string init findRowByField(
-        $rows,
-        "dst-host",
-        strings.trim($dstHost));
+    def host as string init strings.trim($dstHost);
+    ensureHost($host);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        WALLED_GARDEN_PATH,
+        ["?dst-host=" + $host]);
+    def row as map of string to string init findRowByField($rows, "dst-host", $host);
     if (len($row) == 0) {
         raiseError("no walled-garden entry for \"" + $dstHost + "\" was found");
     }

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the lte topic.
 # Spliced into routeros_test.j via include - run with:
@@ -57,9 +57,12 @@ func testSetLteApnRejectsBlank() {
     testing.assertThrows("failSetLteApnBlank", "routeros");
 }
 
-# A router without the /interface/lte menu answers the read with an error;
-# lteInterfaces turns any failed read into an empty list. The offline
-# client's read fails too, so it lands on the same branch.
-func testLteInterfacesEmptyWhenReadFails() {
-    testing.assertEqual(len(lteInterfaces(offlineClient())), 0);
+# "not registered" contains "registered"; roaming is attached but did not.
+func testLteRegistered() {
+    testing.assertTrue(lteRegistered("registered"));
+    testing.assertTrue(lteRegistered("Roaming"));
+    testing.assertFalse(lteRegistered("not registered"));
+    testing.assertFalse(lteRegistered("not-registered"));
+    testing.assertFalse(lteRegistered("unregistered"));
+    testing.assertFalse(lteRegistered("searching"));
 }

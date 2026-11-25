@@ -70,10 +70,15 @@ for the source. Both are idempotent by source and table.
 
 - The gateway must be directly reachable (inside a connected network).
   Otherwise the route shows `active == false` and carries nothing.
-- `removeRoute`, `enableRoute` and `disableRoute` match the destination
-  string exactly as the router lists it, skip dynamic routes, and act on
-  the first static match. For the second route of a failover pair, pass
-  its id from `routes(c)` to the generic verbs.
+- `removeRoute`, `enableRoute` and `disableRoute` compare the destination
+  as a network (host bits and letter case do not matter), ask the router
+  for that destination only, skip dynamic routes, and act on the first
+  static match in any routing table. For the second route of a failover
+  pair, pass its id from `routes(c)` to the generic verbs.
+- `routes(c)` reads the whole table in one reply. On a router with a BGP
+  feed it fails with kind `"limit"` (the reply cap); the per-destination
+  verbs above keep working there.
+- `/ip/route` holds IPv4 only: `addRoute` refuses an IPv6 destination.
 - A WAN set up through [dhcp.md](dhcp.md) or [ppp.md](ppp.md) installs
   its own dynamic default route. Either let it, or pass
   `addDefaultRoute = false` to `setupWanWith` and add the route here.

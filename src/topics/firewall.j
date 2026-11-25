@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - firewall filter rules.
 # Spliced into routeros.j via include - not a standalone module.
@@ -533,20 +533,34 @@ func ensureProtocol(protocol as string) {
 }
 
 /**
- * Add an input-chain accept rule if one with the comment does not
- * already exist (idempotent). Shared by the VPN server helpers to open
- * their ports.
+ * Make sure an input-chain accept rule with a comment exists and matches.
+ *
+ * Shared by the VPN server helpers to open their ports. Without a rule
+ * carrying the comment one is appended; with one, the properties that
+ * differ from `matchAttrs` (and chain=input, action=accept) are set on it,
+ * so a server re-enabled on another port moves its opening along.
  *
  * @param c {Client} an open client
- * @param comment {string} the rule's handle
+ * @param comment {string} the rule's handle, not empty
  * @param matchAttrs {map of string to string} extra match attributes
  *        (protocol, dst-port, ...) merged onto chain=input action=accept
+ * @throws {Error} kind "routeros" on an empty comment
  * @internal
  */
 func ensureInputAccept(c as Client, comment as string, matchAttrs as map of string to string) {
-    def rows as list of map of string to string init getAll($c, FIREWALL_PATH);
+    if ($comment == "") {
+        raiseError("the firewall rule comment must not be empty - it is the rule's handle");
+    }
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        FIREWALL_PATH,
+        ["?comment=" + $comment]);
     def existing as map of string to string init findRowByField($rows, "comment", $comment);
     if (len($existing) > 0) {
+        def changes as map of string to string init inputAcceptChanges($existing, $matchAttrs);
+        if (len($changes) > 0) {
+            set($c, FIREWALL_PATH, rowValue($existing, ".id"), $changes);
+        }
         return;
     }
     def attrs as map of string to string init {
@@ -554,31 +568,72 @@ func ensureInputAccept(c as Client, comment as string, matchAttrs as map of stri
         "action": ACTION_ACCEPT,
         "comment": $comment
     };
-    def keys as list of string init maps.keys($matchAttrs);
-    for (def k in $keys) {
+    for (def k in maps.keys($matchAttrs)) {
         $attrs[$k] = $matchAttrs[$k];
     }
     add($c, FIREWALL_PATH, $attrs);
 }
 
 /**
- * Remove every firewall rule whose comment starts with a prefix.
+ * The properties to set on an existing input-accept rule so it matches.
+ *
+ * Compares chain=input, action=accept and every match attribute with the
+ * rule as the router reported it.
+ *
+ * @param existing {map of string to string} the rule's reply row
+ * @param matchAttrs {map of string to string} the wanted match attributes
+ * @return {map of string to string} the differing properties, {} when the
+ *         rule already matches
+ * @internal
+ */
+func inputAcceptChanges(
+    existing as map of string to string,
+    matchAttrs as map of string to string) {
+    def want as map of string to string init {"chain": CHAIN_INPUT, "action": ACTION_ACCEPT};
+    for (def k in maps.keys($matchAttrs)) {
+        $want[$k] = $matchAttrs[$k];
+    }
+    def changes as map of string to string init {};
+    for (def k in maps.keys($want)) {
+        if (rowValue($existing, $k) != $want[$k]) {
+            $changes[$k] = $want[$k];
+        }
+    }
+    return $changes;
+}
+
+/**
+ * Remove the input-chain accept rules whose comment starts with a prefix.
+ *
+ * Only rules in chain input with action accept are touched: a user's own
+ * rule elsewhere whose comment happens to share the prefix stays.
  *
  * @param c {Client} an open client
- * @param prefix {string} the comment prefix to sweep
+ * @param prefix {string} the comment prefix to sweep, not empty
  * @return {int} how many rules were removed
+ * @throws {Error} kind "routeros" on an empty prefix
  * @internal
  */
 func removeInputAcceptsByPrefix(c as Client, prefix as string) {
-    def rows as list of map of string to string init getAll($c, FIREWALL_PATH);
-    def removed as int init 0;
+    if ($prefix == "") {
+        raiseError("the comment prefix must not be empty - it would match every rule");
+    }
+    def rows as list of map of string to string init apiPrintSelect(
+        $c,
+        FIREWALL_PATH,
+        [".id", "chain", "action", "comment"],
+        ["?chain=" + CHAIN_INPUT, "?action=" + ACTION_ACCEPT]);
+    def ids as list of string init [];
     for (def row in $rows) {
-        if (strings.startsWith(rowValue($row, "comment"), $prefix)) {
-            remove($c, FIREWALL_PATH, rowValue($row, ".id"));
-            $removed = $removed + 1;
+        if (rowValue($row, "chain") == CHAIN_INPUT and rowValue($row, "action") == ACTION_ACCEPT and
+            strings.startsWith(rowValue($row, "comment"), $prefix)) {
+            $ids[] = rowValue($row, ".id");
         }
     }
-    return $removed;
+    if (len($ids) == 0) {
+        return 0;
+    }
+    return removeMany($c, FIREWALL_PATH, $ids);
 }
 
 /**

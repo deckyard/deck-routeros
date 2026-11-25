@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - DHCP server, leases, and the WAN-side DHCP client.
 # Spliced into routeros.j via include - not a standalone module.
@@ -141,8 +141,9 @@ export func dhcpServers(c as Client) {
  *                               addresses (the gateway itself when the router
  *                               resolves, see `allowRemoteDnsRequests`)
  * @return {string} the RouterOS id of the DHCP server
- * @throws {Error} kind "routeros" when a value is malformed, outside the
- *                 network, or the interface does not exist
+ * @throws {Error} kind "routeros" when a value is malformed, IPv6, outside
+ *                 the network, the range runs backwards, or the interface
+ *                 does not exist
  * @example
  *   mt.addIpAddress($c, "192.168.77.1/24", "brlan");
  *   mt.setupDhcp($c, "dhcplan", "brlan", "192.168.77.0/24",
@@ -158,21 +159,32 @@ export func setupDhcp(
     rangeTo as string,
     dns as string) {
     ensureName($name, "DHCP server");
-    ensureCidr($network);
-    ensureIpAddress($gateway);
-    ensureIpAddress($rangeFrom);
-    ensureIpAddress($rangeTo);
+    def net as string init strings.trim($network);
+    def gw as string init strings.trim($gateway);
+    def first as string init strings.trim($rangeFrom);
+    def last as string init strings.trim($rangeTo);
+    ensureCidr($net);
+    if (ipnet.version(ipnet.parse($net).addr) != 4) {
+        raiseError("the DHCP network \"" + $net +
+            "\" must be IPv4 (DHCPv6 lives under /ipv6/dhcp-server)");
+    }
+    ensureIpv4Address($gw, "gateway");
+    ensureIpv4Address($first, "range start");
+    ensureIpv4Address($last, "range end");
     def servers as string init normalizedAddressList($dns);
-    ensureInNetwork($network, $gateway, "gateway");
-    ensureInNetwork($network, $rangeFrom, "range start");
-    ensureInNetwork($network, $rangeTo, "range end");
+    ensureInNetwork($net, $gw, "gateway");
+    ensureInNetwork($net, $first, "range start");
+    ensureInNetwork($net, $last, "range end");
+    if (ipnet.compare(ipnet.parseAddress($first), ipnet.parseAddress($last)) > 0) {
+        raiseError("the range start " + $first + " lies after the range end " + $last);
+    }
     requiredId($c, INTERFACE_PATH, $interfaceName, "interface");
-    add($c, IP_POOL_PATH, {"name": $name, "ranges": $rangeFrom + "-" + $rangeTo});
+    add($c, IP_POOL_PATH, {"name": $name, "ranges": $first + "-" + $last});
     def serverId as string init add(
         $c,
         DHCP_SERVER_PATH,
         {"name": $name, "interface": $interfaceName, "address-pool": $name});
-    add($c, DHCP_NETWORK_PATH, {"address": $network, "gateway": $gateway, "dns-server": $servers});
+    add($c, DHCP_NETWORK_PATH, {"address": $net, "gateway": $gw, "dns-server": $servers});
     return $serverId;
 }
 
@@ -188,6 +200,22 @@ export func setupDhcp(
  * @throws {Error} kind "routeros" when none of the three pieces exists
  */
 export func teardownDhcp(c as Client, name as string, network as string) {
+    if (teardownDhcpPieces($c, $name, $network) == 0) {
+        raiseError("no DHCP setup named \"" + $name + "\" for network \"" + $network +
+            "\" was found");
+    }
+}
+
+/**
+ * Remove whichever pieces of a `setupDhcp` exist.
+ *
+ * @param c {Client}       an open client
+ * @param name {string}    the name given to `setupDhcp`
+ * @param network {string} the CIDR string given to `setupDhcp`
+ * @return {int} how many of the three pieces were removed
+ * @internal
+ */
+func teardownDhcpPieces(c as Client, name as string, network as string) {
     def found as int init 0;
     def serverId as string init idByName($c, DHCP_SERVER_PATH, $name);
     if ($serverId != "") {
@@ -199,16 +227,19 @@ export func teardownDhcp(c as Client, name as string, network as string) {
         remove($c, IP_POOL_PATH, $poolId);
         $found = $found + 1;
     }
-    def rows as list of map of string to string init getAll($c, DHCP_NETWORK_PATH);
-    def row as map of string to string init findRowByField($rows, "address", $network);
-    if (len($row) > 0) {
-        remove($c, DHCP_NETWORK_PATH, rowValue($row, ".id"));
-        $found = $found + 1;
+    def target as string init strings.trim($network);
+    if ($target != "") {
+        def rows as list of map of string to string init apiPrintWhere(
+            $c,
+            DHCP_NETWORK_PATH,
+            ["?address=" + $target]);
+        def row as map of string to string init findRowByField($rows, "address", $target);
+        if (len($row) > 0) {
+            remove($c, DHCP_NETWORK_PATH, rowValue($row, ".id"));
+            $found = $found + 1;
+        }
     }
-    if ($found == 0) {
-        raiseError("no DHCP setup named \"" + $name + "\" for network \"" + $network +
-            "\" was found");
-    }
+    return $found;
 }
 
 /**
@@ -238,13 +269,15 @@ export func dhcpLeases(c as Client) {
  *                         case; sent uppercased
  * @param comment {string} free-text note (e.g. "printer"), "" for none
  * @return {string} the RouterOS id of the reservation
- * @throws {Error} kind "routeros" on a malformed address or MAC
+ * @throws {Error} kind "routeros" on a malformed or IPv6 address, or a
+ *                 malformed MAC
  */
 export func addStaticLease(c as Client, address as string, mac as string, comment as string) {
-    ensureIpAddress($address);
+    def target as string init strings.trim($address);
+    ensureIpv4Address($target, "lease address");
     ensureMac($mac);
     def attrs as map of string to string init {
-        "address": $address,
+        "address": $target,
         "mac-address": strings.upper($mac)
     };
     if ($comment != "") {
@@ -262,11 +295,12 @@ export func addStaticLease(c as Client, address as string, mac as string, commen
  */
 export func removeLeaseByMac(c as Client, mac as string) {
     ensureMac($mac);
-    def rows as list of map of string to string init getAll($c, DHCP_LEASE_PATH);
-    def row as map of string to string init findRowByField(
-        $rows,
-        "mac-address",
-        strings.upper($mac));
+    def wanted as string init strings.upper($mac);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        DHCP_LEASE_PATH,
+        ["?mac-address=" + $wanted]);
+    def row as map of string to string init findRowByField($rows, "mac-address", $wanted);
     if (len($row) == 0) {
         raiseError("no DHCP lease for MAC \"" + $mac + "\" was found");
     }
@@ -329,8 +363,7 @@ export func setupWanWith(
     usePeerDns as bool,
     addDefaultRoute as bool) {
     requiredId($c, INTERFACE_PATH, $interfaceName, "interface");
-    def rows as list of map of string to string init getAll($c, DHCP_CLIENT_PATH);
-    def existing as map of string to string init findRowByField($rows, "interface", $interfaceName);
+    def existing as map of string to string init dhcpClientOn($c, $interfaceName);
     if (len($existing) > 0) {
         return rowValue($existing, ".id");
     }
@@ -356,8 +389,7 @@ export func setupWanWith(
  *   if ($wan.bound) { io.printf("online as %s\n", $wan.address); }
  */
 export func wanStatus(c as Client, interfaceName as string) {
-    def rows as list of map of string to string init getAll($c, DHCP_CLIENT_PATH);
-    def row as map of string to string init findRowByField($rows, "interface", $interfaceName);
+    def row as map of string to string init dhcpClientOn($c, $interfaceName);
     if (len($row) == 0) {
         raiseError("no DHCP client runs on \"" + $interfaceName + "\" - set one up with setupWan");
     }
@@ -461,12 +493,31 @@ func dhcpLeaseFromRow(row as map of string to string) {
  * @internal
  */
 func requiredDhcpClientId(c as Client, interfaceName as string) {
-    def rows as list of map of string to string init getAll($c, DHCP_CLIENT_PATH);
-    def row as map of string to string init findRowByField($rows, "interface", $interfaceName);
+    def row as map of string to string init dhcpClientOn($c, $interfaceName);
     if (len($row) == 0) {
         raiseError("no DHCP client runs on \"" + $interfaceName + "\" - set one up with setupWan");
     }
     return rowValue($row, ".id");
+}
+
+/**
+ * Read the DHCP client on an interface, filtered on the router.
+ *
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the interface
+ * @return {map of string to string} the client's row, or an empty map
+ * @internal
+ */
+func dhcpClientOn(c as Client, interfaceName as string) {
+    def none as map of string to string init {};
+    if ($interfaceName == "") {
+        return $none;
+    }
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        DHCP_CLIENT_PATH,
+        ["?interface=" + $interfaceName]);
+    return findRowByField($rows, "interface", $interfaceName);
 }
 
 /**
@@ -555,7 +606,7 @@ export func addDhcpRelay(
     serverAddress as string) {
     ensureName($name, "DHCP relay");
     def server as string init strings.trim($serverAddress);
-    ensureIpAddress($server);
+    ensureIpv4Address($server, "DHCP server address");
     requiredId($c, INTERFACE_PATH, $interfaceName, "interface");
     def existing as string init idByName($c, DHCP_RELAY_PATH, $name);
     if ($existing != "") {

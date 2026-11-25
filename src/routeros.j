@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 /**
  * routeros - typed verbs and structs over the MikroTik RouterOS API.
  *
- * The bundled `mikrotik` module speaks the binary API (command paths,
+ * The `@deckyard/mikrotik` deck speaks the binary API (command paths,
  * `=key=value` words, reply rows). This module wraps it per topic:
  * interfaces, ethernet, bonding, bridges, VLANs, wireless, the firewall
  * (filter, NAT, raw, mangle, address lists), addressing, DHCP, DNS,
@@ -41,7 +41,7 @@ use io;
 use os;
 use encoding;
 
-import "mikrotik.j";
+import "@deckyard/mikrotik/" as mikrotik;
 import "ipnet.j";
 
 include "topics/core.j";

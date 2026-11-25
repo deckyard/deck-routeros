@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - bridges and bridge ports.
 # Spliced into routeros.j via include - not a standalone module.
@@ -118,7 +118,10 @@ export func removeBridge(c as Client, name as string) {
  * @return {list of BridgePort} the bridge's member ports
  */
 export func bridgePorts(c as Client, bridgeName as string) {
-    def rows as list of map of string to string init getAll($c, BRIDGE_PORT_PATH);
+    def rows as list of map of string to string init [];
+    if ($bridgeName != "") {
+        $rows = apiPrintWhere($c, BRIDGE_PORT_PATH, ["?bridge=" + $bridgeName]);
+    }
     def out as list of BridgePort init [];
     for (def row in $rows) {
         if (rowValue($row, "bridge") == $bridgeName) {
@@ -151,8 +154,7 @@ export func addBridgePort(c as Client, bridgeName as string, interfaceName as st
  * @throws {Error} kind "routeros" when the interface is on no bridge
  */
 export func removeBridgePort(c as Client, interfaceName as string) {
-    def rows as list of map of string to string init getAll($c, BRIDGE_PORT_PATH);
-    def row as map of string to string init findRowByField($rows, "interface", $interfaceName);
+    def row as map of string to string init bridgePortOf($c, $interfaceName);
     if (len($row) == 0) {
         raiseError("interface \"" + $interfaceName + "\" is not a port of any bridge");
     }
@@ -177,8 +179,7 @@ export func removeBridgePort(c as Client, interfaceName as string) {
  *   for (def p in $ports) { io.printf("%s offload=%t\n", $p.interfaceName, $p.hardwareOffload); }
  */
 export func setBridgePortHardwareOffload(c as Client, interfaceName as string, on as bool) {
-    def rows as list of map of string to string init getAll($c, BRIDGE_PORT_PATH);
-    def row as map of string to string init findRowByField($rows, "interface", $interfaceName);
+    def row as map of string to string init bridgePortOf($c, $interfaceName);
     if (len($row) == 0) {
         raiseError("interface \"" + $interfaceName + "\" is not a port of any bridge");
     }
@@ -257,7 +258,9 @@ export func disableVlanFiltering(c as Client, bridge as string) {
  * Tagged ports are trunks (links to switches, or the bridge itself for
  * the router's own VLAN interface); untagged ports are access ports for
  * end devices and need a matching `pvid`. Idempotent by bridge and VLAN
- * id: an existing entry's id is returned and its ports are not changed.
+ * id: a configured entry whose `vlan-ids` holds the id (alone, in a list
+ * like "10,20" or a range like "10-20") is returned and its ports are not
+ * changed. Dynamic entries (RouterOS adds them for PVIDs) do not count.
  *
  * @param c {Client}        an open client
  * @param bridge {string}   the VLAN-aware bridge
@@ -277,8 +280,11 @@ export func addBridgeVlan(
     requiredId($c, BRIDGE_PATH, $bridge, "bridge");
     ensureVlanId($vlanId);
     def vid as string init convert.toString($vlanId);
-    def rows as list of map of string to string init getAll($c, BRIDGE_VLAN_PATH);
-    def existing as map of string to string init findBridgeVlanRow($rows, $bridge, $vid);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        BRIDGE_VLAN_PATH,
+        ["?bridge=" + $bridge]);
+    def existing as map of string to string init findBridgeVlanRow($rows, $bridge, $vlanId);
     if (len($existing) > 0) {
         return rowValue($existing, ".id");
     }
@@ -306,7 +312,10 @@ export func addBridgeVlan(
  */
 export func setPortPvid(c as Client, bridge as string, port as string, pvid as int) {
     ensureVlanId($pvid);
-    def rows as list of map of string to string init getAll($c, BRIDGE_PORT_PATH);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        BRIDGE_PORT_PATH,
+        ["?bridge=" + $bridge, "?interface=" + $port]);
     def row as map of string to string init bridgePortRow($rows, $bridge, $port);
     if (len($row) == 0) {
         raiseError("\"" + $port + "\" is not a port of the bridge \"" + $bridge + "\"");
@@ -317,21 +326,52 @@ export func setPortPvid(c as Client, bridge as string, port as string, pvid as i
 /**
  * Remove a VLAN from a bridge's VLAN table.
  *
+ * Removes the configured entry for exactly this id. An id that shares an
+ * entry with others ("10,20", "10-20") is refused: removing the entry would
+ * drop the other VLANs too; edit its `vlan-ids` with the generic `set`.
+ *
  * @param c {Client}      an open client
  * @param bridge {string} the bridge
- * @param vlanId {int}   the VLAN id
- * @throws {Error} kind "routeros" when no such entry exists
+ * @param vlanId {int}   the VLAN id, 1-4094
+ * @throws {Error} kind "routeros" on a bad id, when no configured entry
+ *                 holds it, or when its entry holds other VLANs too
  */
 export func removeBridgeVlan(c as Client, bridge as string, vlanId as int) {
-    def rows as list of map of string to string init getAll($c, BRIDGE_VLAN_PATH);
-    def row as map of string to string init findBridgeVlanRow(
-        $rows,
-        $bridge,
-        convert.toString($vlanId));
+    ensureVlanId($vlanId);
+    def vid as string init convert.toString($vlanId);
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        BRIDGE_VLAN_PATH,
+        ["?bridge=" + $bridge]);
+    def row as map of string to string init findBridgeVlanRow($rows, $bridge, $vlanId);
     if (len($row) == 0) {
-        raiseError("the bridge \"" + $bridge + "\" has no VLAN " + convert.toString($vlanId));
+        raiseError("the bridge \"" + $bridge + "\" has no VLAN " + $vid);
+    }
+    if (strings.trim(rowValue($row, "vlan-ids")) != $vid) {
+        raiseError("VLAN " + $vid + " shares the entry \"" + rowValue($row, "vlan-ids") +
+            "\" on \"" + $bridge + "\" - change its vlan-ids with set instead");
     }
     remove($c, BRIDGE_VLAN_PATH, rowValue($row, ".id"));
+}
+
+/**
+ * Read the bridge-port row of an interface, filtered on the router.
+ *
+ * @param c {Client}             an open client
+ * @param interfaceName {string} the member interface
+ * @return {map of string to string} the row, or an empty map
+ * @internal
+ */
+func bridgePortOf(c as Client, interfaceName as string) {
+    def none as map of string to string init {};
+    if ($interfaceName == "") {
+        return $none;
+    }
+    def rows as list of map of string to string init apiPrintWhere(
+        $c,
+        BRIDGE_PORT_PATH,
+        ["?interface=" + $interfaceName]);
+    return findRowByField($rows, "interface", $interfaceName);
 }
 
 /**
@@ -354,22 +394,53 @@ func normalizedPortList(csv as string) {
 }
 
 /**
- * Find a bridge VLAN entry by bridge and vlan id.
+ * Find the configured bridge VLAN entry that holds a vlan id.
+ *
+ * Dynamic entries are skipped; `vlan-ids` may be one id, a list or ranges
+ * ("10,20,30-40").
  *
  * @param rows {list of map of string to string} "/interface/bridge/vlan/print" rows
  * @param bridge {string} the bridge
- * @param vid {string}    the vlan id as a string
+ * @param vid {int}       the vlan id
  * @return {map of string to string} the matching row, or an empty map
  * @internal
  */
-func findBridgeVlanRow(rows as list of map of string to string, bridge as string, vid as string) {
+func findBridgeVlanRow(rows as list of map of string to string, bridge as string, vid as int) {
     for (def row in $rows) {
-        if (rowValue($row, "bridge") == $bridge and rowValue($row, "vlan-ids") == $vid) {
+        if (rowValue($row, "bridge") == $bridge and not rowBool($row, "dynamic") and
+            vlanIdsContain(rowValue($row, "vlan-ids"), $vid)) {
             return $row;
         }
     }
     def none as map of string to string init {};
     return $none;
+}
+
+/**
+ * Whether a `vlan-ids` value ("10", "10,20", "30-40") holds an id.
+ *
+ * An entry that does not parse holds nothing.
+ *
+ * @param spec {string} the value as reported
+ * @param vid {int}     the vlan id
+ * @return {bool} true when the id is listed or inside a range
+ * @internal
+ */
+func vlanIdsContain(spec as string, vid as int) {
+    for (def part in strings.split($spec, ",")) {
+        def ends as list of string init strings.split(strings.trim($part), "-");
+        if (len($ends) <= 2 and allDigits($ends[0]) and len($ends[0]) <= 4) {
+            def low as int init convert.toInt($ends[0]);
+            def high as int init $low;
+            if (len($ends) == 2 and allDigits($ends[1]) and len($ends[1]) <= 4) {
+                $high = convert.toInt($ends[1]);
+            }
+            if ($vid >= $low and $vid <= $high) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /**

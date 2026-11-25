@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the mangle topic.
 # Spliced into routeros_test.j via include - run with:
@@ -130,4 +130,31 @@ func failMoveMangleRuleEmptyId() {
 
 func testMoveMangleRuleRejectsEmptyId() {
     testing.assertThrows("failMoveMangleRuleEmptyId", "routeros");
+}
+
+# With the connection rule present but the packet rule missing (a run
+# that failed half-way), a re-run added the connection rule twice.
+func testSetupPacketMarkAddsOnlyMissingRule() {
+    def rows as list of map of string to string init [
+        {
+            ".id": "*1",
+            "chain": "prerouting",
+            "action": "mark-connection",
+            "comment": "mark: voip (connections)"
+        }
+    ];
+    def f as Fake init fakeStart(fakeWithRows(fakeRouter(), MANGLE_PATH, $rows));
+    def c as Client init fakeClient($f);
+    def m as FirewallRule init firewallRule(CHAIN_PREROUTING, ACTION_ACCEPT);
+    $m = withProtocol($m, "udp");
+    setupPacketMark($c, "voip", $m);
+    def log as list of string init fakeLog($c, $f);
+    def adds as list of string init [];
+    for (def s in $log) {
+        if (strings.startsWith($s, MANGLE_PATH + "/add")) {
+            $adds[] = $s;
+        }
+    }
+    testing.assertEqual(len($adds), 1);
+    testing.assertTrue(strings.contains($adds[0], "mark-packet"));
 }

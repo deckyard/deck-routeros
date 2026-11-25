@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - system: packages, updates, firmware, reboot.
 # Spliced into routeros.j via include - not a standalone module.
@@ -196,8 +196,9 @@ export func downloadUpdates(c as Client) {
  *
  * @param c {Client} an open client
  * @throws {Error} kind "mikrotik" when the router refuses (e.g. no
- *                 update reachable); a dropped connection caused by the
- *                 reboot itself is expected and swallowed
+ *                 update reachable); the connection closing after the
+ *                 command was sent is expected and swallowed, any other
+ *                 transport error (never connected, not sent) is thrown
  */
 export func installUpdates(c as Client) {
     runSystemCommand($c, SYSTEM_UPDATE_PATH + "/install");
@@ -237,8 +238,10 @@ export func upgradeRouterboard(c as Client) {
  *
  * @param c {Client} an open client
  * @throws {Error} kind "mikrotik" when the router refuses (e.g. the
- *                 user lacks the reboot policy); a dropped connection
- *                 caused by the reboot itself is expected and swallowed
+ *                 user lacks the reboot policy); the connection closing
+ *                 after the command was sent is expected and swallowed,
+ *                 any other transport error (never connected, not sent)
+ *                 is thrown
  */
 export func reboot(c as Client) {
     runSystemCommand($c, "/system/reboot");
@@ -251,9 +254,10 @@ export func reboot(c as Client) {
  * `reboot`.
  *
  * @param c {Client} an open client
- * @throws {Error} kind "mikrotik" when the router refuses; a dropped
- *                 connection caused by the shutdown itself is expected
- *                 and swallowed
+ * @throws {Error} kind "mikrotik" when the router refuses; the
+ *                 connection closing after the command was sent is
+ *                 expected and swallowed, any other transport error
+ *                 (never connected, not sent) is thrown
  */
 export func shutdown(c as Client) {
     runSystemCommand($c, "/system/shutdown");
@@ -262,13 +266,17 @@ export func shutdown(c as Client) {
 /**
  * Run a command that takes the router down (reboot, shutdown, install).
  *
- * A `!trap` from the router (bad policy, refused command) is re-thrown;
- * a transport error is swallowed, because the connection dropping is
- * exactly what success looks like for these commands.
+ * The connection dropping is what success looks like, so the router
+ * closing it (kind "closed"), a `!fatal` (the router announcing the
+ * close) and a `net.NetError` whose request was sent count as done. Every
+ * other failure is re-thrown: a `!trap` (bad policy, refused command), a
+ * session that never connected, a network error before the command was
+ * sent, a timeout, a cap.
  *
  * @param c {Client}       an open client
  * @param command {string} the command path (e.g. "/system/reboot")
- * @throws {Error} kind "mikrotik" when the router itself refused
+ * @throws {Error} kind "mikrotik" when the router refused; "closed",
+ *         "net" or "timeout" when the command may not have reached it
  * @internal
  */
 func runSystemCommand(c as Client, command as string) {
@@ -276,10 +284,47 @@ func runSystemCommand(c as Client, command as string) {
     try {
         apiRun($c, $command, $none);
     } catch (e) {
+        if ($c.session.socket.id == 0) {
+            # A zero-value session never connected: nothing was sent.
+            throw $e;
+        }
+        def reply as string init "";
         if ($e.kind == "mikrotik") {
+            $reply = $e.reply;
+        }
+        def sent as bool init false;
+        if ($e.kind == "net") {
+            $sent = $e.sent;
+        }
+        if (not droppedAfterSend($e.kind, $reply, $sent)) {
             throw $e;
         }
     }
+}
+
+/**
+ * Whether a failure of a reboot-style command means the router went down
+ * after receiving it.
+ *
+ * @param kind {string}  the error kind
+ * @param reply {string} a "mikrotik" error's reply ("trap" / "fatal"), ""
+ *        for another kind
+ * @param sent {bool}    a "net" error's `sent` flag, false for another kind
+ * @return {bool} true for "closed", a `!fatal`, or a NetError after the
+ *         request was sent
+ * @internal
+ */
+func droppedAfterSend(kind as string, reply as string, sent as bool) {
+    if ($kind == "closed") {
+        return true;
+    }
+    if ($kind == "mikrotik") {
+        return $reply == "fatal";
+    }
+    if ($kind == "net") {
+        return $sent;
+    }
+    return false;
 }
 
 /**

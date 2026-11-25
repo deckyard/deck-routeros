@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the wifi (wave2) topic.
 # Spliced into routeros_test.j via include - run with:
@@ -85,10 +85,3 @@ func testAddVirtualWifiRejectsEmptyName() {
 
 # Without a readable wifiwave2 menu the readers return an empty list.
 
-func testWifiInterfacesEmptyWhenMenuUnreadable() {
-    testing.assertEqual(len(wifiInterfaces(offlineClient())), 0);
-}
-
-func testWifiRegistrationsEmptyWhenMenuUnreadable() {
-    testing.assertEqual(len(wifiRegistrations(offlineClient())), 0);
-}

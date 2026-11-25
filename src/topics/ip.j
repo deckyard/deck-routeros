@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - IP addresses on interfaces.
 # Spliced into routeros.j via include - not a standalone module.
@@ -61,7 +61,10 @@ export func ipAddresses(c as Client) {
 export func addIpAddress(c as Client, address as string, interfaceName as string) {
     ensureCidr($address);
     requiredId($c, INTERFACE_PATH, $interfaceName, "interface");
-    return add($c, IP_ADDRESS_PATH, {"address": $address, "interface": $interfaceName});
+    return add(
+        $c,
+        IP_ADDRESS_PATH,
+        {"address": strings.trim($address), "interface": $interfaceName});
 }
 
 /**

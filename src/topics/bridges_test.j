@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the bridges topic.
 # Spliced into routeros_test.j via include - run with:
@@ -74,7 +74,7 @@ func testFindBridgeVlanRowMatchesBoth() {
         {".id": "*2", "bridge": "brguest", "vlan-ids": "10"},
         {".id": "*3", "bridge": "brlan", "vlan-ids": "20"}
     ];
-    def row as map of string to string init findBridgeVlanRow($rows, "brlan", "20");
+    def row as map of string to string init findBridgeVlanRow($rows, "brlan", 20);
     testing.assertEqual(rowValue($row, ".id"), "*3");
 }
 
@@ -139,4 +139,77 @@ func failSetPortPvidOutOfRange() {
 
 func testSetPortPvidRejectsOutOfRange() {
     testing.assertThrows("failSetPortPvidOutOfRange", "routeros");
+}
+
+func testVlanIdsContainListsAndRanges() {
+    testing.assertTrue(vlanIdsContain("10", 10));
+    testing.assertTrue(vlanIdsContain("10,20", 20));
+    testing.assertTrue(vlanIdsContain("5, 30-40", 35));
+    testing.assertFalse(vlanIdsContain("30-40", 41));
+    testing.assertFalse(vlanIdsContain("", 1));
+}
+
+func bridgeVlanFake() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        BRIDGE_PATH,
+        [{".id": "*B", "name": "brlan"}]);
+    return fakeWithRows(
+        $r,
+        BRIDGE_VLAN_PATH,
+        [
+            {
+                ".id": "*D1",
+                "bridge": "brlan",
+                "vlan-ids": "10",
+                "untagged": "ether2",
+                "dynamic": "true"
+            },
+            {".id": "*S1", "bridge": "brlan", "vlan-ids": "20,30", "tagged": "brlan,ether1"}
+        ]);
+}
+
+func testAddBridgeVlanSkipsDynamicEntries() {
+    def f as Fake init fakeStart(bridgeVlanFake());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(addBridgeVlan($c, "brlan", 10, "ether1", ""), "*F1");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/interface/bridge/vlan/add =bridge=brlan =vlan-ids=10 =tagged=ether1"));
+}
+
+func testAddBridgeVlanFindsIdInsideAList() {
+    def f as Fake init fakeStart(bridgeVlanFake());
+    def c as Client init fakeClient($f);
+    testing.assertEqual(addBridgeVlan($c, "brlan", 20, "ether1", ""), "*S1");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertFalse(fakeSaw($log, "/interface/bridge/vlan/add"));
+}
+
+func testRemoveBridgeVlanRefusesASharedEntry() {
+    def f as Fake init fakeStart(bridgeVlanFake());
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        removeBridgeVlan($c, "brlan", 30);
+    } catch (e) {
+        $got = $e.kind;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($got, "routeros");
+    testing.assertFalse(fakeSaw($log, "/interface/bridge/vlan/remove"));
+}
+
+func testRemoveBridgePortFiltersOnTheRouter() {
+    def r as FakeRouter init fakeWithRows(
+        fakeRouter(),
+        BRIDGE_PORT_PATH,
+        [{".id": "*1", "bridge": "brlan", "interface": "ether2"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    removeBridgePort($c, "ether2");
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw($log, "/interface/bridge/port/print ?interface=ether2"));
+    testing.assertTrue(fakeSaw($log, "/interface/bridge/port/remove =.id=*1"));
 }

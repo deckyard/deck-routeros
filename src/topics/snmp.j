@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - SNMP: plug the router into your monitoring.
 # Spliced into routeros.j via include - not a standalone module.
@@ -75,12 +75,14 @@ export func snmpCommunities(c as Client) {
  * Write access is always off. SNMP v2c sends the community string in
  * cleartext: pick a non-obvious name, restrict the sources, and disable
  * the default "public" community (generic `disable` on
- * `SNMP_COMMUNITY_PATH`). Idempotent.
+ * `SNMP_COMMUNITY_PATH`). Idempotent. Verbose logging shows the
+ * community as `<redacted>`.
  *
  * @param c {Client}         an open client
  * @param community {string} community string the monitoring system uses
  * @param addresses {string} allowed sources, comma-separated IPs or CIDRs;
- *                           "" allows any source
+ *                           "" allows any source (sent as
+ *                           "0.0.0.0/0,::/0")
  * @return {string} the RouterOS id of the community
  * @throws {Error} kind "routeros" on an empty or spaced community name, or an
  *                 address list with an empty or unparseable entry
@@ -90,12 +92,8 @@ export func snmpCommunities(c as Client) {
  */
 export func enableSnmp(c as Client, community as string, addresses as string) {
     ensureName($community, "SNMP community");
-    def allowed as string init "";
-    if (strings.trim($addresses) != "") {
-        $allowed = normalizedUserAddress($addresses);
-    }
     def attrs as map of string to string init {
-        "addresses": $allowed,
+        "addresses": snmpAllowedAddresses($addresses),
         "read-access": "yes",
         "write-access": "no"
     };
@@ -128,6 +126,24 @@ export func setSnmpInfo(c as Client, contact as string, location as string) {
  */
 export func disableSnmp(c as Client) {
     apiRun($c, SNMP_PATH + "/set", {"enabled": "no"});
+}
+
+/**
+ * The community's `addresses` value for an allowed-sources argument.
+ *
+ * "" means any source, written out as both families: RouterOS reads an
+ * empty list differently across versions, so it is never sent.
+ *
+ * @param addresses {string} comma-separated IPs or CIDRs, "" for any
+ * @return {string} the normalized list
+ * @throws {Error} kind "routeros" on an empty or unparseable entry
+ * @internal
+ */
+func snmpAllowedAddresses(addresses as string) {
+    if (strings.trim($addresses) == "") {
+        return "0.0.0.0/0,::/0";
+    }
+    return normalizedUserAddress($addresses);
 }
 
 /**

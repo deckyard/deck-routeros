@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the certificates topic.
 # Spliced into routeros_test.j via include - run with:
@@ -13,13 +13,6 @@ func testDurationToDaysForms() {
     testing.assertEqual(durationToDays("23h59m"), 0);
     testing.assertEqual(durationToDays("90"), 0);
     testing.assertEqual(durationToDays("2d"), 2);
-}
-
-func testDurationToDaysUnparseable() {
-    testing.assertEqual(durationToDays(""), -1);
-    testing.assertEqual(durationToDays("soon"), -1);
-    testing.assertEqual(durationToDays("10q"), -1);
-    testing.assertEqual(durationToDays("w"), -1);
 }
 
 func testCertificateFromRow() {
@@ -64,7 +57,8 @@ func testExpiringFromFilters() {
             invalidAfter: "",
             hasPrivateKey: true,
             trusted: false,
-            isCa: false
+            isCa: false,
+            expired: false
         },
         Certificate{
             id: "*2",
@@ -75,7 +69,8 @@ func testExpiringFromFilters() {
             invalidAfter: "",
             hasPrivateKey: true,
             trusted: false,
-            isCa: false
+            isCa: false,
+            expired: false
         },
         Certificate{
             id: "*3",
@@ -86,7 +81,8 @@ func testExpiringFromFilters() {
             invalidAfter: "",
             hasPrivateKey: false,
             trusted: false,
-            isCa: false
+            isCa: false,
+            expired: false
         }
     ];
     def soon as list of Certificate init expiringFrom($certs, 30);
@@ -173,4 +169,94 @@ func testSubjectAltNameForNamesAndAddresses() {
     testing.assertEqual(subjectAltNameFor("router.lan"), "DNS:router.lan");
     testing.assertEqual(subjectAltNameFor(" 192.168.88.1 "), "IP:192.168.88.1");
     testing.assertEqual(subjectAltNameFor("fd00::1"), "IP:fd00::1");
+}
+
+func testImportCertificateRemovesFilesWhenImportFails() {
+    def r as FakeRouter init fakeWithTrap(
+        fakeRouter(),
+        "/certificate/import",
+        "",
+        "no certificates found");
+    $r = fakeWithRows(
+        $r,
+        FILE_PATH,
+        [{".id": "*7", "name": "web.crt"}, {".id": "*8", "name": "web.key"}]);
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        importCertificatePem(
+            $c,
+            "web",
+            "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+            "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----\n");
+    } catch (e) {
+        $got = $e.kind;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertEqual($got, "mikrotik");
+    testing.assertTrue(fakeSaw($log, "/file/remove =.id=*7"));
+    testing.assertTrue(fakeSaw($log, "/file/remove =.id=*8"));
+}
+
+func testDurationToDaysMoreForms() {
+    testing.assertEqual(durationToDays("8w2d03:32:06"), 58);
+    testing.assertEqual(durationToDays("-3d"), -3);
+    testing.assertEqual(durationToDays("-1s"), -1);
+    testing.assertEqual(durationToDays("500ms"), 0);
+    testing.assertEqual(durationToDays("1d00:00:05.250"), 1);
+}
+
+func failDurationHuge() {
+    durationToDays("99999999999999999999w");
+}
+
+func failDurationEmpty() {
+    durationToDays("");
+}
+
+func failDurationWord() {
+    durationToDays("soon");
+}
+
+func failDurationUnit() {
+    durationToDays("10q");
+}
+
+func failDurationBareUnit() {
+    durationToDays("w");
+}
+
+func testDurationToDaysRejectsJunkAsRouteros() {
+    testing.assertThrows("failDurationHuge", "routeros");
+    testing.assertThrows("failDurationEmpty", "routeros");
+    testing.assertThrows("failDurationWord", "routeros");
+    testing.assertThrows("failDurationUnit", "routeros");
+    testing.assertThrows("failDurationBareUnit", "routeros");
+}
+
+func testExpiringFromKeepsExpired() {
+    def certs as list of Certificate init [
+        certificateFromRow({".id": "*1", "name": "gone", "expired": "true"}),
+        certificateFromRow({".id": "*2", "name": "past", "expires-after": "-2d"}),
+        certificateFromRow({".id": "*3", "name": "later", "expires-after": "51w"}),
+        certificateFromRow({".id": "*4", "name": "junk", "expires-after": "soon"})
+    ];
+    def soon as list of Certificate init expiringFrom($certs, 30);
+    testing.assertEqual(len($soon), 2);
+    testing.assertEqual($soon[0].name, "gone");
+    testing.assertEqual($soon[1].name, "past");
+}
+
+func testCertificateAuthorityFlag() {
+    testing.assertTrue(certificateFromRow({"name": "ca", "authority": "true"}).isCa);
+    testing.assertFalse(certificateFromRow({"name": "srv", "ca": "my-ca"}).isCa);
+}
+
+func failSelfSignedCommaCn() {
+    generateSelfSigned(offlineClient(), "web", "a.lan,IP:0.0.0.0", 365);
+}
+
+func testSelfSignedRefusesCommaInCn() {
+    testing.assertThrows("failSelfSignedCommaCn", "routeros");
 }

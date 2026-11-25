@@ -60,7 +60,13 @@ mt.kickHotspotUser($c, "visitor");
   The voucher limit uses the scheduler's interval syntax (`"4h"`, `"1d"`,
   `"1d12h"`, `"HH:MM:SS"`).
 - `teardownHotspot` removes the server, the profile and the DHCP stack.
-  Users, bindings and walled-garden entries stay.
+  Users, bindings and walled-garden entries stay. A missing piece is
+  skipped; a router or transport error midway is thrown, so a dropped
+  connection never reads as a finished teardown.
+- `bypassHotspotMac` returns an existing bypass but refuses a MAC that
+  already has a blocked or regular binding: remove that binding first
+  (generic `remove` on `HOTSPOT_BINDING_PATH`). `removeHotspotBypass`
+  removes only a bypass.
 - The login page is HTML on the router's storage (`html-directory` in the
   profile); upload custom pages as in [files.md](files.md).
 - Guests share one network. Isolate them from the LAN with forward rules

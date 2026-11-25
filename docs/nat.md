@@ -52,9 +52,10 @@ for (def n in $nats) {
   RouterOS™ default config does (established/related and dstnat'ed
   connections are accepted); a hardened one needs an accept rule
   ([firewall.md](firewall.md)).
-- Use `forwardPortOn` with the WAN interface. `forwardPort` matches any
-  incoming interface, so LAN clients connecting to the router on that
-  port are redirected too.
+- Use `forwardPortOn` with the WAN interface. `forwardPort` matches the
+  router's own addresses (`dst-address-type=local`) on any incoming
+  interface, so LAN clients connecting to the router on that port are
+  redirected too. Connections to that port on internet hosts are not.
 - Reaching a forwarded service from inside the LAN through the public
   address needs hairpin NAT (an extra srcnat rule); add it with the
   generic `add` on `NAT_PATH`.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - disks: USB / NVMe / SATA storage.
 # Spliced into routeros.j via include - not a standalone module.
@@ -48,20 +48,16 @@ export def struct Disk {
 /**
  * List the storage devices on the router.
  *
- * Returns an empty list when the router has no storage or the disk menu
- * cannot be read (any read error, a dropped connection included).
+ * Returns an empty list when the router has no storage or no disk menu
+ * (the menu answers with a `!trap`); any other failure, such as a dropped
+ * connection, is thrown.
  *
  * @param c {Client} an open client
  * @return {list of Disk} all disks
  */
 export func disks(c as Client) {
     def out as list of Disk init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, DISK_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, DISK_PATH);
     for (def row in $rows) {
         $out[] = diskFromRow($row);
     }
@@ -99,7 +95,9 @@ export func diskByName(c as Client, name as string) {
  * a disk also read on a PC. The whole device ("usb1") and its partition
  * ("usb1-part1") are different targets; a container root-dir lives on
  * the partition. Tries `/disk/format` (RouterOS 7.21+) and falls back to
- * `/disk/format-drive` when the router answers "no such command".
+ * `/disk/format-drive` when the router answers with a `!trap` of category
+ * 0 (missing item or command) or none; when the fallback is refused the
+ * same way too, the first error is thrown.
  *
  * @param c {Client}          an open client
  * @param name {string}       the disk to format
@@ -123,10 +121,31 @@ export func formatDisk(c as Client, name as string, filesystem as string, label 
     try {
         apiRun($c, DISK_PATH + DISK_FORMAT_COMMAND, $attrs);
     } catch (e) {
-        if (not isUnknownCommand($e.kind, $e.message)) {
+        def reply as string init "";
+        def category as string init "";
+        if ($e.kind == "mikrotik") {
+            $reply = $e.reply;
+            $category = $e.category;
+        }
+        if (not maybeUnknownCommand($e.kind, $reply, $category)) {
             throw $e;
         }
-        apiRun($c, DISK_PATH + DISK_FORMAT_COMMAND_LEGACY, $attrs);
+        try {
+            apiRun($c, DISK_PATH + DISK_FORMAT_COMMAND_LEGACY, $attrs);
+        } catch (legacy) {
+            # Neither spelling ran: the current one's error is the answer
+            # unless the legacy command was known and failed on its own.
+            def legacyReply as string init "";
+            def legacyCategory as string init "";
+            if ($legacy.kind == "mikrotik") {
+                $legacyReply = $legacy.reply;
+                $legacyCategory = $legacy.category;
+            }
+            if (maybeUnknownCommand($legacy.kind, $legacyReply, $legacyCategory)) {
+                throw $e;
+            }
+            throw $legacy;
+        }
     }
 }
 
@@ -195,21 +214,21 @@ func diskRowMatching(rows as list of map of string to string, name as string) {
 }
 
 /**
- * Tell a "the router has no such command" refusal from a real failure.
+ * Whether a failure may be the router not knowing the command.
  *
- * Used to fall back to a command's older spelling without swallowing a
- * genuine error (a busy disk, a refused format).
+ * Reads the `mikrotik.MikrotikError` fields, never the message: a `!trap`
+ * whose category is 0 (missing item or command) or absent. Used to try a
+ * command's older spelling; a transport error, a `!fatal` or a trap of
+ * another category is a real failure.
  *
- * @param kind {string}    the error kind
- * @param message {string} the error message
- * @return {bool} true when the router did not recognise the command
+ * @param kind {string}     the error kind
+ * @param reply {string}    a "mikrotik" error's reply, "" otherwise
+ * @param category {string} a "mikrotik" error's trap category, "" otherwise
+ * @return {bool} true when the older spelling is worth a try
  * @internal
  */
-func isUnknownCommand(kind as string, message as string) {
-    if ($kind != "mikrotik") {
-        return false;
-    }
-    return strings.contains(strings.lower($message), "no such command");
+func maybeUnknownCommand(kind as string, reply as string, category as string) {
+    return $kind == "mikrotik" and $reply == "trap" and ($category == "0" or $category == "");
 }
 
 /**

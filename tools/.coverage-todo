@@ -1,9 +1,6 @@
 activeUsers
-addBridgeVlan
 addMasquerade
 addWireguardPeer
-addressListEntries
-addressLists
 allowRemoteDnsRequests
 arpTable
 arpTableOn
@@ -17,7 +14,6 @@ certificateByName
 certificates
 checkForUpdates
 clampTcpMss
-clearAddressList
 clearSmsInbox
 clock
 cloudStatus
@@ -65,7 +61,6 @@ disableVrrp
 disableWatch
 disableWifi
 disableWireguard
-disconnect
 diskByName
 dnsAdlists
 dnsCache
@@ -105,10 +100,8 @@ eoipTunnels
 ethernetPortByName
 ethernetPorts
 expiringCertificates
-files
 firewallRules
 flowTargets
-flushArp
 flushDnsCache
 forwardPortOn
 greTunnelByName
@@ -122,7 +115,6 @@ hotspotUsers
 identity
 installUpdates
 interfaceByName
-interfaceListMembers
 interfaceLists
 interfaces
 ipAddresses
@@ -164,20 +156,13 @@ radiusServers
 rawRules
 readFileText
 reboot
-removeAdlist
-removeArpEntry
 removeBond
 removeBridge
-removeBridgePort
-removeBridgeVlan
 removeCertificate
-removeContainer
 removeDhcpClient
 removeDhcpRelay
 removeDnsEntry
 removeEoipTunnel
-removeFile
-removeFirewallRuleByComment
 removeFlowTarget
 removeFromAddressList
 removeFromInterfaceList
@@ -208,7 +193,6 @@ removeVirtualWifi
 removeVlan
 removeVpnUser
 removeVrrp
-removeWalledGardenEntry
 removeWireguard
 removeWireguardPeerByComment
 renewWan
@@ -239,10 +223,8 @@ snmpSettings
 sstpClients
 sstpServerStatus
 startContainer
-stopContainer
 systemInfo
 teardownDhcp
-teardownHotspot
 teardownIpsecTunnel
 trafficFlowStatus
 treeQueues

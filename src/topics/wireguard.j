@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - WireGuard VPN tunnels (RouterOS v7).
 # Spliced into routeros.j via include - not a standalone module.
@@ -75,21 +75,16 @@ export def struct WireguardPeer {
 /**
  * List every WireGuard interface on the router.
  *
- * Any read error yields an empty list. That covers routers without
- * WireGuard (RouterOS v6), but also hides a dropped connection or a
- * permission error.
+ * A router without WireGuard (RouterOS v6, the menu answers with a
+ * `!trap`) reads as empty; any other failure (a dropped connection, a
+ * timeout) is thrown.
  *
  * @param c {Client} an open client
  * @return {list of WireguardInterface} all WireGuard interfaces
  */
 export func wireguardInterfaces(c as Client) {
     def out as list of WireguardInterface init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, WIREGUARD_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, WIREGUARD_PATH);
     for (def row in $rows) {
         $out[] = wireguardFromRow($row);
     }
@@ -146,7 +141,9 @@ export func wireguardPublicKey(c as Client, name as string) {
  * Creates the interface (`addWireguard`), puts `address` on it, and
  * accepts the listen port with an input-chain rule commented
  * "wireguard: <name>". Idempotent: each piece is created only if missing
- * (the address is matched by value, the rule by comment). Add peers with
+ * (the address on this interface is matched by value, the rule by
+ * comment), and a re-run with another port moves both the interface's
+ * listen port and the rule's opening to it. Add peers with
  * `addWireguardPeer`.
  *
  * @param c {Client}          an open client
@@ -168,18 +165,18 @@ export func setupWireguardServer(
     listenPort as int,
     address as string) {
     ensureCidr($address);
+    def cidr as string init strings.trim($address);
     def id as string init addWireguard($c, $name, $listenPort);
+    def port as string init convert.toString($listenPort);
+    def iface as map of string to string init findByName($c, WIREGUARD_PATH, $name);
+    if (rowValue($iface, "listen-port") != "" and rowValue($iface, "listen-port") != $port) {
+        set($c, WIREGUARD_PATH, $id, {"listen-port": $port});
+    }
     def rows as list of map of string to string init getAll($c, IP_ADDRESS_PATH);
-    def existing as map of string to string init findRowByField($rows, "address", $address);
-    if (len($existing) == 0) {
-        add($c, IP_ADDRESS_PATH, {"address": $address, "interface": $name});
+    if (not hasInterfaceAddress($rows, $name, $cidr)) {
+        add($c, IP_ADDRESS_PATH, {"address": $cidr, "interface": $name});
     }
-    def fwComment as string init "wireguard: " + $name;
-    def fwRows as list of map of string to string init getAll($c, FIREWALL_PATH);
-    def fwExisting as map of string to string init findRowByField($fwRows, "comment", $fwComment);
-    if (len($fwExisting) == 0) {
-        allowService($c, "udp", $listenPort, $fwComment);
-    }
+    ensureInputAccept($c, "wireguard: " + $name, {"protocol": "udp", "dst-port": $port});
     return $id;
 }
 
@@ -187,20 +184,15 @@ export func setupWireguardServer(
  * List WireGuard peers with traffic counters and handshake age.
  *
  * A peer whose `lastHandshake` is within about 2 minutes is alive. Any
- * read error yields an empty list, as for `wireguardInterfaces` (meant
- * for RouterOS v6; it also hides a dropped connection).
+ * router without the menu reads as empty, as for `wireguardInterfaces`;
+ * any other failure is thrown.
  *
  * @param c {Client} an open client
  * @return {list of WireguardPeer} peers of all WireGuard interfaces
  */
 export func wireguardPeers(c as Client) {
     def out as list of WireguardPeer init [];
-    def rows as list of map of string to string init [];
-    try {
-        $rows = getAll($c, WIREGUARD_PEER_PATH);
-    } catch (e) {
-        return $out;
-    }
+    def rows as list of map of string to string init optionalMenuRows($c, WIREGUARD_PEER_PATH);
     for (def row in $rows) {
         $out[] = wireguardPeerFromRow($row);
     }
@@ -319,7 +311,7 @@ export func removeWireguardPeerByComment(c as Client, comment as string) {
  * Delete a WireGuard interface with its peers and what
  * `setupWireguardServer` created for it.
  *
- * Removes the first IP address on the interface, the "wireguard: <name>"
+ * Removes every static IP address on the interface, the "wireguard: <name>"
  * firewall rule if present, and the interface (its peers go with it).
  *
  * @param c {Client}    an open client
@@ -329,10 +321,13 @@ export func removeWireguardPeerByComment(c as Client, comment as string) {
 export func removeWireguard(c as Client, name as string) {
     def id as string init requiredId($c, WIREGUARD_PATH, $name, "WireGuard interface");
     def addrRows as list of map of string to string init getAll($c, IP_ADDRESS_PATH);
-    def addrRow as map of string to string init findRowByField($addrRows, "interface", $name);
-    if (len($addrRow) > 0) {
-        remove($c, IP_ADDRESS_PATH, rowValue($addrRow, ".id"));
+    def addrIds as list of string init [];
+    for (def row in $addrRows) {
+        if (rowValue($row, "interface") == $name and not rowBool($row, "dynamic")) {
+            $addrIds[] = rowValue($row, ".id");
+        }
     }
+    removeMany($c, IP_ADDRESS_PATH, $addrIds);
     def fwRows as list of map of string to string init getAll($c, FIREWALL_PATH);
     def fwRow as map of string to string init findRowByField(
         $fwRows,
@@ -367,7 +362,8 @@ export func disableWireguard(c as Client, name as string) {
 }
 
 /**
- * Validate a WireGuard key: 44 base64 characters ending in "=".
+ * Validate a WireGuard key: 44 base64 characters ending in "=" that
+ * decode to 32 bytes.
  *
  * @param key {string} the candidate key
  * @throws {Error} kind "routeros" on any other shape
@@ -385,6 +381,28 @@ func ensureWireguardKey(key as string) {
             raiseError("\"" + $key +
                 "\" is not a WireGuard key - it contains characters outside base64");
         }
+    }
+    if (not wireguardKeyDecodes($k)) {
+        raiseError("\"" + $key + "\" is not a WireGuard key - it does not decode to 32 bytes");
+    }
+}
+
+/**
+ * Whether a base64 text decodes to exactly 32 bytes, with "=" only as
+ * the final padding character.
+ *
+ * @param k {string} 44 base64 characters
+ * @return {bool} true for a well-formed 32-byte key
+ * @internal
+ */
+func wireguardKeyDecodes(k as string) {
+    if (strings.contains($k[..len($k) - 1], "=")) {
+        return false;
+    }
+    try {
+        return len(encoding.fromText("base64", $k)) == 32;
+    } catch (e) {
+        return false;
     }
 }
 
@@ -418,6 +436,30 @@ func normalizedAllowedAddress(csv as string) {
         raiseError("the allowed-address list must contain at least one network");
     }
     return strings.join($out, ",");
+}
+
+/**
+ * Whether an interface already carries an address (compared by value:
+ * IPv6 case and zero compression do not matter).
+ *
+ * @param rows {list of map of string to string} "/ip/address" or
+ *        "/ipv6/address" rows
+ * @param interfaceName {string} the interface
+ * @param cidr {string} the address with its prefix
+ * @return {bool} true when that interface has that address
+ * @internal
+ */
+func hasInterfaceAddress(
+    rows as list of map of string to string,
+    interfaceName as string,
+    cidr as string) {
+    for (def row in $rows) {
+        if (rowValue($row, "interface") == $interfaceName and
+            sameInterfaceAddress(rowValue($row, "address"), $cidr)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

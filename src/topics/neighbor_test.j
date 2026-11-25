@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the neighbor topic.
 # Spliced into routeros_test.j via include - run with:
@@ -35,4 +35,14 @@ func testNeighborFromLayer2Row() {
     def n as Neighbor init neighborFromRow($row);
     testing.assertEqual($n.address, "");
     testing.assertEqual($n.platform, "Cisco");
+}
+
+# v7 lists a neighbor behind a bridge port as "ether2,bridge"; an exact
+# match found it on neither.
+func testNeighborOnInterfaceCommaList() {
+    testing.assertTrue(neighborOnInterface("ether2,bridge", "ether2"));
+    testing.assertTrue(neighborOnInterface("ether2,bridge", "bridge"));
+    testing.assertTrue(neighborOnInterface("ether1", "ether1"));
+    testing.assertFalse(neighborOnInterface("ether12,bridge", "ether1"));
+    testing.assertFalse(neighborOnInterface("ether1", ""));
 }

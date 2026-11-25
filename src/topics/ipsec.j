@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - IPsec: standards-based site-to-site tunnels.
 # Spliced into routeros.j via include - not a standalone module.
@@ -135,8 +135,10 @@ export func ipsecActive(c as Client) {
  *   the peer's address when it is an IP.
  *
  * The far end makes the mirror call: our address as its peer, the same
- * key, subnets swapped. When a peer of that name exists, its id is
- * returned and nothing is changed.
+ * key, subnets swapped. Idempotent per part: an existing peer, identity
+ * or policy of that name is kept unchanged (its key and subnets are not
+ * updated) and only the missing parts are created, so a run that failed
+ * half-way is completed by calling it again.
  *
  * @param c {Client} an open client
  * @param name {string} tunnel name, used for the peer and rule comments
@@ -166,20 +168,28 @@ export func setupIpsecTunnel(
     }
     ensureCidr($localSubnet);
     ensureCidr($remoteSubnet);
-    def existing as string init idByName($c, IPSEC_PEER_PATH, $name);
-    if ($existing != "") {
-        return $existing;
+    def local as string init strings.trim($localSubnet);
+    def far as string init strings.trim($remoteSubnet);
+    def peerId as string init idByName($c, IPSEC_PEER_PATH, $name);
+    if ($peerId == "") {
+        $peerId = add(
+            $c,
+            IPSEC_PEER_PATH,
+            {"name": $name, "address": $remote, "exchange-mode": "ike2"});
     }
-    def peerId as string init add(
-        $c,
-        IPSEC_PEER_PATH,
-        {"name": $name, "address": $remote, "exchange-mode": "ike2"});
-    add($c, IPSEC_IDENTITY_PATH, {"peer": $name, "auth-method": "pre-shared-key", "secret": $psk});
-    add(
-        $c,
-        IPSEC_POLICY_PATH,
-        {"peer": $name, "tunnel": "yes", "src-address": $localSubnet, "dst-address": $remoteSubnet});
-    ipsecNatBypass($c, $name, $localSubnet, $remoteSubnet);
+    if (not hasPeerRow(getAll($c, IPSEC_IDENTITY_PATH), $name)) {
+        add(
+            $c,
+            IPSEC_IDENTITY_PATH,
+            {"peer": $name, "auth-method": "pre-shared-key", "secret": $psk});
+    }
+    if (not hasPeerRow(getAll($c, IPSEC_POLICY_PATH), $name)) {
+        add(
+            $c,
+            IPSEC_POLICY_PATH,
+            {"peer": $name, "tunnel": "yes", "src-address": $local, "dst-address": $far});
+    }
+    ipsecNatBypass($c, $name, $local, $far);
     ipsecFirewallAccepts($c, $name, $remote);
     return $peerId;
 }
@@ -190,9 +200,11 @@ export func setupIpsecTunnel(
  *
  * @param c {Client} an open client
  * @param name {string} name given to `setupIpsecTunnel`
- * @throws {Error} kind "routeros" when nothing of the tunnel exists
+ * @throws {Error} kind "routeros" on an empty or spaced name, or when
+ *         nothing of the tunnel exists
  */
 export func teardownIpsecTunnel(c as Client, name as string) {
+    ensureName($name, "IPsec tunnel");
     def found as int init 0;
     def policyRows as list of map of string to string init getAll($c, IPSEC_POLICY_PATH);
     for (def row in $policyRows) {
@@ -319,6 +331,26 @@ func firstChainRowId(rows as list of map of string to string, chain as string) {
         }
     }
     return "";
+}
+
+/**
+ * Whether any row (identity or policy) belongs to the named peer.
+ *
+ * @param rows {list of map of string to string} identity or policy rows
+ * @param name {string} the peer name
+ * @return {bool} true when a row's "peer" equals `name`; false for ""
+ * @internal
+ */
+func hasPeerRow(rows as list of map of string to string, name as string) {
+    if ($name == "") {
+        return false;
+    }
+    for (def row in $rows) {
+        if (rowValue($row, "peer") == $name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the ethernet topic.
 # Spliced into routeros_test.j via include - run with:
@@ -170,4 +170,60 @@ func failSetPoeUnknownMode() {
 
 func testSetPoeRejectsUnknownMode() {
     testing.assertThrows("failSetPoeUnknownMode", "routeros");
+}
+
+func testEthernetLinkModeMapsRates() {
+    testing.assertEqual(ethernetLinkMode("100Mbps", true), "100M-baseT-full");
+    testing.assertEqual(ethernetLinkMode("10Mbps", false), "10M-baseT-half");
+    testing.assertEqual(ethernetLinkMode("1Gbps", true), "1G-baseT-full");
+    testing.assertEqual(ethernetLinkMode("2.5Gbps", true), "2.5G-baseT");
+    testing.assertEqual(ethernetLinkMode("10G-baseSR-LR", true), "10G-baseSR-LR");
+}
+
+func failLinkModeHalfAt10G() {
+    ethernetLinkMode("10Gbps", false);
+}
+
+func failLinkModeDuplexMismatch() {
+    ethernetLinkMode("100M-baseT-half", true);
+}
+
+func testEthernetLinkModeRejectsImpossibleDuplex() {
+    testing.assertThrows("failLinkModeHalfAt10G", "routeros");
+    testing.assertThrows("failLinkModeDuplexMismatch", "routeros");
+}
+
+func ethernetFake() {
+    return fakeWithRows(fakeRouter(), ETHERNET_PATH, [{".id": "*1", "name": "ether4"}]);
+}
+
+func testForceEthernetLinkSendsTheV7Mode() {
+    def f as Fake init fakeStart(ethernetFake());
+    def c as Client init fakeClient($f);
+    forceEthernetLink($c, "ether4", "100Mbps", true);
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/interface/ethernet/set =auto-negotiation=no =speed=100M-baseT-full =.id=*1"));
+}
+
+func testForceEthernetLinkFallsBackToTheOldForm() {
+    def r as FakeRouter init fakeWithTrap(
+        ethernetFake(),
+        "/interface/ethernet/set",
+        "1",
+        "invalid value");
+    def f as Fake init fakeStart($r);
+    def c as Client init fakeClient($f);
+    def got as string init "";
+    try {
+        forceEthernetLink($c, "ether4", "100Mbps", true);
+    } catch (e) {
+        $got = $e.routerMessage;
+    }
+    def log as list of string init fakeLog($c, $f);
+    testing.assertTrue(fakeSaw(
+        $log,
+        "/interface/ethernet/set =auto-negotiation=no =speed=100Mbps =full-duplex=yes =.id=*1"));
+    testing.assertEqual($got, "invalid value");
 }

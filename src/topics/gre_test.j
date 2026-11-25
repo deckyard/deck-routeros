@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.27.0
+# pragma-jennifer-version: >=0.28.0
 
 # routeros - white-box tests for the gre topic.
 # Spliced into routeros_test.j via include - run with:
@@ -59,4 +59,12 @@ func failAddSecureGreTunnelEmptySecret() {
 
 func testAddSecureGreTunnelRejectsEmptySecret() {
     testing.assertThrows("failAddSecureGreTunnelEmptySecret", "routeros");
+}
+
+func failGreIpv6Remote() {
+    addGreTunnel(offlineClient(), "grex", "2001:db8::2");
+}
+
+func testAddGreTunnelRejectsIpv6Remote() {
+    testing.assertThrows("failGreIpv6Remote", "routeros");
 }
